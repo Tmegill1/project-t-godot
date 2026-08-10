@@ -1,7 +1,57 @@
 extends TestCase
 
+# Legend: buildable, path, blocked, spawn, goal.
+const _TILE_CHARS := {
+	Tiles.BUILDABLE: ".",
+	Tiles.PATH: "#",
+	Tiles.BLOCKED: "X",
+	Tiles.SPAWN: "S",
+	Tiles.GOAL: "G",
+}
+
+# The exact board produced by Seeds.DEFAULT_DEMO_MAP_SEED, independently
+# verified row-for-row (including the scattered blocked tiles) against the
+# reference TypeScript implementation in
+# reference/project-t/td-browser/src/game/data/demoMap.ts.
+#
+# test_same_seed_same_map and test_different_seed_different_map only prove
+# "deterministic per seed" and "different seeds differ" - a swapped shuffle
+# order, a forked second RNG stream, or a reordered candidate-pool build
+# would still satisfy both of those while silently changing which tiles are
+# buildable. This test is what pins the RNG stream, the shuffle order, and
+# the draw order (adjacent tiles shuffled before distant ones, both from the
+# same stream) as a single observable board, the way the RNG golden test
+# pins the raw number stream.
+#
+# If this test fails, the generated board has diverged from the reference
+# game - the fix is in build(), not here. Do NOT regenerate these strings
+# from whatever build() currently produces and paste them in to make the
+# test pass; that pins a bug exactly as happily as it pins correct behavior.
+const GOLDEN_BOARD := [
+	".......................",
+	".......................",
+	".X.........X...........",
+	"XXX....................",
+	"S################......",
+	"XXX.............#......",
+	".............X..#......",
+	"................#......",
+	"...X#############......",
+	"....#...............XXX",
+	"...X#################GX",
+	".........X.......X.XXXX",
+	"..X..................X.",
+	"..............X....X...",
+]
+
 func _build() -> Array:
 	return DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
+
+func _render_row(row: Array) -> String:
+	var out := ""
+	for kind in row:
+		out += _TILE_CHARS[kind]
+	return out
 
 func test_dimensions() -> bool:
 	var m := _build()
@@ -82,6 +132,13 @@ func test_top_row_and_last_column_are_never_scatter_blocked() -> bool:
 		if r >= 9 and r <= 11:
 			continue  # the goal surround legitimately blocks column 22
 		assert_true(m[r][22] != Tiles.BLOCKED, "last column reserved, row %d" % r)
+	return true
+
+func test_golden_board_matches_reference() -> bool:
+	Grid.set_active(DemoMap.GRID_COLS, DemoMap.GRID_ROWS)
+	var m := _build()
+	for r in GOLDEN_BOARD.size():
+		assert_eq(_render_row(m[r]), GOLDEN_BOARD[r], "row %d matches the reference board" % r)
 	return true
 
 func test_same_seed_same_map() -> bool:
