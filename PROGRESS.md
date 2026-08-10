@@ -50,8 +50,8 @@ godot --path .
 | 4 | Map generation | ✅ |
 | 5 | Pathfinding | ✅ |
 | 6 | Enemy, tower, economy, map data tables | ✅ |
-| 7 | Wave composition and scaling | 🔧 |
-| 8 | Movement | ⬜ |
+| 7 | Wave composition and scaling | ✅ |
+| 8 | Movement | 🔧 |
 | 9 | Damage resolution | ⬜ |
 | 10 | Leak penalty | ⬜ |
 | 11 | Targeting | ⬜ |
