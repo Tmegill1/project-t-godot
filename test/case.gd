@@ -1,3 +1,11 @@
+# Base class for test suites. Test suite scripts `extends TestCase` and
+# define `test_*` methods; test/run_tests.gd discovers and calls them.
+#
+# NOTE: this file is intentionally named "case.gd", not "test_case.gd". The
+# runner discovers every test_*.gd file under test/ and treats it as a
+# suite; if this base class carried that prefix it would be discovered too
+# and immediately trip run_tests.gd's "zero test methods" guard (it defines
+# no test_* methods of its own). Keep this filename off the test_* pattern.
 class_name TestCase
 extends RefCounted
 
