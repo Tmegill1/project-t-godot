@@ -45,7 +45,7 @@ godot --path .
 | # | Task | Status |
 |---|---|---|
 | 1 | Project scaffold and test harness | ✅ |
-| 2 | Seeded RNG | ⬜ |
+| 2 | Seeded RNG | 🔧 |
 | 3 | Tiles and grid conversion | ⬜ |
 | 4 | Map generation | ⬜ |
 | 5 | Pathfinding | ⬜ |
