@@ -46,6 +46,59 @@ func test_tower_stats_match_the_phaser_build() -> bool:
 			assert_eq(def[field], expected[kind][field], "%s.%s" % [kind, field])
 	return true
 
+## Fields the previous version left unasserted: cosmetic and progression data
+## that has zero effect on damage math but everything to do with which
+## sprite gets drawn (Task 17/18 read sprite_frame, upgrade_frames and
+## texture_key directly). Expected values are taken from
+## reference/project-t/td-browser/src/game/data/towers.ts, not read back out
+## of data/towers.gd, so a wrong table value would fail this test rather
+## than being silently re-pinned as "correct".
+func test_tower_cosmetic_and_progression_fields_match_the_phaser_build() -> bool:
+	var expected := {
+		&"basic": {
+			"label": "Basic", "color": Color8(0x00, 0x66, 0xff), "size": 0.8,
+			"sprite_frame": 8, "upgrade_frames": [8, 9, 11, 17],
+			"limit_bonus_map2": 2, "projectile_speed": 500.0,
+		},
+		&"fast": {
+			"label": "Fast", "color": Color8(0x00, 0xff, 0x00), "size": 0.75,
+			"sprite_frame": 1, "upgrade_frames": [1, 0, 7, 16],
+			"limit_bonus_map2": 2, "projectile_speed": 500.0,
+		},
+		&"mortar": {
+			"label": "Mortar", "color": Color8(0xb0, 0x7a, 0x3a), "size": 0.85,
+			"sprite_frame": 5, "upgrade_frames": [5, 6, 12, 13],
+			"limit_bonus_map2": 2, "projectile_speed": 350.0,
+		},
+		&"long": {
+			"label": "Long Range", "color": Color8(0xff, 0x66, 0x00), "size": 0.85,
+			"sprite_frame": 2, "upgrade_frames": [2, 10, 18, 19],
+			"limit_bonus_map2": 2, "projectile_speed": 500.0,
+		},
+	}
+	for kind in expected.keys():
+		var def: Dictionary = Towers.DEFS[kind]
+		for field in expected[kind].keys():
+			assert_eq(def[field], expected[kind][field], "%s.%s" % [kind, field])
+	return true
+
+## label, texture_key, sprite_scale and flip_horizontally pick which sprite
+## sheet an enemy uses and how it is drawn (Task 17 reads texture_key
+## directly). Only ogre's sprite_scale/flip_horizontally were asserted
+## before; this covers every field, for every kind, against
+## reference/project-t/td-browser/src/game/data/enemies.ts.
+func test_enemy_cosmetic_fields_match_the_phaser_build() -> bool:
+	var expected := {
+		&"slime": {"label": "Slime", "texture_key": "slime", "sprite_scale": 0.7, "flip_horizontally": false},
+		&"ogre":  {"label": "Ogre",  "texture_key": "ogre",  "sprite_scale": 1.2, "flip_horizontally": true},
+		&"bee":   {"label": "Bee",   "texture_key": "bee",   "sprite_scale": 0.7, "flip_horizontally": false},
+	}
+	for kind in expected.keys():
+		var def: Dictionary = Enemies.DEFS[kind]
+		for field in expected[kind].keys():
+			assert_eq(def[field], expected[kind][field], "%s.%s" % [kind, field])
+	return true
+
 func test_only_the_mortar_has_splash_and_arcing_shots() -> bool:
 	for kind in Towers.KINDS:
 		var def: Dictionary = Towers.DEFS[kind]
