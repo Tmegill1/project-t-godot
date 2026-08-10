@@ -30,8 +30,19 @@ static func get_all_spawn_paths(map: Array) -> Array[PackedVector2Array]:
 		var tiles := _bfs(spawn, goal, map, rows, cols)
 		var path := PackedVector2Array()
 		path.append(Grid.tile_to_world_center(spawn.x, spawn.y))
-		for t in tiles:
-			path.append(Grid.tile_to_world_center(t.x, t.y))
+		if tiles.is_empty():
+			# BFS found no route: the goal is unreachable from this spawn.
+			# Match the reference's fallback (PathFinder.ts:49-55) rather
+			# than leaving a one-point path with no goal at all - later
+			# tasks (e.g. Movement.advance) index path[path_index] and
+			# derive arrival from path.size(), so every path must have at
+			# least a start and an end. A spawn adjacent to the goal is
+			# NOT this case: its trail is [goal], not empty, so it takes
+			# the normal branch below.
+			path.append(Grid.tile_to_world_center(goal.x, goal.y))
+		else:
+			for t in tiles:
+				path.append(Grid.tile_to_world_center(t.x, t.y))
 		results.append(path)
 
 	return results

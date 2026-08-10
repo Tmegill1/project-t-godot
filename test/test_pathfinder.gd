@@ -49,3 +49,34 @@ func test_returns_empty_when_no_spawn() -> bool:
 	var no_spawn := [[Tiles.BUILDABLE, Tiles.GOAL]]
 	assert_eq(PathFinder.get_all_spawn_paths(no_spawn).size(), 0, "no spawn, no paths")
 	return true
+
+func _walled_off_map() -> Array:
+	# 1 row x 3 cols: S is walled off from G by a blocked tile - no route.
+	return [[Tiles.SPAWN, Tiles.BLOCKED, Tiles.GOAL]]
+
+func test_unreachable_goal_falls_back_to_straight_line() -> bool:
+	Grid.set_active(3, 1)
+	var paths := PathFinder.get_all_spawn_paths(_walled_off_map())
+	assert_eq(paths.size(), 1, "one spawn, one (fallback) path")
+	var p: PackedVector2Array = paths[0]
+	assert_eq(p.size(), 2, "fallback is exactly spawn and goal, no route between")
+	assert_eq(p[0], Grid.tile_to_world_center(0, 0), "point 0 is the spawn centre")
+	assert_eq(p[1], Grid.tile_to_world_center(2, 0), "point 1 is the goal centre")
+	return true
+
+# Later tasks (e.g. Movement.advance) index path[path_index] and derive
+# arrival from path.size(); a path must always have at least a start and an
+# end, whether or not BFS found a real route. Check this holds both when the
+# goal is unreachable (fallback path) and on the real, connected map.
+func test_every_path_has_at_least_two_points() -> bool:
+	Grid.set_active(3, 1)
+	for p in PathFinder.get_all_spawn_paths(_walled_off_map()):
+		var walled: PackedVector2Array = p
+		assert_true(walled.size() >= 2, "walled-off path has a start and an end")
+
+	Grid.set_active(DemoMap.GRID_COLS, DemoMap.GRID_ROWS)
+	var map := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
+	for p in PathFinder.get_all_spawn_paths(map):
+		var real: PackedVector2Array = p
+		assert_true(real.size() >= 2, "real map path has a start and an end")
+	return true
