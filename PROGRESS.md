@@ -44,7 +44,7 @@ godot --path .
 
 | # | Task | Status |
 |---|---|---|
-| 1 | Project scaffold and test harness | 🔧 in fix round 1 |
+| 1 | Project scaffold and test harness | ✅ |
 | 2 | Seeded RNG | ⬜ |
 | 3 | Tiles and grid conversion | ⬜ |
 | 4 | Map generation | ⬜ |
@@ -94,8 +94,26 @@ probe files rather than by reading:
   0. One typo in any later task's tests would delete that file's whole coverage
   with no signal.
 
-Both are being fixed before any other task starts, because this runner is the only
-gate the remaining 22 tasks have.
+Both are fixed (commit `899b0cf`), along with two lesser issues: discovery was
+case-sensitive, and a suite that discovered *zero* tests also exited 0 —
+indistinguishable from a green run.
+
+Two corrections came out of this that were worth more than the fix itself:
+
+- The guidance given to the implementer said `load()` returns `null` on a parse
+  error. On Godot 4.7.1 it does not — it returns a `GDScript` whose
+  `can_instantiate()` is `false`. The implementer checked rather than complied,
+  and the reviewer independently confirmed it. Following the hint would have
+  produced a null check that never fires.
+- The implementer then reported that one gap — a test that passes assertions and
+  *then* crashes — was permanently unfixable in GDScript. Review **refuted** that
+  empirically: when GDScript aborts a function mid-run it returns the declared
+  return type's default, so `func test_x() -> bool: ...; return true` reads as
+  `false` when the test dies partway.
+
+**Test-authoring contract, binding on every later task:** every `test_*` method is
+declared `-> bool` and ends with `return true`. It is self-enforcing — a method
+that forgets returns `null` instead of `true` and fails loudly.
 
 ---
 

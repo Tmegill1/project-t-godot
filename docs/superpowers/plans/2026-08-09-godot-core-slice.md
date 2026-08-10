@@ -22,6 +22,7 @@ Every task's requirements implicitly include this section.
 - **Determinism:** all randomness goes through `sim/rng.gd`. Never call `randf()`, `randi()`, or `RandomNumberGenerator`.
 - **Ints:** GDScript ints are 64-bit signed; JS bitwise ops are 32-bit. Mask with `& 0xFFFFFFFF` after every arithmetic step when porting bitwise code.
 - **Test command:** `godot --headless --quit --script test/run_tests.gd` from the project root. Exit 0 = pass, exit 1 = failure.
+- **Test method contract (adopted after Task 1; overrides the test code shown in Tasks 2–23):** every `test_*` method must be declared `-> bool` and end with `return true`, including at every early return. GDScript substitutes the declared return type's default when a function aborts mid-execution, so this is what lets the runner detect a test that passes some assertions and then crashes. The rule is self-enforcing — a method missing it returns `null` rather than `true` and fails loudly.
 - **After adding any new `class_name`**, run `godot --headless --import` once before the tests, or the class will not resolve.
 - **Reference source:** `reference/project-t/td-browser/` (cloned in Task 1, gitignored). All "port from" paths below are relative to it.
 - **Commit** at the end of every task, only when its tests pass.
