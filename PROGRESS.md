@@ -56,7 +56,7 @@ godot --path .
 | 10 | Leak penalty | ✅ |
 | 11 | Targeting | ✅ |
 | 12 | Economy arithmetic | ✅ |
-| 13 | Purity guard | 🔧 |
+| 13 | Purity guard | ✅ |
 | 14 | Headless wave harness | ⬜ ← **checkpoint: rules layer complete** |
 | 15 | Asset import and atlas extraction | ⬜ |
 | 16 | Map renderer | ⬜ |
