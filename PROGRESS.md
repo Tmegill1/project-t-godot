@@ -52,8 +52,8 @@ godot --path .
 | 6 | Enemy, tower, economy, map data tables | ✅ |
 | 7 | Wave composition and scaling | ✅ |
 | 8 | Movement | ✅ |
-| 9 | Damage resolution | 🔧 |
-| 10 | Leak penalty | ⬜ |
+| 9 | Damage resolution | ✅ |
+| 10 | Leak penalty | 🔧 |
 | 11 | Targeting | ⬜ |
 | 12 | Economy arithmetic | ⬜ |
 | 13 | Purity guard | ⬜ |
