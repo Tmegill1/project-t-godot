@@ -47,8 +47,8 @@ godot --path .
 | 1 | Project scaffold and test harness | ✅ |
 | 2 | Seeded RNG | ✅ |
 | 3 | Tiles and grid conversion | ✅ |
-| 4 | Map generation | 🔧 |
-| 5 | Pathfinding | ⬜ |
+| 4 | Map generation | ✅ |
+| 5 | Pathfinding | 🔧 |
 | 6 | Enemy, tower, economy, map data tables | ⬜ |
 | 7 | Wave composition and scaling | ⬜ |
 | 8 | Movement | ⬜ |
