@@ -40,8 +40,16 @@ static func select(tower: Dictionary, candidates: Array):
 		if not is_targetable(tower, candidate):
 			continue
 		var score := _score_for(tower, candidate)
+		# Strict equality, not is_equal_approx: an approximate-tolerance
+		# tie-break would let a genuinely-closer candidate lose to a
+		# genuinely-farther one whenever their scores land within the
+		# tolerance window without being equal, which is reachable in
+		# practice (movement.gd accumulates position via continuous float
+		# arithmetic every tick) and would make selection order-dependent -
+		# the exact bug this tie-break exists to prevent. Matches
+		# targeting.ts's `score === bestScore` exactly.
 		if best == null or score > best_score \
-				or (is_equal_approx(score, best_score) and int(candidate["id"]) < int(best["id"])):
+				or (score == best_score and int(candidate["id"]) < int(best["id"])):
 			best = candidate
 			best_score = score
 

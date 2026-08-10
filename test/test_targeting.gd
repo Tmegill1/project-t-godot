@@ -198,6 +198,47 @@ func test_ties_break_on_lowest_id_three_way() -> bool:
 	assert_eq(Targeting.select(_ref_tower(), identical)["id"], 3, "lowest of 7, 3, 5 is 3")
 	return true
 
+# Regression test (added after code review found a real bug): a genuine,
+# non-tied score difference must win outright, even when the two scores are
+# close enough that is_equal_approx would have called them a tie. P and Q
+# are NOT at the same distance — Q is closer, if only by a hair — so Q must
+# win regardless of which one the loop visits first. Before this was fixed
+# to use strict `==`, is_equal_approx(scoreP, scoreQ) returned true here
+# (their distances differ by ~0.0001, well inside its relative tolerance),
+# so whichever candidate the loop reached FIRST kept "winning" via the
+# score > best_score branch never firing for the second one, and the
+# id-tie-break branch (wrongly) treating them as tied and preferring the
+# lower id (2) - id 2 is P, the FARTHER enemy - regardless of order. That
+# silently violated both "closest wins" and the "order never matters" claim
+# in select()'s own doc comment.
+func test_a_genuinely_closer_candidate_wins_even_when_scores_are_float_close() -> bool:
+	var tower := _ref_tower({"range": 1000.0})
+	var p := _ref_enemy(2, {"position": Vector2(500.0, 0)})       # distance 500.0
+	var q := _ref_enemy(7, {"position": Vector2(499.9999, 0)})    # distance ~499.999908, genuinely closer
+	assert_eq(Targeting.select(tower, [p, q])["id"], 7, "q is closer, p first in the array")
+	assert_eq(Targeting.select(tower, [q, p])["id"], 7, "q is closer, q first in the array")
+	return true
+
+# Regression test pinning that "closest" scores by linear distance
+# (distance_to), not squared distance. Positions found by an empirical
+# search for two points whose distance_to() from the origin rounds to the
+# exact same float while their distance_squared_to() does not (verified:
+# 9.990004539 == 9.990004539, but 99.800193787 != 99.800186157) - i.e. a
+# genuine tie under the metric the module is supposed to use, that would
+# NOT be a tie if it scored by squared distance instead. Under squared
+# distance, id 2 (the numerically-smaller-square candidate) would win
+# outright via score > best_score, skipping the id tie-break entirely and
+# silently preferring the higher id on what is actually a dead-even tie.
+func test_closest_scores_by_linear_distance_not_squared_distance() -> bool:
+	var tower := _ref_tower({"range": 20.0})
+	var candidate_a := _ref_enemy(1, {"position": Vector2(9.99, -0.01)})
+	var candidate_b := _ref_enemy(2, {"position": Vector2(9.99, -0.009661)})
+	assert_eq(Targeting.select(tower, [candidate_a, candidate_b])["id"], 1,
+		"exact tie under linear distance breaks on lowest id (a first)")
+	assert_eq(Targeting.select(tower, [candidate_b, candidate_a])["id"], 1,
+		"same exact tie, order swapped - still lowest id")
+	return true
+
 # Ported: "does not depend on iteration order" — for every declared
 # priority, forward and backward orderings of a fully-tied field (three
 # enemies sharing every scored attribute, differing only by id) must agree.
