@@ -69,3 +69,34 @@ static func get_modifiers(wave_number: int) -> Dictionary:
 static func ogre_spawn_delay(slime_count: int) -> float:
 	var last_slime_at := float(slime_count - 1) * INTERVAL_MS
 	return minf(last_slime_at + OGRE_DELAY_AFTER_LAST_SLIME_MS, OGRE_MAX_START_DELAY_MS)
+
+## Spawn instants for a wave, mirroring GameScene.startWave's offsets.
+##
+## Public (not a private helper on Harness) because Task 19's live game board
+## needs the exact same schedule the headless harness uses — one
+## implementation, two callers, so the board can never spawn on a schedule
+## the harness didn't also simulate.
+static func build_schedule(wave: int) -> Array:
+	var schedule: Array = []
+	var composition := get_composition(wave)
+
+	var slime_count := 0
+	for entry in composition:
+		if entry["kind"] == &"slime":
+			slime_count = entry["count"]
+
+	for entry in composition:
+		var kind: StringName = entry["kind"]
+		var start := 0.0
+		match kind:
+			&"bee":
+				start = BEE_START_DELAY_MS
+			&"ogre":
+				start = ogre_spawn_delay(slime_count)
+			_:
+				start = 0.0
+		for i in entry["count"]:
+			schedule.append({"kind": kind, "at_ms": start + float(i) * INTERVAL_MS})
+
+	schedule.sort_custom(func(a, b): return a["at_ms"] < b["at_ms"])
+	return schedule

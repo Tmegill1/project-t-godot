@@ -70,3 +70,95 @@ func test_composition_returns_fresh_objects() -> bool:
 	var b := Waves.get_composition(5)
 	assert_false(b[0]["count"] == 999, "callers cannot corrupt later waves")
 	return true
+
+# --------------------------------------------------------------------------
+# build_schedule — Task 14 pulled this out of Harness (where the original
+# brief had it as a private _build_schedule) into a public function here, so
+# Task 19's live game board and the headless harness share one
+# implementation of when things spawn.
+# --------------------------------------------------------------------------
+
+func test_build_schedule_is_sorted_by_time() -> bool:
+	# Wave 5 mixes all three kinds with three different start offsets
+	# (slime immediately, bee after BEE_START_DELAY_MS, ogre after the last
+	# slime), so a sort bug is actually reachable here, unlike a
+	# single-kind wave.
+	var schedule := Waves.build_schedule(5)
+	for i in range(1, schedule.size()):
+		assert_true(schedule[i]["at_ms"] >= schedule[i - 1]["at_ms"],
+			"entry %d (%.1f) is not before entry %d (%.1f)" % [
+				i - 1, schedule[i - 1]["at_ms"], i, schedule[i]["at_ms"]])
+	return true
+
+func test_wave_four_schedule_has_nineteen_entries() -> bool:
+	# Wave 4's composition is 11 slimes + 6 bees + 2 ogres (accumulated from
+	# waves 1-4; see test_ogres_arrive_at_wave_four /
+	# test_composition_accumulates_from_wave_one above) = 19 spawn instants.
+	var schedule := Waves.build_schedule(4)
+	assert_eq(schedule.size(), 19, "11 slimes + 6 bees + 2 ogres")
+	var slimes := 0
+	var bees := 0
+	var ogres := 0
+	for entry in schedule:
+		match entry["kind"]:
+			&"slime": slimes += 1
+			&"bee": bees += 1
+			&"ogre": ogres += 1
+	assert_eq(slimes, 11, "eleven slime entries")
+	assert_eq(bees, 6, "six bee entries")
+	assert_eq(ogres, 2, "two ogre entries")
+	return true
+
+# BEE_START_DELAY_MS had zero test coverage before this task: mutating 5000
+# to 9999 left the whole suite green. Pin the constant directly...
+func test_bee_start_delay_ms_is_five_thousand() -> bool:
+	assert_almost_eq(Waves.BEE_START_DELAY_MS, 5000.0, 0.001, "bees wait five seconds")
+	return true
+
+# ...and, more importantly, pin it through the one place it actually has an
+# effect: the schedule the harness and the live board both spawn from. A
+# mutation to BEE_START_DELAY_MS that the constant test above somehow missed
+# (or a future refactor that stops build_schedule from reading the constant
+# at all) would still be caught here, because the earliest bee's at_ms is
+# asserted directly against the real constant, not a hardcoded literal.
+func test_schedule_starts_the_bee_column_at_bee_start_delay() -> bool:
+	# Wave 2 is the first wave with bees (three of them) and no ogres, so the
+	# earliest bee entry is unambiguous.
+	var schedule := Waves.build_schedule(2)
+	var earliest_bee = null
+	for entry in schedule:
+		if entry["kind"] == &"bee":
+			earliest_bee = entry
+			break
+	assert_true(earliest_bee != null, "wave 2 has bees")
+	assert_almost_eq(earliest_bee["at_ms"], Waves.BEE_START_DELAY_MS, 0.001,
+		"the bee column starts at BEE_START_DELAY_MS, not some other offset")
+	return true
+
+# The ogre column's start time has the same shape of gap the bee tests above
+# close: ogre_spawn_delay(slime_count) is unit-tested directly (see
+# test_ogre_delay_trails_the_last_slime_but_is_capped above), but nothing
+# pinned that build_schedule (a) calls it with the wave's own slime count
+# rather than some other kind's count, or (b) calls it at all rather than a
+# fixed constant. Both are real, distinct mutations found by mutation
+# testing sim/harness.gd and this file together: capturing slime_count from
+# the wrong kind's composition entry, and hardcoding the ogre column to
+# start at BEE_START_DELAY_MS instead of the computed delay. Both survived
+# every other test in this file (schedule size, sort order, entry counts)
+# because none of those look at a specific entry's `at_ms`.
+func test_schedule_starts_the_ogre_column_at_the_computed_delay() -> bool:
+	# Wave 4 has 11 slimes (see test_wave_four_schedule_has_nineteen_entries
+	# above) and 2 ogres, so ogre_spawn_delay(11) = (11-1)*500 + 3000 = 8000,
+	# under the 10000 cap. Hardcoded rather than computed via
+	# Waves.ogre_spawn_delay(11) here, so this test does not become
+	# vacuously self-consistent if that function itself ever regresses.
+	var schedule := Waves.build_schedule(4)
+	var earliest_ogre = null
+	for entry in schedule:
+		if entry["kind"] == &"ogre":
+			earliest_ogre = entry
+			break
+	assert_true(earliest_ogre != null, "wave 4 has ogres")
+	assert_almost_eq(earliest_ogre["at_ms"], 8000.0, 0.001,
+		"the ogre column starts at ogre_spawn_delay(11), not BEE_START_DELAY_MS or any other offset")
+	return true
