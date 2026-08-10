@@ -1,6 +1,18 @@
 # Base class for test suites. Test suite scripts `extends TestCase` and
 # define `test_*` methods; test/run_tests.gd discovers and calls them.
 #
+# CONTRACT: every test_* method must be declared `-> bool` and end with
+# `return true` (every early `return` inside a test_* method must also
+# `return true`). The return value is purely a "did I run to completion"
+# sentinel - it carries no pass/fail meaning of its own; assert_* calls
+# below are what record pass/fail. This contract is what lets run_tests.gd
+# detect a test that crashes mid-execution: a GDScript function that aborts
+# partway through a runtime error does not run its own `return` statement,
+# it returns the declared return type's default instead (`false` for
+# `-> bool`), so an aborted test is distinguishable from a completed one.
+# See the header comment in test/run_tests.gd for the full mechanism and
+# its limits.
+#
 # NOTE: this file is intentionally named "case.gd", not "test_case.gd". The
 # runner discovers every test_*.gd file under test/ and treats it as a
 # suite; if this base class carried that prefix it would be discovered too
