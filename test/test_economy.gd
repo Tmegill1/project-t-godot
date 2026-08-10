@@ -15,9 +15,15 @@ func test_price_escalates_per_tower_already_owned() -> bool:
 	assert_eq(EconomySim.tower_price(&"mortar", 2), 140, "70 + 2*35")
 	return true
 
-func test_escalation_is_per_kind_not_global() -> bool:
+# Renamed from the brief's `test_escalation_is_per_kind_not_global`: tower_price
+# is stateless (it takes owned_of_kind as an argument, tracks no state of its
+# own), so what this actually pins is that the Towers.DEFS lookup uses the
+# `kind` argument given, not a fixed/wrong one. A guarantee about per-kind
+# *count tracking* isolation belongs to whatever maintains those counts
+# (Task 19's board), not to this pure pricing function.
+func test_tower_price_looks_up_the_given_kind_not_a_fixed_one() -> bool:
 	assert_eq(EconomySim.tower_price(&"fast", 0), 50,
-		"owning basics does not raise the price of a fast tower")
+		"fast's own base price, not basic's, is read when kind is fast")
 	return true
 
 func test_sell_refunds_half_rounded_down() -> bool:
@@ -75,6 +81,17 @@ func test_escalation_is_linear_and_isolated_per_kind_at_higher_counts() -> bool:
 	# higher, more adversarial basic count.
 	assert_eq(EconomySim.tower_price(&"fast", 0), 50,
 		"seven owned basics do not leak into a fresh fast's price")
+	return true
+
+# Matches economy.ts's `Math.max(0, owned)` clamp on escalatedCost. Nothing
+# in this slice can produce a negative owned_of_kind yet (Task 19's board
+# will maintain the real counts), but the function must not silently price
+# a tower below its base cost if one is ever passed in.
+func test_negative_owned_count_clamps_to_base_price() -> bool:
+	assert_eq(EconomySim.tower_price(&"basic", -1), 20,
+		"a negative count must not push the price below base")
+	assert_eq(EconomySim.tower_price(&"long", -5), 100,
+		"holds for a larger-magnitude negative count too")
 	return true
 
 # sellRefund(cost) = max(0, floor(cost / 2)). Sweeps a range of paid values,
