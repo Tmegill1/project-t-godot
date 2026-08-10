@@ -339,3 +339,61 @@ func test_a_small_killing_blow_still_reports_lethal() -> bool:
 	assert_almost_eq(r["remaining_health"], 0.0, 0.001, "exact small kill")
 	assert_true(r["lethal"], "a sub-1 damage_dealt still kills a sub-1 health target")
 	return true
+
+# Reviewer-found gap: incoming damage must be clamped to zero BEFORE armour
+# is applied, matching damage.ts's order (`incoming = Math.max(0, source.damage)`
+# runs first, armour reduction runs after). Against an unarmoured target, a
+# missing/loosened clamp on `incoming` is invisible: after_armor's own floor
+# at line 43 produces damage_dealt == 0 and remaining_health == health either
+# way. Only a target with nonzero armor exposes it, via armor_absorbed:
+# without the early clamp, armor_absorbed becomes (negative incoming) - 0,
+# i.e. negative, instead of the correct 0.
+#
+# Expected values derived from damage.ts's resolveDamage directly (source.ts
+# lines 92, 108-110, 120), not from the GDScript under test:
+#   incoming = Math.max(0, -10) = 0
+#   armor = Math.max(0, 2) = 2; effectiveArmor = Math.max(0, 2 - 0) = 2
+#   afterArmor = Math.max(0, 0 - 2) = 0
+#   damageDealt = Math.min(0, 5) = 0; remainingHealth = 5 - 0 = 5
+#   armorAbsorbed = incoming - afterArmor = 0 - 0 = 0
+func test_negative_damage_is_clamped_before_armour_is_applied() -> bool:
+	var r := Damage.resolve({"damage": -10}, _target(5.0, {"armor": 2}))
+	assert_almost_eq(r["armor_absorbed"], 0.0, 0.001,
+		"clamped-to-zero incoming leaves nothing for armour to absorb")
+	assert_almost_eq(r["remaining_health"], 5.0, 0.001, "health unchanged")
+	assert_almost_eq(r["damage_dealt"], 0.0, 0.001, "no damage dealt")
+	return true
+
+# Widened mutation set (round 2) found three more genuine gaps, all the same
+# shape as the one above: a malformed/negative input field is clamped to
+# zero by the reference (damage.ts: `Math.max(0, target.shield ?? 0)`, and
+# analogously for health and pierce), but nothing exercised that clamp with
+# a value that would actually go negative.
+
+# `shield` is clamped at the top of resolve(). A negative shield (malformed
+# data) must read back as zero, not leak through as a negative number in
+# remaining_shield.
+func test_negative_shield_value_is_clamped_to_zero() -> bool:
+	var r := Damage.resolve({"damage": 5}, _target(10.0, {"shield": -3}))
+	assert_eq(r["remaining_shield"], 0, "malformed negative shield reads as zero")
+	assert_almost_eq(r["damage_dealt"], 5.0, 0.001, "no shield charge to absorb the hit")
+	return true
+
+# The corpse branch clamps remaining_health with maxf(0.0, health). A target
+# whose health field is already negative (e.g. clock-skewed damage ticks)
+# must still report zero, not a negative remaining_health.
+func test_corpse_remaining_health_clamps_negative_input_to_zero() -> bool:
+	var deeply_dead := {"health": -50.0, "max_health": 5.0, "alive": false}
+	var r := Damage.resolve({"damage": 5}, deeply_dead)
+	assert_almost_eq(r["remaining_health"], 0.0, 0.001,
+		"negative health input still reports zero, not negative")
+	return true
+
+# `pierce` is clamped before it offsets armour. A negative pierce value must
+# be inert, not subtract further from armour and increase it — pierce is
+# supposed to reduce armour's effect, never amplify it.
+func test_negative_pierce_does_not_increase_effective_armour() -> bool:
+	var r := Damage.resolve({"damage": 10, "pierce": -5}, _target(50.0, {"armor": 3}))
+	assert_almost_eq(r["damage_dealt"], 7.0, 0.001,
+		"negative pierce is inert: 10 minus the unmodified 3 armour")
+	return true
