@@ -1,5 +1,7 @@
 # Progress
 
+
+> **Resuming after a break?** Read [CONTINUE.md](CONTINUE.md) — it has the full state, every remaining task with its implementation approach, and the gotchas already established.
 Live status of the Godot port. Updated as tasks complete.
 
 **Project location on this machine:** `~/Projects/project-t-godot`
