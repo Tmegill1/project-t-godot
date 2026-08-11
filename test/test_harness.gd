@@ -211,6 +211,46 @@ func test_mortar_splash_does_not_overkill_via_self_double_counting() -> bool:
 	assert_eq(r["gold_earned"], 115, "wave 5 exact: gold from exactly these kills")
 	return true
 
+# Review follow-up (post-Task-14): `tower["cooldown"] > 0.0` (line ~99) needs
+# a tick_ms that divides its target tower's fire_rate evenly to ever land
+# cooldown on exactly 0.0 and expose a `>` vs `>=` mutation — the default
+# tick (1000.0/60.0, not exactly representable in binary float) never does.
+# mortar's fire_rate (2000.0) divides evenly by tick_ms=40.0 (used elsewhere
+# in this file for the same reason, see test_tick_ms_override_is_honored),
+# so this reuses that combination against the same wave-5-mortar scenario
+# above rather than inventing a new one. Confirmed this actually
+# distinguishes the two: `>` (correct) gives kills=16/leaks=10/lives_lost=21
+# /gold=115; `>=` (mutated — an exactly-zero cooldown now also skips firing)
+# gives kills=15/leaks=11/lives_lost=20/gold=120. Values taken from running
+# both variants directly, not derived.
+func test_cooldown_boundary_at_an_evenly_dividing_tick_size() -> bool:
+	var towers := [{"kind": &"mortar", "position": Grid.tile_to_world_center(5, 3)}]
+	var r := Harness.run_wave({"wave": 5, "towers": towers, "path": _path(), "tick_ms": 40.0})
+	assert_eq(r["kills"], 16, "exact: cooldown==0.0 still fires (> not >=)")
+	assert_eq(r["leaks"], 10, "exact: one fewer leak than the >= mutant")
+	assert_eq(r["lives_lost"], 21, "exact: lives lost at this exact leak count")
+	assert_eq(r["gold_earned"], 115, "exact: gold from exactly these kills")
+	return true
+
+# Review follow-up (post-Task-14): does `e["position"].distance_to(...) <=
+# tower["splash"]` (line ~109) ever land a bystander at exactly the splash
+# radius, where `<=` vs `<` diverges? Found by sweeping the same
+# wave-5-mortar-at-(5,3) scenario above across waves 1-20 at the default tick
+# and diffing mutated-vs-unmutated output directly (not derived
+# algebraically): wave 10 is the first wave in that sweep where a bystander's
+# distance from the mortar's target lands exactly on the splash radius
+# (55.0), so `<=` (correct) hits it and `<` (mutated) does not — confirmed
+# by running both variants: unmutated gives kills=12/leaks=59/lives_lost=222
+# /gold=120; mutated gives kills=9/leaks=62/lives_lost=234/gold=90.
+func test_splash_radius_boundary_at_wave_ten() -> bool:
+	var towers := [{"kind": &"mortar", "position": Grid.tile_to_world_center(5, 3)}]
+	var r := Harness.run_wave({"wave": 10, "towers": towers, "path": _path()})
+	assert_eq(r["kills"], 12, "exact: a bystander at exactly the splash radius is hit (<= not <)")
+	assert_eq(r["leaks"], 59, "exact: three fewer leaks than the < mutant")
+	assert_eq(r["lives_lost"], 222, "exact: lives lost at this exact leak count")
+	assert_eq(r["gold_earned"], 120, "exact: gold from exactly these kills")
+	return true
+
 # Ported: "stops even under a heavy wave with a weak defence" (termination).
 func test_a_heavy_wave_with_a_weak_defence_still_terminates() -> bool:
 	var r := Harness.run_wave({

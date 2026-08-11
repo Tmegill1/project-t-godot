@@ -162,3 +162,58 @@ func test_schedule_starts_the_ogre_column_at_the_computed_delay() -> bool:
 	assert_almost_eq(earliest_ogre["at_ms"], 8000.0, 0.001,
 		"the ogre column starts at ogre_spawn_delay(11), not BEE_START_DELAY_MS or any other offset")
 	return true
+
+# Review follow-up (post-Task-14): Array.sort_custom is not documented as a
+# stable sort on this engine, so a comparator keyed only on at_ms leaves
+# tied entries (same at_ms, different kind) in an order that is an artifact
+# of the sort implementation rather than the wave data. build_schedule
+# breaks ties on push order — composition order is slime, then bee, then
+# ogre (see test_composition_accumulates_from_wave_one /
+# test_ogres_arrive_at_wave_four), and within a kind, increasing spawn
+# index — mirroring the reference's
+# `a.spawn.atMs - b.spawn.atMs || a.index - b.index`
+# (td-browser/src/game/sim/harness.ts), whose own comment states the reason
+# outright: "so the schedule does not depend on the sort implementation."
+#
+# test_build_schedule_is_sorted_by_time above uses wave 5, which has zero
+# *cross-column* ties at a boundary this test needs (it has slime/bee ties
+# but no bee/ogre ones), so it cannot exercise the ogre column's tie-break.
+# Wave 6 has both, ten tied at_ms instants total.
+#
+# This checks every tied group at wave 6, not one or two cherry-picked
+# timestamps — that distinction is not academic. A first version of this
+# test asserted only the 5000ms and 10000ms groups and passed even with the
+# tie-break deleted entirely (comparator reverted to bare
+# `a["at_ms"] < b["at_ms"]`): confirmed directly, by reverting the fix and
+# re-running, that on this exact engine build sort_custom's own partitioning
+# happens to leave both of those two particular groups in push order by
+# coincidence. The very next tied instant, 5500ms, does NOT: the no-tie-break
+# comparator puts bee before slime there, backwards from push order.
+# Checking the whole set (not a sample) is what makes this test load-bearing
+# rather than a false sense of coverage.
+func test_build_schedule_breaks_ties_by_push_order() -> bool:
+	# Composition order is slime, then bee, then ogre (see
+	# test_composition_accumulates_from_wave_one / test_ogres_arrive_at_wave_four),
+	# so within any tied at_ms, the earlier-pushed kind must sort first.
+	var rank := {&"slime": 0, &"bee": 1, &"ogre": 2}
+	var schedule := Waves.build_schedule(6)
+	var groups := {}
+	for entry in schedule:
+		var t = entry["at_ms"]
+		if not groups.has(t):
+			groups[t] = []
+		groups[t].append(entry["kind"])
+	var tie_groups_checked := 0
+	for t in groups.keys():
+		var kinds: Array = groups[t]
+		if kinds.size() < 2:
+			continue
+		tie_groups_checked += 1
+		for i in range(1, kinds.size()):
+			assert_true(rank[kinds[i - 1]] <= rank[kinds[i]],
+				"at %.1fms, %s must not sort after %s (push order: slime, bee, ogre)" % [
+					t, kinds[i - 1], kinds[i]])
+	# Confirms the loop above actually exercised ties rather than vacuously
+	# passing over a schedule with none (e.g. if get_composition regressed).
+	assert_eq(tie_groups_checked, 10, "wave 6 has exactly ten tied at_ms instants to check")
+	return true

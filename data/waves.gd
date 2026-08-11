@@ -85,6 +85,13 @@ static func build_schedule(wave: int) -> Array:
 		if entry["kind"] == &"slime":
 			slime_count = entry["count"]
 
+	# Tie-break carries push order (see below) so two entries at the same
+	# at_ms sort deterministically instead of depending on whatever ordering
+	# Array.sort_custom happens to produce for equal keys — it is not
+	# documented as a stable sort on this engine. Ties are not hypothetical:
+	# from wave 6 on, slime/bee/ogre columns land on identical at_ms values
+	# (e.g. wave 12 has genuine three-way ties at 10000, 10500, 11000...).
+	var push_index := 0
 	for entry in composition:
 		var kind: StringName = entry["kind"]
 		var start := 0.0
@@ -96,7 +103,20 @@ static func build_schedule(wave: int) -> Array:
 			_:
 				start = 0.0
 		for i in entry["count"]:
-			schedule.append({"kind": kind, "at_ms": start + float(i) * INTERVAL_MS})
+			schedule.append({
+				"kind": kind, "at_ms": start + float(i) * INTERVAL_MS,
+				"_push_index": push_index,
+			})
+			push_index += 1
 
-	schedule.sort_custom(func(a, b): return a["at_ms"] < b["at_ms"])
+	# Mirrors the reference (harness.ts): sort by time, then by push order,
+	# "so the schedule does not depend on the sort implementation."
+	schedule.sort_custom(func(a, b):
+		if a["at_ms"] != b["at_ms"]:
+			return a["at_ms"] < b["at_ms"]
+		return a["_push_index"] < b["_push_index"])
+
+	for entry in schedule:
+		entry.erase("_push_index")
+
 	return schedule
