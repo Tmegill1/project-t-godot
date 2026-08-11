@@ -58,7 +58,7 @@ godot --path .
 | 12 | Economy arithmetic | ✅ |
 | 13 | Purity guard | ✅ |
 | 14 | Headless wave harness | ✅ ← **checkpoint: rules layer complete** |
-| 15 | Asset import and atlas extraction | ⬜ |
+| 15 | Asset import and atlas extraction | ✅ |
 | 16 | Map renderer | ⬜ |
 | 17 | Enemy view | ⬜ |
 | 18 | Tower and projectile views | ⬜ |
