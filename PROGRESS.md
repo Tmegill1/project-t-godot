@@ -28,16 +28,16 @@ Full reasoning lives in:
 
 ## How to run it
 
-Nothing is playable yet — the first playable build arrives at Task 21.
+The game is playable: main menu → game → win or lose → retry or menu.
 
 ```bash
 cd ~/Projects/project-t-godot
 
-# Run the test suite (works now)
-godot --headless --quit --script test/run_tests.gd
-
-# Open in the editor
+# Play it
 godot --path .
+
+# Run the test suite
+godot --headless --quit --script test/run_tests.gd
 ```
 
 ---
@@ -61,12 +61,12 @@ godot --path .
 | 13 | Purity guard | ✅ |
 | 14 | Headless wave harness | ✅ ← **checkpoint: rules layer complete** |
 | 15 | Asset import and atlas extraction | ✅ |
-| 16 | Map renderer | ⬜ |
-| 17 | Enemy view | ⬜ |
-| 18 | Tower and projectile views | ⬜ |
-| 19 | Game board | ⬜ |
-| 20 | HUD and tower panel | ⬜ |
-| 21 | Scene flow and main scene | ⬜ ← **first playable** |
+| 16 | Map renderer | ✅ |
+| 17 | Enemy view | ✅ |
+| 18 | Tower and projectile views | ✅ |
+| 19 | Game board | ✅ |
+| 20 | HUD and tower panel | ✅ |
+| 21 | Scene flow and main scene | ✅ ← **first playable** |
 | 22 | Audio | ⬜ |
 | 23 | Web export and README | ⬜ |
 
