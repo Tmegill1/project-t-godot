@@ -233,6 +233,28 @@ func test_take_damage_emits_died_exactly_once_on_the_lethal_hit_and_not_before()
 	e.free()
 	return true
 
+# _die() plays "death_%s" % _facing *before* its `await`, so it is observable
+# synchronously (see the walk-facing assertions at test_physics_process_does_
+# not_update_facing_on_a_waypoint_arrival_tick and the flip-matrix test
+# above). Both prior death-related tests deal their lethal hit while _facing
+# is still its class default (&"side"), so a mutation that hardcodes
+# "death_side" - or drops the "%s" interpolation entirely - would agree with
+# the correct code on every existing assertion. Driving the enemy to a
+# non-side facing first, via a real physics tick, closes that gap.
+func test_die_plays_the_death_animation_for_the_enemys_current_facing() -> bool:
+	var e := _ready_enemy()
+	var vertical_path := PackedVector2Array([Vector2(0, 0), Vector2(0, 100), Vector2(0, 200)])
+	e.setup(&"slime", vertical_path, 1)
+
+	e._physics_process(0.016)  # distance to (0, 100) is 100px, well past WAYPOINT_ARRIVAL_RADIUS - no arrival, so facing updates
+	assert_eq(e._facing, &"down", "precondition: the tick actually turned the enemy to face down")
+
+	e.take_damage({"damage": 999.0})  # one hit, comfortably lethal for a 5-health slime
+	assert_eq(e._sprite.animation, &"death_down", "the death animation matches the enemy's facing at the moment it died, not a fixed direction")
+
+	e.free()
+	return true
+
 # --------------------------------------------------------------------------
 # health bar fraction/colour
 # --------------------------------------------------------------------------
