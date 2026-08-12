@@ -591,11 +591,19 @@ func test_leak_below_zero_clamps_lives_to_zero_not_negative() -> bool:
 	b._lives = 2
 	var game_over_count := {"n": 0}
 	b.game_over.connect(func(): game_over_count["n"] += 1)
+	var lives_events: Array = []
+	b.lives_changed.connect(func(l): lives_events.append(l))
 
 	b._on_enemy_leaked(4)  # would take lives to -2 if not clamped
 
 	assert_eq(b.get_lives(), 0, "lives clamp to zero rather than going negative")
 	assert_eq(game_over_count["n"], 1, "game_over still fires exactly once")
+	# The clamp must land before lives_changed fires, not after - otherwise
+	# this same overdrawing leak broadcasts the pre-clamp negative value
+	# (-2) to every listener (e.g. Task 20's HUD) for one frame before the
+	# internal state is corrected. Asserting the getter alone can't catch
+	# that: it only ever sees the final, already-clamped value.
+	assert_eq(lives_events, [0], "lives_changed carries the already-clamped value, never a transient negative one")
 	b.free()
 	return true
 
@@ -610,10 +618,18 @@ func test_game_over_does_not_fire_twice_for_a_second_leak_after_the_run_is_finis
 
 	b._on_enemy_leaked(1)  # first leak ends the run
 	assert_eq(game_over_count["n"], 1, "precondition: game_over fired once")
+	assert_eq(b.get_lives(), 0, "precondition: lives sit at exactly zero after the ending leak")
 
 	b._on_enemy_leaked(1)  # a second enemy leaking after the run already ended
 
 	assert_eq(game_over_count["n"], 1, "game_over does not fire a second time once the run is finished")
+	# The clamp is unconditional (maxi(0, ...)), not gated on _run_finished,
+	# so lives stay floored at zero even for leaks the board no longer
+	# reacts to - Enemy nodes already in the tree keep running their own
+	# _physics_process and can keep leaking after _run_finished is set,
+	# since the board only stops spawning/ticking, it does not freeze or
+	# free enemies already spawned.
+	assert_eq(b.get_lives(), 0, "lives stay floored at zero, not driven negative, by a leak after the run has ended")
 	b.free()
 	return true
 

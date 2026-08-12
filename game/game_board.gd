@@ -122,10 +122,9 @@ func _on_enemy_died(reward: int) -> void:
 	gold_changed.emit(_gold)
 
 func _on_enemy_leaked(life_loss: int) -> void:
-	_lives -= life_loss
+	_lives = maxi(0, _lives - life_loss)
 	lives_changed.emit(_lives)
 	if _lives <= 0 and not _run_finished:
-		_lives = 0
 		_run_finished = true
 		_wave_active = false
 		game_over.emit()
