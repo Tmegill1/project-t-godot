@@ -1,0 +1,18 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://game/game_board.gd" id="1_board"]
+[ext_resource type="Script" path="res://game/map_renderer.gd" id="2_map"]
+
+[node name="GameBoard" type="Node2D"]
+script = ExtResource("1_board")
+
+[node name="MapRenderer" type="Node2D" parent="."]
+script = ExtResource("2_map")
+
+[node name="Towers" type="Node2D" parent="."]
+
+[node name="Enemies" type="Node2D" parent="."]
+
+[node name="Projectiles" type="Node2D" parent="."]
+
+[node name="PlacementPreview" type="Node2D" parent="."]
