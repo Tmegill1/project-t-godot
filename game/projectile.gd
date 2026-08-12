@@ -58,7 +58,8 @@ func _physics_process(delta: float) -> void:
 
 	var to_target := _target.global_position - global_position
 	var step := _speed * delta
-	if to_target.length() <= step or to_target.length() <= HIT_RADIUS:
+	var dist := to_target.length()
+	if dist <= step or dist <= HIT_RADIUS:
 		hit.emit(_target, _source, _splash)
 		queue_free()
 		return
