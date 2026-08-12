@@ -13,3 +13,4 @@ script = ExtResource("1_game")
 [node name="Hud" parent="." instance=ExtResource("3_hud")]
 
 [node name="TowerPanel" parent="Hud" instance=ExtResource("4_panel")]
+offset_top = 52.0
