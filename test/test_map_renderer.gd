@@ -342,6 +342,59 @@ func test_is_adjacent_to_walkable_checks_all_four_orthogonal_directions() -> boo
 	mr.free()
 	return true
 
+# _is_adjacent_to_walkable checks directions in a fixed order: up, down,
+# left, right. On Godot 4.7.1, an out-of-bounds index access aborts the
+# *entire* enclosing function frame and returns the declared return type's
+# default - not just the failing expression, with everything after it in
+# that function skipped. (This is the same mechanism test/case.gd's
+# `-> bool` / `return true` crash sentinel itself depends on - see
+# run_tests.gd's header comment - so it is settled behaviour, not
+# incidental.) A tile in the last row has no real "down" neighbour; the
+# correct bounds check skips it cleanly via `continue`. But if that bounds
+# check were ever broken, the resulting out-of-bounds access on the down
+# probe - checked *before* left and right - would abort the whole function
+# and return false immediately, even when the genuine walkable neighbour is
+# to the left or right and would otherwise have been found. The direction
+# test above always centres its target tile, so no probe there is ever out
+# of bounds and it structurally cannot exercise this; these cases exist
+# specifically to close that gap.
+func test_is_adjacent_to_walkable_checks_left_and_right_from_the_last_row() -> bool:
+	var mr := MapRenderer.new()
+
+	# Last row, walkable neighbour only to the right - past where the down
+	# probe (checked second) would go out of bounds.
+	Grid.set_active(3, 2)
+	var right_only: Array = [
+		[Tiles.BLOCKED, Tiles.BLOCKED, Tiles.BLOCKED],
+		[Tiles.BLOCKED, Tiles.BUILDABLE, Tiles.PATH],
+	]
+	mr.render(right_only, Rng.new(1))
+	assert_true(mr._is_adjacent_to_walkable(1, 1),
+		"last-row tile finds its walkable neighbour to the right, past where the down probe would go out of bounds")
+
+	# Last row, walkable neighbour only to the left - same hazard.
+	var left_only: Array = [
+		[Tiles.BLOCKED, Tiles.BLOCKED, Tiles.BLOCKED],
+		[Tiles.PATH, Tiles.BUILDABLE, Tiles.BLOCKED],
+	]
+	mr.render(left_only, Rng.new(1))
+	assert_true(mr._is_adjacent_to_walkable(1, 1),
+		"last-row tile finds its walkable neighbour to the left, past where the down probe would go out of bounds")
+
+	# Bottom-right corner: last row AND last column, walkable neighbour only
+	# to the left - both the down and right probes would go out of bounds.
+	Grid.set_active(2, 2)
+	var corner: Array = [
+		[Tiles.BLOCKED, Tiles.BLOCKED],
+		[Tiles.PATH, Tiles.BUILDABLE],
+	]
+	mr.render(corner, Rng.new(1))
+	assert_true(mr._is_adjacent_to_walkable(1, 1),
+		"bottom-right corner tile finds its walkable neighbour to the left, past where both the down and right probes would go out of bounds")
+
+	mr.free()
+	return true
+
 # A single seed's stone count can coincidentally match between rng.int_range
 # (3, 5) and a mutated (2, 5) or (3, 6): they share the same underlying
 # next() draw at that call site, and lo + int(next() * width) can round to
@@ -575,4 +628,18 @@ func test_grid_overlay_sits_above_ground_and_below_decoration() -> bool:
 	assert_true(grid.z_index < overlay_z, "the grid draws below decoration/endpoints/blocked overlays")
 
 	mr.free()
+	return true
+
+# _GRID_LINE_COLOR is a plain script-level const on a class_name script, so
+# it is readable directly via MapRenderer._GRID_LINE_COLOR - no scene tree,
+# node instantiation, or draw pass required. (An earlier version of this
+# suite treated the grid's draw color as untestable in headless mode,
+# reasoning that _draw()'s draw_line calls only execute during a live
+# render pass; that reasoning is correct for verifying what actually gets
+# painted to a canvas, but wrong for reading the constant the drawing code
+# would use - the two are different questions, and this test answers the
+# one that is actually checkable here.)
+func test_grid_line_color_matches_the_reference() -> bool:
+	assert_eq(MapRenderer._GRID_LINE_COLOR, Color8(0x2a, 0x2a, 0x2a),
+		"grid overlay strokes match the reference MapRenderer.ts drawGrid()'s 0x2a2a2a")
 	return true
