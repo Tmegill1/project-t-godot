@@ -69,7 +69,7 @@ func test_icon_for_cuts_each_kinds_own_frame_from_the_tower_sheet() -> bool:
 	for kind in Towers.KINDS:
 		var icon := TowerPanel.icon_for(kind)
 		assert_eq(icon.region, expected[kind], "%s icon region matches its upgrade_frames[0]" % kind)
-		assert_eq(icon.atlas, TowerPanel.TOWER_SHEET, "%s icon is cut from the shared tower sheet" % kind)
+		assert_eq(icon.atlas, Tower.TOWER_SHEET, "%s icon is cut from the same sheet the placed tower uses" % kind)
 	return true
 
 func test_every_button_carries_its_kinds_icon() -> bool:

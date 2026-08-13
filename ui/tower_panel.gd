@@ -8,9 +8,6 @@ extends Control
 ## least 44x44 (touch-first requirement).
 
 const MIN_TAP_SIZE := Vector2(120, 56)
-const TOWER_SHEET := preload("res://assets/towers.png")
-const SHEET_COLUMNS := 5
-const FRAME_SIZE := 96
 const ICON_PX := 40
 
 var _board: GameBoard
@@ -40,16 +37,20 @@ func bind(board: GameBoard) -> void:
 
 	_refresh(board.get_gold())
 
-## That kind's sprite, cut from the shared tower sheet on the same 96px grid
-## the placed tower uses, so the button shows the thing you are buying.
+## That kind's sprite, cut from the shared tower sheet on the same grid the
+## placed tower uses, so the button shows the thing you are buying.
+##
+## The sheet and its geometry come from Tower rather than being re-declared
+## here: they are one description of one PNG, and a second copy would drift
+## the day someone re-packs towers.png.
 static func icon_for(kind: StringName) -> AtlasTexture:
 	var frame: int = Towers.DEFS[kind]["upgrade_frames"][0]
 	var atlas := AtlasTexture.new()
-	atlas.atlas = TOWER_SHEET
+	atlas.atlas = Tower.TOWER_SHEET
 	atlas.region = Rect2(
-		(frame % SHEET_COLUMNS) * FRAME_SIZE,
-		(frame / SHEET_COLUMNS) * FRAME_SIZE,
-		FRAME_SIZE, FRAME_SIZE)
+		(frame % Tower.SHEET_COLUMNS) * Tower.FRAME_SIZE,
+		(frame / Tower.SHEET_COLUMNS) * Tower.FRAME_SIZE,
+		Tower.FRAME_SIZE, Tower.FRAME_SIZE)
 	return atlas
 
 ## Placing consumes the board's selection, so the button must not stay lit.
