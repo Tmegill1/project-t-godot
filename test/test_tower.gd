@@ -295,3 +295,41 @@ func test_sheet_columns_and_frame_size_constants_match_the_brief() -> bool:
 	assert_eq(Tower.SHEET_COLUMNS, 5, "SHEET_COLUMNS")
 	assert_eq(Tower.FRAME_SIZE, 96, "FRAME_SIZE")
 	return true
+
+# --------------------------------------------------------------------------
+# frame_region — the single copy of the sheet's geometry.
+#
+# The atlas arithmetic used to be written out twice: here in Tower.setup and
+# again in ui/tower_panel.gd's icon_for. An earlier pass unified the constants
+# (SHEET_COLUMNS, FRAME_SIZE) but left both sites computing the Rect2, which
+# is the same duplication one layer down. Tower.frame_region is now the only
+# copy; both call sites' results stay pinned where they already were
+# (test_setup_atlas_region_for_each_tower_kind above, and test_tower_panel.gd's
+# test_icon_for_cuts_each_kinds_own_frame_from_the_tower_sheet).
+# --------------------------------------------------------------------------
+
+# Static, so it needs no tree, no node and no @onready resolution.
+func test_frame_region_walks_the_sheet_row_major() -> bool:
+	assert_eq(Tower.frame_region(0), Rect2(0, 0, 96, 96), "frame 0 is the top-left cell")
+	assert_eq(Tower.frame_region(4), Rect2(4 * 96, 0, 96, 96), "frame 4 is the last cell of row 0")
+	assert_eq(Tower.frame_region(5), Rect2(0, 96, 96, 96), "frame 5 wraps to the start of row 1")
+	assert_eq(Tower.frame_region(12), Rect2(2 * 96, 2 * 96, 96, 96), "frame 12 is row 2, column 2")
+	return true
+
+# `frame / SHEET_COLUMNS` must stay integer division. Both operands are ints
+# so GDScript floors it; if either ever became a float the row would come out
+# fractional and every icon would sample a sliver of two rows. Frame 7 is the
+# cheapest witness: 7 / 5 is 1 as ints and 1.4 as floats.
+func test_frame_region_row_uses_integer_division() -> bool:
+	assert_eq(Tower.frame_region(7), Rect2(2 * 96, 1 * 96, 96, 96),
+		"frame 7 is row 1 column 2, not row 1.4")
+	return true
+
+# The invariant the extraction exists to protect: what the build panel shows
+# you before you buy is cut from the same cell as the tower you get.
+func test_the_build_panel_icon_and_the_placed_tower_share_one_region() -> bool:
+	for kind in Towers.KINDS:
+		var frame: int = Towers.DEFS[kind]["upgrade_frames"][0]
+		assert_eq(TowerPanel.icon_for(kind).region, Tower.frame_region(frame),
+			"%s: the panel icon and the placed tower cut the same cell" % kind)
+	return true

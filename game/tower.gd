@@ -14,6 +14,17 @@ const TOWER_SHEET := preload("res://assets/towers.png")
 const SHEET_COLUMNS := 5
 const FRAME_SIZE := 96
 
+## Where a frame index sits on the shared tower sheet, row-major across
+## SHEET_COLUMNS. One PNG gets one description of its geometry: the build
+## panel's button icons come through here too (ui/tower_panel.gd's icon_for),
+## so a re-pack of towers.png is a one-line change rather than two that can
+## disagree. Integer division on the row is intentional.
+static func frame_region(frame: int) -> Rect2:
+	return Rect2(
+		(frame % SHEET_COLUMNS) * FRAME_SIZE,
+		(frame / SHEET_COLUMNS) * FRAME_SIZE,
+		FRAME_SIZE, FRAME_SIZE)
+
 var kind: StringName
 var price_paid := 0
 var grid_col := 0
@@ -35,13 +46,9 @@ func setup(tower_kind: StringName, col: int, row: int, paid: int) -> void:
 	_def = Towers.DEFS[kind]
 	position = Grid.tile_to_world_center(col, row)
 
-	var frame: int = _def["upgrade_frames"][0]
 	var atlas := AtlasTexture.new()
 	atlas.atlas = TOWER_SHEET
-	atlas.region = Rect2(
-		(frame % SHEET_COLUMNS) * FRAME_SIZE,
-		(frame / SHEET_COLUMNS) * FRAME_SIZE,
-		FRAME_SIZE, FRAME_SIZE)
+	atlas.region = frame_region(_def["upgrade_frames"][0])
 	_sprite.texture = atlas
 	var target_px := Tiles.TILE_SIZE * float(_def["size"])
 	_sprite.scale = Vector2.ONE * (target_px / FRAME_SIZE)

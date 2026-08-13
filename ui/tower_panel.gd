@@ -19,8 +19,17 @@ func bind(board: GameBoard) -> void:
 	board.tower_placed.connect(_on_tower_placed)
 
 	var container: VBoxContainer = $Buttons
+	# free(), not queue_free(). queue_free() only unparents a node once a frame
+	# actually processes, which never happens inside a single synchronous test
+	# method (no await allowed) — the previous bind()'s buttons would still be
+	# in get_children() alongside the new ones, doubling the count on any
+	# re-bind observed synchronously. Same engine behaviour, same conclusion,
+	# as game/map_renderer.gd's render(); these two used to disagree. The
+	# buttons are owned exclusively by this container (the only other reference
+	# is _buttons, rebuilt below), so an immediate free() is safe.
 	for child in container.get_children():
-		child.queue_free()
+		child.free()
+	_buttons.clear()
 
 	for kind in Towers.KINDS:
 		var button := Button.new()
@@ -40,17 +49,15 @@ func bind(board: GameBoard) -> void:
 ## That kind's sprite, cut from the shared tower sheet on the same grid the
 ## placed tower uses, so the button shows the thing you are buying.
 ##
-## The sheet and its geometry come from Tower rather than being re-declared
-## here: they are one description of one PNG, and a second copy would drift
-## the day someone re-packs towers.png.
+## The sheet AND the region arithmetic come from Tower rather than being
+## re-declared here: they are one description of one PNG, and a second copy
+## would drift the day someone re-packs towers.png. An earlier pass unified
+## only the constants and left both sites computing the Rect2 themselves,
+## which is the same duplication one layer down — Tower.frame_region closes it.
 static func icon_for(kind: StringName) -> AtlasTexture:
-	var frame: int = Towers.DEFS[kind]["upgrade_frames"][0]
 	var atlas := AtlasTexture.new()
 	atlas.atlas = Tower.TOWER_SHEET
-	atlas.region = Rect2(
-		(frame % Tower.SHEET_COLUMNS) * Tower.FRAME_SIZE,
-		(frame / Tower.SHEET_COLUMNS) * Tower.FRAME_SIZE,
-		Tower.FRAME_SIZE, Tower.FRAME_SIZE)
+	atlas.region = Tower.frame_region(Towers.DEFS[kind]["upgrade_frames"][0])
 	return atlas
 
 ## Placing consumes the board's selection, so the button must not stay lit.
