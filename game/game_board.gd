@@ -220,9 +220,12 @@ func _on_projectile_hit(target_node: Node2D, source: Dictionary, splash: float) 
 	if splash <= 0.0:
 		return
 	for enemy in _enemies_root.get_children():
+		# The primary target took its hit above, so it is excluded here; the
+		# geometry itself is Damage.in_splash, the single copy of the splash
+		# rule that sim/harness.gd's balance tests also run.
 		if enemy == target_node or not enemy is Enemy:
 			continue
-		if enemy.global_position.distance_to(target_node.global_position) <= splash:
+		if Damage.in_splash(target_node.global_position, enemy.global_position, splash):
 			enemy.take_damage(source)
 
 func _select_tower(tower: Tower) -> void:

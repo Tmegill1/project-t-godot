@@ -8,6 +8,25 @@ class_name Damage
 ## either could be answered by the same build as the other, enemy properties
 ## would be decoration.
 
+## Whether a splash blast centred on `center` reaches something at `position`.
+##
+## This lives in sim/ because both callers need it and there must only be one
+## of it: sim/harness.gd resolves splash for every balance test in the suite,
+## and game/game_board.gd resolves it for the game the player actually runs.
+## This project's load-bearing claim is that those are the same rules — with
+## two copies, the first upgrade that touches splash gets written twice and
+## only the harness's copy is covered by tests.
+##
+## The boundary is inclusive: something at exactly the splash radius IS hit.
+## test_harness.gd's test_splash_radius_boundary_at_wave_ten depends on that
+## exact edge (wave 10 puts a bystander at exactly 55.0 from the target).
+##
+## Excluding the blast's own primary target is deliberately left to the caller:
+## the harness identifies it by sim id and the board by node identity, and that
+## is a question of identity, not of geometry.
+static func in_splash(center: Vector2, position: Vector2, radius: float) -> bool:
+	return center.distance_to(position) <= radius
+
 static func resolve(source: Dictionary, target: Dictionary) -> Dictionary:
 	var shield: int = maxi(0, int(target.get("shield", 0)))
 	var health: float = float(target["health"])

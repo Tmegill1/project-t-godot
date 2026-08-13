@@ -105,8 +105,10 @@ static func run_wave(config: Dictionary) -> Dictionary:
 			var hit_list: Array = [target]
 			if tower["splash"] > 0.0:
 				for e in enemies:
+					# The blast's own target is already in hit_list; the
+					# geometry is Damage.in_splash, shared with the live board.
 					if e["id"] != target["id"] \
-							and e["position"].distance_to(target["position"]) <= tower["splash"]:
+							and Damage.in_splash(target["position"], e["position"], tower["splash"]):
 						hit_list.append(e)
 			for e in hit_list:
 				var r := Damage.resolve({"damage": tower["damage"], "pierce": tower["pierce"]}, e)

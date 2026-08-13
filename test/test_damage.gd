@@ -397,3 +397,51 @@ func test_negative_pierce_does_not_increase_effective_armour() -> bool:
 	assert_almost_eq(r["damage_dealt"], 7.0, 0.001,
 		"negative pierce is inert: 10 minus the unmodified 3 armour")
 	return true
+
+# --------------------------------------------------------------------------
+# in_splash — the single copy of the splash-coverage rule.
+#
+# This predicate used to be written out twice, once in sim/harness.gd (which
+# every balance test in the suite runs through) and once in
+# game/game_board.gd (which the player runs through). They agreed, but only
+# the harness's copy was covered by the balance tests, so the first upgrade
+# touching splash would have had to be made twice and could silently diverge.
+# These tests pin the extracted rule directly; the two call sites' own
+# behaviour stays pinned where it already was, in test_harness.gd's
+# test_splash_radius_boundary_at_wave_ten and test_game_board.gd's splash
+# tests, so both the rule and its wiring are covered.
+# --------------------------------------------------------------------------
+
+func test_in_splash_covers_inside_and_excludes_outside() -> bool:
+	var center := Vector2(100.0, 100.0)
+	assert_true(Damage.in_splash(center, Vector2(100.0, 100.0), 40.0),
+		"the blast centre itself is covered")
+	assert_true(Damage.in_splash(center, Vector2(130.0, 100.0), 40.0),
+		"30px away is inside a 40px radius")
+	assert_false(Damage.in_splash(center, Vector2(141.0, 100.0), 40.0),
+		"41px away is outside a 40px radius")
+	# Radial, not a bounding box: (30, 30) is 42.4px away, outside 40.
+	assert_false(Damage.in_splash(center, Vector2(130.0, 130.0), 40.0),
+		"coverage is a circle, not a square")
+	return true
+
+# `<=`, not `<`. test_harness.gd's wave-10 mortar pin depends on this exact
+# edge (a bystander lands at exactly 55.0 from the target there), as does
+# test_game_board.gd's boundary test — a `<` mutation changes both.
+func test_in_splash_boundary_is_inclusive() -> bool:
+	assert_true(Damage.in_splash(Vector2.ZERO, Vector2(40.0, 0.0), 40.0),
+		"exactly at the radius is hit (<=, not <)")
+	assert_false(Damage.in_splash(Vector2.ZERO, Vector2(40.001, 0.0), 40.0),
+		"just beyond the radius is not")
+	return true
+
+# A zero radius covers only an exactly co-located point. Both call sites guard
+# with an explicit "no splash" early return before ever asking, so this is the
+# predicate's behaviour rather than the game's — pinned so the guard can never
+# be dropped on the assumption that in_splash(…, 0.0) is inert on its own.
+func test_in_splash_with_a_zero_radius_still_covers_a_co_located_point() -> bool:
+	assert_true(Damage.in_splash(Vector2(5.0, 5.0), Vector2(5.0, 5.0), 0.0),
+		"distance zero is within radius zero, so the callers' own guard matters")
+	assert_false(Damage.in_splash(Vector2(5.0, 5.0), Vector2(5.1, 5.0), 0.0),
+		"anything at all off-centre is outside a zero radius")
+	return true
