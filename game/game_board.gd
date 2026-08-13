@@ -192,7 +192,14 @@ func _try_place(col: int, row: int) -> void:
 	_map_renderer.clear_decoration_at(col, row)
 
 	gold_changed.emit(_gold)
-	tower_placed.emit(_selected_kind)
+	var placed_kind := _selected_kind
+
+	# Placing consumes the selection. Without this the kind stays armed and
+	# the next tap on open ground builds another one, which is the opposite
+	# of what a tap on empty ground means once you have finished building.
+	_selected_kind = &""
+
+	tower_placed.emit(placed_kind)
 
 func _on_tower_fired(target_node: Node2D, source: Dictionary,
 		splash: float, tower: Tower) -> void:

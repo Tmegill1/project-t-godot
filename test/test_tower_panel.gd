@@ -45,7 +45,66 @@ func test_bind_creates_one_button_per_kind_with_base_price_and_label() -> bool:
 	return true
 
 func test_min_tap_size_constant_matches_the_brief() -> bool:
-	assert_eq(TowerPanel.MIN_TAP_SIZE, Vector2(120, 48), "MIN_TAP_SIZE matches the brief's literal dimensions")
+	# Grew from 48 to 56 when the tower icon was added beside the label, so the
+	# artwork and two text lines both fit. Still well above the 44x44 floor.
+	assert_eq(TowerPanel.MIN_TAP_SIZE, Vector2(120, 56), "MIN_TAP_SIZE leaves room for the icon")
+	assert_true(TowerPanel.MIN_TAP_SIZE.x >= 44.0 and TowerPanel.MIN_TAP_SIZE.y >= 44.0,
+		"MIN_TAP_SIZE still satisfies the touch-first 44x44 floor")
+	return true
+
+# --------------------------------------------------------------------------
+# Tower icons
+# --------------------------------------------------------------------------
+
+func test_icon_for_cuts_each_kinds_own_frame_from_the_tower_sheet() -> bool:
+	# The same 96px grid and upgrade_frames[0] the placed tower uses, so the
+	# button shows the thing you are actually buying. Frames: basic 8 -> (3,1),
+	# fast 1 -> (1,0), mortar 5 -> (0,1), long 2 -> (2,0).
+	var expected := {
+		&"basic": Rect2(3 * 96, 1 * 96, 96, 96),
+		&"fast": Rect2(1 * 96, 0 * 96, 96, 96),
+		&"mortar": Rect2(0 * 96, 1 * 96, 96, 96),
+		&"long": Rect2(2 * 96, 0 * 96, 96, 96),
+	}
+	for kind in Towers.KINDS:
+		var icon := TowerPanel.icon_for(kind)
+		assert_eq(icon.region, expected[kind], "%s icon region matches its upgrade_frames[0]" % kind)
+		assert_eq(icon.atlas, TowerPanel.TOWER_SHEET, "%s icon is cut from the shared tower sheet" % kind)
+	return true
+
+func test_every_button_carries_its_kinds_icon() -> bool:
+	var p := _ready_panel()
+	var b := _ready_board()
+	p.bind(b)
+
+	for kind in Towers.KINDS:
+		var button: Button = p._buttons[kind]
+		assert_true(button.icon != null, "%s button has an icon" % kind)
+		assert_eq(button.icon.region, TowerPanel.icon_for(kind).region,
+			"%s button's icon is that kind's own frame, not another kind's" % kind)
+	p.free(); b.free()
+	return true
+
+# --------------------------------------------------------------------------
+# Selection clears on placement
+# --------------------------------------------------------------------------
+
+func test_placing_a_tower_untoggles_every_button() -> bool:
+	var p := _ready_panel()
+	var b := _ready_board()
+	b._gold = 1000
+	p.bind(b)
+
+	p._on_selected(&"basic")
+	assert_true(p._buttons[&"basic"].button_pressed, "precondition: the basic button is lit after selecting it")
+
+	var tile := _find_buildable_tile(b)
+	b._try_place(tile.x, tile.y)
+
+	for kind in Towers.KINDS:
+		assert_false(p._buttons[kind].button_pressed,
+			"%s button is no longer lit once a tower has been placed" % kind)
+	p.free(); b.free()
 	return true
 
 func test_bind_creates_buttons_that_meet_the_minimum_tap_target() -> bool:

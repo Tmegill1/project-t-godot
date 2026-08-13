@@ -192,13 +192,15 @@ func test_try_place_enforces_the_per_kind_limit_at_the_boundary() -> bool:
 	var limit := EconomySim.tower_limit(kind, Maps.FIRST)
 	assert_eq(limit, 5, "precondition: mortar's tower_limit on demoMap is 5")
 	var tiles := _find_buildable_tiles(b, limit + 1)
-	b.select_tower_kind(kind)
 	for i in limit:
+		# Re-arm each time: a successful placement now consumes the selection.
+		b.select_tower_kind(kind)
 		b._try_place(tiles[i].x, tiles[i].y)
 	assert_eq(b.get_tower_count(kind), limit, "precondition: exactly the limit placed")
 
 	var rejected := {"count": 0, "reason": ""}
 	b.placement_rejected.connect(func(r): rejected["count"] += 1; rejected["reason"] = r)
+	b.select_tower_kind(kind)
 	b._try_place(tiles[limit].x, tiles[limit].y)
 
 	assert_eq(rejected["count"], 1, "the (limit + 1)th placement of the same kind is rejected")
@@ -279,10 +281,73 @@ func test_placing_a_second_tower_of_a_kind_charges_the_escalated_price() -> bool
 
 	b._try_place(tiles[0].x, tiles[0].y)
 	var gold_after_first := b.get_gold()
+	# Re-arm: a successful placement now consumes the selection.
+	b.select_tower_kind(&"basic")
 	b._try_place(tiles[1].x, tiles[1].y)
 
 	assert_eq(gold_after_first, 1000 - first_price, "the first tower was charged the base price")
 	assert_eq(b.get_gold(), gold_after_first - second_price, "the second tower was charged the escalated price, not the base again")
+	b.free()
+	return true
+
+# --------------------------------------------------------------------------
+# Placing consumes the selection
+# --------------------------------------------------------------------------
+
+func test_a_successful_placement_clears_the_selected_kind() -> bool:
+	var b := _ready_board()
+	b._gold = 1000
+	var tile := _find_buildable_tiles(b, 1)[0]
+	b.select_tower_kind(&"basic")
+	assert_eq(b._selected_kind, &"basic", "precondition: the kind is armed")
+
+	b._try_place(tile.x, tile.y)
+
+	assert_eq(b._selected_kind, &"", "placing a tower disarms the selected kind")
+	b.free()
+	return true
+
+# The selection must survive a rejection, or a mis-tap on a blocked tile would
+# silently disarm you and the next tap would do nothing.
+func test_a_rejected_placement_leaves_the_selection_armed() -> bool:
+	var b := _ready_board()
+	b._gold = 1000
+	b.select_tower_kind(&"basic")
+	var blocked := _find_tile(b, Tiles.BLOCKED)
+
+	b._try_place(blocked.x, blocked.y)
+
+	assert_eq(b._selected_kind, &"basic", "a rejected placement leaves the kind armed to retry")
+	b.free()
+	return true
+
+func test_a_rejection_for_insufficient_gold_also_leaves_the_selection_armed() -> bool:
+	var b := _ready_board()
+	b._gold = 5  # below basic's base price of 20
+	b.select_tower_kind(&"basic")
+	var tile := _find_buildable_tiles(b, 1)[0]
+
+	b._try_place(tile.x, tile.y)
+
+	assert_eq(b._selected_kind, &"basic", "an unaffordable placement leaves the kind armed")
+	assert_eq(b.get_tower_count(&"basic"), 0, "precondition: nothing was placed")
+	b.free()
+	return true
+
+# tower_placed must still carry the kind that was placed, even though the
+# selection is cleared before it fires — the panel reads that payload.
+func test_tower_placed_still_reports_the_kind_despite_the_selection_clearing() -> bool:
+	var b := _ready_board()
+	b._gold = 1000
+	var tile := _find_buildable_tiles(b, 1)[0]
+	var seen := {"kind": &"unset", "count": 0}
+	b.tower_placed.connect(func(k): seen["kind"] = k; seen["count"] += 1)
+
+	b.select_tower_kind(&"mortar")
+	b._try_place(tile.x, tile.y)
+
+	assert_eq(seen["count"], 1, "tower_placed fired exactly once")
+	assert_eq(seen["kind"], &"mortar", "tower_placed carries the placed kind, not the cleared empty selection")
 	b.free()
 	return true
 
