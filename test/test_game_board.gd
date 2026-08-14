@@ -611,13 +611,17 @@ func test_enemy_died_signal_adds_its_reward_to_gold() -> bool:
 
 	var gold_events: Array = []
 	b.gold_changed.connect(func(g): gold_events.append(g))
+	var died_events: Array = []
+	enemy.died.connect(func(r, k): died_events.append([r, k]))
 	var gold_before := b.get_gold()
 	var reward := int(Enemies.DEFS[&"ogre"]["reward"])
 
-	enemy.died.emit(reward)
+	enemy.died.emit(reward, &"ogre")
 
 	assert_eq(b.get_gold(), gold_before + reward, "gold increased by exactly the enemy's reward")
 	assert_eq(gold_events, [b.get_gold()], "gold_changed fired exactly once")
+	assert_eq(died_events, [[reward, &"ogre"]],
+		"died carries both the reward and the kind unchanged to every listener, including the board's own _on_enemy_died")
 	b.free()
 	return true
 

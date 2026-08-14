@@ -82,6 +82,7 @@ func start_next_wave() -> void:
 	_spawn_queue = Waves.build_schedule(_wave)
 	wave_changed.emit(_wave, Waves.MAX_WAVES)
 	wave_state_changed.emit(true)
+	_play_sound(&"wave-start")
 
 func _physics_process(delta: float) -> void:
 	if _run_finished:
@@ -117,24 +118,29 @@ func _spawn(kind: StringName) -> void:
 	enemy.died.connect(_on_enemy_died)
 	enemy.leaked.connect(_on_enemy_leaked)
 
-func _on_enemy_died(reward: int) -> void:
+func _on_enemy_died(reward: int, kind: StringName) -> void:
 	_gold += reward
 	gold_changed.emit(_gold)
+	_play_sound(&"death-%s" % kind)
 
 func _on_enemy_leaked(life_loss: int) -> void:
 	_lives = maxi(0, _lives - life_loss)
 	lives_changed.emit(_lives)
+	_play_sound(&"leak")
 	if _lives <= 0 and not _run_finished:
 		_run_finished = true
 		_wave_active = false
 		game_over.emit()
+		_play_sound(&"defeat")
 
 func _on_wave_cleared() -> void:
 	_wave_active = false
 	wave_state_changed.emit(false)
+	_play_sound(&"wave-clear")
 	if _wave >= Waves.MAX_WAVES and not _run_finished:
 		_run_finished = true
 		victory.emit()
+		_play_sound(&"victory")
 
 # --- Input -------------------------------------------------------------
 
@@ -165,20 +171,24 @@ func _handle_tap(world: Vector2) -> void:
 func _try_place(col: int, row: int) -> void:
 	if _tiles[row][col] != Tiles.BUILDABLE:
 		placement_rejected.emit("You can only build on open ground.")
+		_play_sound(&"denied")
 		return
 
 	var total := _towers_root.get_child_count()
 	if total >= int(Maps.get_def(_map_name)["tower_budget"]):
 		placement_rejected.emit("Tower budget reached.")
+		_play_sound(&"denied")
 		return
 
 	if _counts[_selected_kind] >= EconomySim.tower_limit(_selected_kind, _map_name):
 		placement_rejected.emit("You cannot build any more of that tower.")
+		_play_sound(&"denied")
 		return
 
 	var price := EconomySim.tower_price(_selected_kind, _counts[_selected_kind])
 	if not EconomySim.can_afford(_gold, price):
 		placement_rejected.emit("Not enough gold — that costs %d." % price)
+		_play_sound(&"denied")
 		return
 
 	var tower: Tower = TOWER_SCENE.instantiate()
@@ -200,11 +210,13 @@ func _try_place(col: int, row: int) -> void:
 	_selected_kind = &""
 
 	tower_placed.emit(placed_kind)
+	_play_sound(&"place")
 
 func _on_tower_fired(target_node: Node2D, source: Dictionary,
 		splash: float, tower: Tower) -> void:
 	if not is_instance_valid(target_node):
 		return
+	_play_sound(&"fire-%s" % tower.kind)
 	var projectile: Projectile = PROJECTILE_SCENE.instantiate()
 	_projectiles_root.add_child(projectile)
 	projectile.global_position = tower.global_position
@@ -248,3 +260,26 @@ func sell_selected_tower() -> void:
 	_occupied.erase(Vector2i(tower.grid_col, tower.grid_row))
 	tower.queue_free()
 	gold_changed.emit(_gold)
+	_play_sound(&"sell")
+
+# --- Audio ---------------------------------------------------------------
+
+## Looks up the AudioManager autoload by absolute path rather than
+## referencing its global identifier directly. Under
+## `godot --headless --script` (how the test suite runs), autoload
+## singletons are never instantiated and their global identifiers do not
+## even resolve at compile time - a bare `AudioManager` reference in this
+## file would abort compilation of the whole script under the harness
+## (confirmed with a throwaway probe; see task-22-amendments.md #2).
+## Routing through Engine.get_main_loop().root also sidesteps a second
+## failure mode: calling get_node() on `self` when this node was never
+## added to a live tree (true for every board the test harness builds)
+## throws "Can't use get_node() with absolute paths from outside the
+## active scene tree" - calling it on the tree's own root avoids that.
+func _play_sound(sound: StringName) -> void:
+	var loop := Engine.get_main_loop()
+	if not loop is SceneTree:
+		return
+	var mgr = loop.root.get_node_or_null("AudioManager")
+	if mgr:
+		mgr.play(sound)

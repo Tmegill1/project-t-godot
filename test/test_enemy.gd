@@ -210,8 +210,8 @@ func test_take_damage_emits_died_exactly_once_on_the_lethal_hit_and_not_before()
 	var e := _ready_enemy()
 	e.setup(&"slime", _straight_path(), 1)  # health 5, reward 5
 
-	var captured := {"count": 0, "reward": -1}
-	e.died.connect(func(v): captured["count"] += 1; captured["reward"] = v)
+	var captured := {"count": 0, "reward": -1, "kind": &""}
+	e.died.connect(func(v, k): captured["count"] += 1; captured["reward"] = v; captured["kind"] = k)
 
 	e.take_damage({"damage": 2.0})  # 5 -> 3
 	assert_eq(captured["count"], 0, "died has not fired after a non-lethal hit")
@@ -222,6 +222,7 @@ func test_take_damage_emits_died_exactly_once_on_the_lethal_hit_and_not_before()
 	assert_true(lethal["lethal"], "the resolve result reports lethal")
 	assert_eq(captured["count"], 1, "died fired exactly once on the lethal hit")
 	assert_eq(captured["reward"], int(Enemies.DEFS[&"slime"]["reward"]), "died carries the enemy's reward")
+	assert_eq(captured["kind"], &"slime", "died carries the enemy's own kind, not a fixed/default value")
 	assert_eq(e.sim["dying"], true, "sim marks dying")
 	assert_eq(e.sim["alive"], false, "sim marks not alive")
 	assert_false(e._health_bar.visible, "health bar is hidden once dying")

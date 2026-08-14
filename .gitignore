@@ -2,3 +2,8 @@
 reference/
 *.tmp
 export/
+
+# Dropped into the project root by the Godot MCP every time it runs the game,
+# along with an [autoload] entry in project.godot that must be stripped before
+# committing. Neither belongs to the game.
+mcp_interaction_server.gd

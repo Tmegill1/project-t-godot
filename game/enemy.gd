@@ -5,7 +5,7 @@ extends Node2D
 ## where to move each tick, and reports its own death/leak upward by signal.
 ## Decides nothing about the game itself - the sim modules do.
 
-signal died(reward: int)
+signal died(reward: int, kind: StringName)
 signal leaked(life_loss: int)
 
 const FRAME_SIZE := 48
@@ -93,7 +93,7 @@ func get_sim_state() -> Dictionary:
 func _die() -> void:
 	sim["dying"] = true
 	sim["alive"] = false
-	died.emit(int(Enemies.DEFS[kind]["reward"]))
+	died.emit(int(Enemies.DEFS[kind]["reward"]), kind)
 	_health_bar.visible = false
 	_sprite.play("death_%s" % _facing)
 	await _sprite.animation_finished
