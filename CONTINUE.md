@@ -270,7 +270,12 @@ the player runs, not only in the thing the tests run.
 3. **The balance is unplaytested.** The original's own handoff notes say every
    number is a placeholder. "Matches Phaser" will not mean "plays well." Tune with
    the harness, which is exactly what it is for.
-4. **Web export will be 25–40 MB** against the Phaser build's 368 KB gzipped.
+4. **Web export is 40.6 MB** — measured, not predicted; the design anticipated
+   25–40 MB. 39.5 MB of that is `index.wasm`, the Godot engine binary. The
+   game's own `index.pck` is 785 KB raw / 658 KB gzipped, against the Phaser
+   build's 368 KB gzipped — so the game data itself is roughly 1.8× larger, but
+   that difference is noise beside the engine. Trimming art or audio cannot
+   meaningfully move the total; only a different engine would.
 
 ---
 

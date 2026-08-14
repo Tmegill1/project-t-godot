@@ -22,10 +22,10 @@ why this one was chosen — lives in:
 For narrative history of how the port was built task by task, see
 [`PROGRESS.md`](PROGRESS.md) (task log and decision log) and
 [`CONTINUE.md`](CONTINUE.md) (single-file resume/orientation doc, written for
-an assistant picking the project back up). Both were last updated mid-plan and
-have not been revisited since; treat the task counts in them as historical
-rather than current — this README and `git log` are the source of truth for
-where the project actually stands.
+an assistant picking the project back up). Both are current as of the final
+commit and agree with this README: all 23 tasks are complete. `CONTINUE.md`
+additionally carries the engine and harness facts that are expensive to
+rediscover — read it before changing anything, not after.
 
 ---
 
@@ -100,11 +100,22 @@ in a browser bundle.
 
 `export/` is gitignored; export output is never committed.
 
-Serve the result locally to sanity-check it:
+The build is about **40 MB**, of which `index.wasm` — the Godot engine itself —
+is 39.5 MB. The game's own data (`index.pck`) is 785 KB raw, 658 KB gzipped;
+the Phaser original shipped 368 KB gzipped in total. So the game data is
+roughly 1.8× larger, and the engine is ~107× the entire Phaser build. Nothing
+you do to the art or audio will move that total meaningfully — it is the price
+of shipping an engine to the browser, and it was accepted during design.
+
+> **The web build has never been opened in a browser.** Every check done on it
+> so far was mechanical: the expected artefacts exist, the magic bytes are
+> right, a local server returns 200 for each, and threads are confirmably off
+> in the shipped `index.html`. Whether it *boots and plays* is unverified —
+> the port was built by tooling with no browser available. Do this first:
 
 ```bash
 cd export/web && python3 -m http.server 8000
-# open http://localhost:8000
+# open http://localhost:8000 — expect the menu, then place a tower and run wave 1
 ```
 
 ---
