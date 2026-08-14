@@ -265,17 +265,27 @@ func sell_selected_tower() -> void:
 # --- Audio ---------------------------------------------------------------
 
 ## Looks up the AudioManager autoload by absolute path rather than
-## referencing its global identifier directly. Under
-## `godot --headless --script` (how the test suite runs), autoload
-## singletons are never instantiated and their global identifiers do not
-## even resolve at compile time - a bare `AudioManager` reference in this
-## file would abort compilation of the whole script under the harness
-## (confirmed with a throwaway probe; see task-22-amendments.md #2).
-## Routing through Engine.get_main_loop().root also sidesteps a second
-## failure mode: calling get_node() on `self` when this node was never
-## added to a live tree (true for every board the test harness builds)
-## throws "Can't use get_node() with absolute paths from outside the
-## active scene tree" - calling it on the tree's own root avoids that.
+## referencing its global identifier directly.
+##
+## The autoload node IS instantiated under `godot --headless --script` (how
+## the test suite runs) - probed directly: Engine.get_main_loop().root has
+## exactly one child and it is AudioManager - and a bare `AudioManager`
+## reference compiles and runs fine in a script loaded via load() the way
+## this file is (confirmed with a probe shaped exactly like this file's
+## _ready_board() pattern). What actually never happens under this harness
+## is NOTIFICATION_READY reaching that node: is_inside_tree() on it is
+## false, so its own _ready() never runs, _streams/_players stay empty, and
+## play()'s own `has()` guard turns every call into a silent no-op whether
+## it is reached directly or through this helper - see test_audio_manager.gd
+## for the same finding from the manager's side.
+##
+## Routing through Engine.get_main_loop().root earns its keep for a second,
+## real reason: calling get_node() on `self` when this node was never added
+## to a live tree (true for every board the test harness builds) throws
+## "Can't use get_node() with absolute paths from outside the active scene
+## tree" - calling it on the tree's own root avoids that. In production,
+## where the board IS in a live tree and AudioManager HAS completed
+## _ready(), this same path finds the real, ready singleton.
 func _play_sound(sound: StringName) -> void:
 	var loop := Engine.get_main_loop()
 	if not loop is SceneTree:

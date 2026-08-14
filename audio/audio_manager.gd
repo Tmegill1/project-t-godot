@@ -2,6 +2,15 @@ extends Node
 
 ## Sounds the core slice can fire. Others exist in assets/audio and are wired
 ## by the phases that introduce their events.
+##
+## Two names below have no call site, both deliberate:
+## - "ui-click": skipped on purpose. The HUD's only two buttons already
+##   trigger "wave-start" and "sell" through the board; a separate click
+##   sound here would double-fire on every press.
+## - "explosion": unwired, and honestly so - neither the brief nor its
+##   amendments ever assigned it a call site. Left present rather than
+##   inventing a use for it; a later phase that needs it can wire it
+##   deliberately.
 const SOUNDS := [
 	&"place", &"sell", &"denied", &"ui-click", &"wave-start", &"wave-clear",
 	&"leak", &"victory", &"defeat", &"fire-basic", &"fire-fast",
