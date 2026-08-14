@@ -144,9 +144,10 @@ func test_every_enemy_kind_has_a_matching_death_sound() -> bool:
 # cutting off an earlier one still playing.
 #
 # The floor is the largest per-kind tower cap (data/towers.gd's
-# base_limit) - currently 8, for both "basic" and "fast" - the scenario
-# audio_manager.gd's own module comment cites ("with eight towers firing, a
-# single player would drop most shots"). Same-kind towers share one
+# base_limit) - currently 8, for both "basic" and "fast" - which is the
+# scenario the plan's Task 22 gives as the reason for pooling at all
+# ("with eight towers firing, a single player would drop most shots",
+# docs/superpowers/plans/2026-08-09-godot-core-slice.md). Same-kind towers share one
 # fire_rate, so a full complement of one kind is the concrete, plausible
 # way to get that many "fire-<kind>" sounds clustered together. The map's
 # total tower_budget (16, data/maps.gd, enforced by game_board.gd's
