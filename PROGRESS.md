@@ -67,8 +67,8 @@ godot --headless --quit --script test/run_tests.gd
 | 19 | Game board | ✅ |
 | 20 | HUD and tower panel | ✅ |
 | 21 | Scene flow and main scene | ✅ ← **first playable** |
-| 22 | Audio | ⬜ |
-| 23 | Web export and README | ⬜ |
+| 22 | Audio | ✅ |
+| 23 | Web export and README | ✅ |
 
 Legend: ⬜ not started · 🔧 in progress · ✅ done
 

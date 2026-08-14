@@ -3,7 +3,7 @@
 **Point an assistant at this file and say "continue this project."** It contains
 everything needed to resume with no prior conversation.
 
-Last updated: 2026-08-12 · Branch `feat/core-slice` · 21 of 23 tasks complete
+Last updated: 2026-08-14 · Branch `feat/core-slice` · **all 23 tasks complete**
 
 > This file is the *orientation* document: state, how to run things, and the
 > hard-won facts that are expensive to rediscover. The per-task status table and
@@ -30,8 +30,8 @@ Two documents hold the reasoning:
 
 ## 2. Where things stand
 
-**21 of 23 tasks complete. The game is playable end to end** — main menu → game →
-win or lose → retry or menu. Only audio (Task 22) and web export (Task 23) remain.
+**All 23 tasks complete. The game is playable end to end** — main menu → game →
+win or lose → retry or menu, with sound.
 
 | Layer | State |
 |---|---|
@@ -40,9 +40,13 @@ win or lose → retry or menu. Only audio (Task 22) and web export (Task 23) rem
 | `assets/` — 61 files | ✅ imported, sliced, verified visually |
 | `game/` — board, enemy, tower, projectile, map renderer | ✅ complete |
 | `ui/` — menu, HUD, build panel, game-over, victory | ✅ complete |
-| `audio/` | ⬜ Task 22, not started |
-| Web export | ⬜ Task 23, not started |
-| Tests | ✅ 3938 checks across 24 files, exit 0 |
+| `audio/` — pooled playback, 17 core-slice events | ✅ complete |
+| Web export | ✅ preset + build; **never opened in a browser** |
+| Tests | ✅ 4039 checks across 25 files, exit 0 |
+
+The one thing nobody has done: **open the web build in an actual browser.** The
+export produces the right artefacts and serves them, but whether it boots and
+plays is unverified — see §10.
 
 The rules layer also runs headlessly on its own: `sim/harness.gd` simulates a real
 wave — pathing, targeting, damage, splash, leaks — with no window open. That is the
@@ -91,23 +95,31 @@ defect; this noise is not.
 
 ## 4. What is left
 
-**Both remaining tasks have complete code in the plan document.** Read the task's
-section before implementing it.
+The 23-task plan is finished. What remains is not implementation:
 
-### Task 22 — Audio (plan line 3532)
-`audio/audio_manager.gd` as an autoload with a **pool of 12 `AudioStreamPlayer`s** —
-a single player would cut off overlapping sounds once eight towers are firing. Wire
-the core-slice events only. No explicit unlock call is needed: the main menu's Play
-button supplies the user gesture a web build requires.
+**1. Open the web build in a browser.** Nobody has. The export produces the right
+artefacts and a local server returns 200 for each, but no agent on this project
+could execute WebAssembly, so whether it boots and plays is genuinely unknown.
 
-Note the collision with §5's MCP warning: this task adds a *legitimate* `[autoload]`
-entry to `project.godot`. Do not let the strip-before-commit habit delete it.
+```bash
+godot --headless --export-release "Web" export/web/index.html
+cd export/web && python3 -m http.server 8000   # then open http://localhost:8000
+```
 
-### Task 23 — Web export and README (plan line 3630)
-`Web` preset with `variant/thread_support=false` (threads need COOP/COEP headers
-most static hosts do not send). Expect **25–40 MB** — this was raised during design
-and the web-first target confirmed anyway; the pre-sliced atlas and OGG audio are
-the mitigations already applied.
+Expect the menu, then a run: place a tower, start wave 1, hear it fire. Audio needs
+a user gesture in browsers — the menu's Play button supplies it, so no explicit
+unlock call exists or is needed.
+
+**2. Merge the branch.** The final whole-branch review and its fix wave are both
+complete and verified.
+
+**3. Decide the open art question in §9** — the squashed stone tiles.
+
+**4. Playtest and tune.** Nothing here has been balanced. See §9.
+
+Note for whoever touches `project.godot`: the `[autoload]` entry for `AudioManager`
+is *legitimate*. §5's strip-before-commit warning is about the Godot MCP's
+`McpInteractionServer` entry only — do not let the habit delete the real one.
 
 ---
 
@@ -284,10 +296,15 @@ the player runs, not only in the thing the tests run.
 ```bash
 cd ~/Projects/project-t-godot
 git checkout feat/core-slice
-godot --headless --quit --script test/run_tests.gd   # expect 3938 checks, exit 0
+godot --headless --import                            # once, after a fresh clone
+godot --headless --quit --script test/run_tests.gd   # expect 4039 checks, exit 0
 godot --path .                                       # and actually play a run
 ```
 
-Then implement **Task 22** (audio) from plan line 3532. Play a full run first —
-it is playable now, and the fastest way to build context for what a sound cue
-should be attached to is to watch the game miss it.
+Then do the browser check in §4 — it is the only unverified thing left, and it
+takes two minutes. After that the branch is ready to merge.
+
+Play a full run before changing any number. The balance has never been playtested
+and every value came across from a prototype whose own notes call them
+placeholders; `sim/harness.gd` can simulate whole waves headlessly, so tuning does
+not mean sitting through twenty of them.
