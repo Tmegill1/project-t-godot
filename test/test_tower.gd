@@ -152,7 +152,16 @@ func test_tick_fires_once_when_a_candidate_is_in_range_and_resets_cooldown() -> 
 
 	assert_eq(captured["count"], 1, "wants_to_fire fires exactly once")
 	assert_true(captured["target"] == target_node, "fires at the selected candidate's node")
-	assert_eq(captured["source"], {"damage": 5, "pierce": 0}, "source carries the def's damage and pierce")
+	# Asserted key by key rather than as one dictionary equality: the source
+	# gained gold and slow fields when upgrades landed, and a whole-dictionary
+	# comparison would have to be rewritten again for every field added after.
+	# The unupgraded values here are still exactly the table's.
+	assert_eq(captured["source"]["damage"], 5, "source carries the def's damage")
+	assert_eq(captured["source"]["pierce"], 0, "source carries the def's pierce")
+	assert_almost_eq(captured["source"]["gold_multiplier"], 1.0, 0.0001, "an unupgraded tower pays plain gold")
+	assert_eq(captured["source"]["bonus_gold_per_kill"], 0, "and no flat bonus")
+	assert_almost_eq(captured["source"]["slow_factor"], 1.0, 0.0001, "and slows nothing")
+	assert_almost_eq(captured["source"]["slow_duration_ms"], 0.0, 0.0001, "for no time at all")
 	assert_eq(captured["splash"], 55.0, "splash carries the def's base_splash_radius")
 	assert_eq(t._cooldown, 2000.0, "cooldown resets to fire_rate after firing")
 
@@ -332,4 +341,227 @@ func test_the_build_panel_icon_and_the_placed_tower_share_one_region() -> bool:
 		var frame: int = Towers.DEFS[kind]["upgrade_frames"][0]
 		assert_eq(TowerPanel.icon_for(kind).region, Tower.frame_region(frame),
 			"%s: the panel icon and the placed tower cut the same cell" % kind)
+	return true
+
+# --------------------------------------------------------------------------
+# upgrades
+#
+# The tower caches resolved stats rather than resolving per tick, so every
+# path that changes tiers has to refresh the cache. These tests exist mostly
+# to catch a refresh that was forgotten.
+# --------------------------------------------------------------------------
+
+# _ready_tower() deliberately stops short of setup() - its callers pick their
+# own kind and tile. Everything below needs a tower that has been through
+# setup(), and Grid must be active first because setup() positions through
+# Grid.tile_to_world_center.
+func _setup_tower(kind: StringName) -> Tower:
+	Grid.set_active(23, 14)
+	var t := _ready_tower()
+	t.setup(kind, 0, 0, EconomySim.tower_price(kind, 0))
+	return t
+
+func test_setup_starts_a_tower_with_no_tiers() -> bool:
+	var t := _setup_tower(&"basic")
+	assert_eq(t.tiers[&"sustained"], 0, "sustained starts at zero")
+	assert_eq(t.tiers[&"burst"], 0, "burst starts at zero")
+	t.free()
+	return true
+
+func test_get_stats_returns_base_stats_before_any_upgrade() -> bool:
+	var t := _setup_tower(&"mortar")
+	var def: Dictionary = Towers.DEFS[&"mortar"]
+	assert_almost_eq(t.get_stats()["damage"], float(def["damage"]), 0.0001, "unupgraded damage is the table's")
+	assert_almost_eq(t.get_stats()["fire_rate"], float(def["fire_rate"]), 0.0001, "and its fire rate")
+	assert_almost_eq(t.get_stats()["range"], float(def["range"]), 0.0001, "and its range")
+	assert_almost_eq(t.get_stats()["splash_radius"], float(def["base_splash_radius"]), 0.0001, "and its splash")
+	assert_eq(t.get_stats()["pierce"], int(def["pierce"]), "and its pierce")
+	assert_false(bool(t.get_stats()["detection"]), "and it cannot see phased enemies")
+	t.free()
+	return true
+
+func test_apply_upgrade_advances_the_branch_and_refreshes_the_stats() -> bool:
+	var t := _setup_tower(&"basic")
+	var before: float = t.get_stats()["fire_rate"]
+	t.apply_upgrade(&"sustained")
+	assert_eq(t.tiers[&"sustained"], 1, "branch advanced")
+	assert_eq(t.tiers[&"burst"], 0, "the other branch is untouched")
+	assert_true(t.get_stats()["fire_rate"] < before,
+		"the cached stats were refreshed, not left stale")
+	assert_almost_eq(t.get_stats()["fire_rate"], 800.0, 0.0001, "1000 * 0.8, resolved not guessed")
+	t.free()
+	return true
+
+func test_apply_upgrade_accumulates_into_price_paid() -> bool:
+	var t := _setup_tower(&"basic")
+	var placed := t.price_paid
+	t.apply_upgrade(&"sustained")
+	assert_eq(t.price_paid, placed + 30,
+		"price_paid means everything sunk in, so sell_refund keeps its meaning")
+	t.free()
+	return true
+
+# Each tier costs its own price, not the first one's. Buying twice must charge
+# 30 then 60 - a cost read from the wrong tier is invisible on a single buy.
+func test_apply_upgrade_charges_the_cost_of_the_tier_being_bought() -> bool:
+	var t := _setup_tower(&"basic")
+	var placed := t.price_paid
+	t.apply_upgrade(&"sustained")
+	t.apply_upgrade(&"sustained")
+	assert_eq(t.price_paid, placed + 30 + 60, "tier 1 then tier 2, not tier 1 twice")
+	assert_eq(t.tiers[&"sustained"], 2, "and the branch advanced twice")
+	t.free()
+	return true
+
+func test_to_targeting_dict_reports_upgraded_range_and_detection() -> bool:
+	var t := _setup_tower(&"basic")
+	t.apply_upgrade(&"burst")
+	t.apply_upgrade(&"burst")
+	t.apply_upgrade(&"burst")  # Spotter grants detection
+	assert_true(t.to_targeting_dict()["detection"], "detection comes from resolved stats")
+	assert_almost_eq(t.to_targeting_dict()["range"], 100.0, 0.0001, "range is untouched until tier 4")
+	t.apply_upgrade(&"burst")  # Executioner extends range by a quarter
+	assert_almost_eq(t.to_targeting_dict()["range"], 125.0, 0.0001, "100 * 1.25, resolved not the table's")
+	t.free()
+	return true
+
+func test_upgrading_advances_the_sprite_frame() -> bool:
+	var t := _setup_tower(&"basic")
+	var frames: Array = Towers.DEFS[&"basic"]["upgrade_frames"]
+	assert_eq((t._sprite.texture as AtlasTexture).region, Tower.frame_region(int(frames[0])),
+		"an unupgraded tower shows the first frame")
+	t.apply_upgrade(&"sustained")
+	var atlas := t._sprite.texture as AtlasTexture
+	assert_eq(atlas.region, Tower.frame_region(int(frames[1])), "one tier in shows the second frame")
+	assert_true(atlas.atlas == Tower.TOWER_SHEET, "and still points at the tower sheet, not a blank texture")
+	t.free()
+	return true
+
+# The range ring is derived state too, and it is the one piece of feedback a
+# player gets that a range upgrade landed.
+func test_upgrading_range_grows_the_range_indicator() -> bool:
+	var t := _setup_tower(&"basic")
+	assert_almost_eq(t._range_indicator.radius, 100.0, 0.0001, "starts at the table's range")
+	for i in range(4):
+		t.apply_upgrade(&"burst")
+	assert_almost_eq(t._range_indicator.radius, 125.0, 0.0001, "the ring grew with the resolved range")
+	t.free()
+	return true
+
+# The shot's payload is where slow and gold reach the rest of the game.
+func test_tick_source_carries_the_resolved_slow_and_gold_effects() -> bool:
+	var t := _setup_tower(&"fast")
+	for i in range(4):
+		t.apply_upgrade(&"sustained")  # Suppression: Deep Freeze slows to 45% for 2.5s
+	var target_node := Node2D.new()
+	var captured := {"source": {}}
+	t.wants_to_fire.connect(func(_tn, src, _sp): captured["source"] = src)
+	t.tick(16.0, [_candidate(1, t.position + Vector2(10, 0), {"node": target_node})])
+
+	assert_almost_eq(captured["source"]["slow_factor"], 0.45, 0.0001, "the strongest slow travels with the shot")
+	assert_almost_eq(captured["source"]["slow_duration_ms"], 2500.0, 0.0001, "with the duration that won")
+	assert_almost_eq(captured["source"]["gold_multiplier"], 1.0, 0.0001, "and no gold effect from this branch")
+
+	var g := _setup_tower(&"fast")
+	for i in range(4):
+		g.apply_upgrade(&"burst")  # Bounty Hunter: War Profiteer doubles gold, plus 2
+	var g_captured := {"source": {}}
+	g.wants_to_fire.connect(func(_tn, src, _sp): g_captured["source"] = src)
+	g.tick(16.0, [_candidate(1, g.position + Vector2(10, 0), {"node": target_node})])
+
+	assert_almost_eq(g_captured["source"]["gold_multiplier"], 2.0, 0.0001, "the strongest multiplier travels with the shot")
+	assert_eq(g_captured["source"]["bonus_gold_per_kill"], 2, "and the flat bonus with it")
+	assert_almost_eq(g_captured["source"]["slow_factor"], 1.0, 0.0001, "and this branch slows nothing")
+
+	t.free()
+	g.free()
+	target_node.free()
+	return true
+
+# Splash is resolved too, not read from the table - a Fragmentation basic must
+# actually splash.
+func test_tick_splash_comes_from_the_resolved_stats() -> bool:
+	var t := _setup_tower(&"basic")
+	for i in range(3):
+		t.apply_upgrade(&"sustained")  # Fragmentation: 45px splash
+	var target_node := Node2D.new()
+	var captured := {"splash": -1.0}
+	t.wants_to_fire.connect(func(_tn, _src, sp): captured["splash"] = sp)
+	t.tick(16.0, [_candidate(1, t.position + Vector2(10, 0), {"node": target_node})])
+	assert_almost_eq(captured["splash"], 45.0, 0.0001, "the upgrade's splash radius, not the table's zero")
+	t.free()
+	target_node.free()
+	return true
+
+# The board instantiates a Tower under a node that never entered a live tree,
+# so the tower's own @onready fields are unresolved and setup() aborts at the
+# first line that touches one (see the header of test_game_board.gd). Every
+# rules field setup() assigns BEFORE that line still lands, and Task 8's
+# upgrade path depends on tiers and the resolved stats being among them.
+# This test deliberately skips notification(NOTIFICATION_READY) to reproduce
+# that state, so it PRINTS A SCRIPT ERROR when it passes.
+func test_setup_lands_tiers_and_stats_even_when_the_sprite_half_aborts() -> bool:
+	Grid.set_active(23, 14)
+	var t: Tower = load("res://game/tower.tscn").instantiate()
+	t.setup(&"basic", 0, 0, 20)
+
+	assert_true(t._sprite == null, "precondition: this tower's @onready fields really are unresolved")
+	assert_eq(t.tiers[&"sustained"], 0, "tiers landed before the aborting line")
+	assert_eq(t.tiers[&"burst"], 0, "both branches of them")
+	assert_almost_eq(t.get_stats()["range"], 100.0, 0.0001, "and so did the resolved stats")
+	t.free()
+	return true
+
+# An illegal buy - here the cross-path rule locking a branch at tier 2 - must
+# cost nothing. upgrade_cost still returns a real price for that tier (it only
+# zeroes at MAX_TIER), so charging before checking would take 145 gold for a
+# tier the tower never receives. Prints the "Illegal upgrade" error that
+# with_upgrade pushes; that noise is the point of the call.
+func test_apply_upgrade_charges_nothing_for_a_buy_the_cross_path_rule_forbids() -> bool:
+	var t := _setup_tower(&"basic")
+	for i in range(3):
+		t.apply_upgrade(&"sustained")
+	t.apply_upgrade(&"burst")
+	t.apply_upgrade(&"burst")
+	var committed := t.price_paid
+	assert_eq(committed, 20 + 30 + 60 + 130 + 30 + 65, "precondition: placement plus five legal tiers")
+
+	t.apply_upgrade(&"burst")  # tier 3 while sustained sits at 3 - forbidden
+
+	assert_eq(t.price_paid, committed, "an illegal buy costs nothing")
+	assert_eq(t.tiers[&"burst"], 2, "and the branch does not advance")
+	t.free()
+	return true
+
+# The rest of the payload has to come from the resolved stats too, and an
+# unupgraded tower cannot prove it - its resolved values equal the table's.
+# Basic sustained tier 1 changes the fire rate, long burst tier 3 the pierce,
+# and both change damage.
+func test_tick_fires_at_the_upgraded_rate_and_damage() -> bool:
+	var t := _setup_tower(&"basic")
+	t.apply_upgrade(&"sustained")   # Quick Loader: fires 20% faster
+	t.apply_upgrade(&"burst")       # Heavy Rounds: damage up 40%
+	var target_node := Node2D.new()
+	var captured := {"source": {}}
+	t.wants_to_fire.connect(func(_tn, src, _sp): captured["source"] = src)
+	t.tick(16.0, [_candidate(1, t.position + Vector2(10, 0), {"node": target_node})])
+
+	assert_almost_eq(t._cooldown, 800.0, 0.0001, "the cooldown is the resolved fire rate, not the table's 1000")
+	assert_almost_eq(captured["source"]["damage"], 6.0, 0.0001, "round(4 * 1.4), not the table's 4")
+	t.free()
+	target_node.free()
+	return true
+
+func test_tick_carries_the_upgraded_pierce() -> bool:
+	var t := _setup_tower(&"long")
+	for i in range(3):
+		t.apply_upgrade(&"burst")   # Tungsten Core: +5 pierce
+	var target_node := Node2D.new()
+	var captured := {"source": {}}
+	t.wants_to_fire.connect(func(_tn, src, _sp): captured["source"] = src)
+	t.tick(16.0, [_candidate(1, t.position + Vector2(10, 0), {"node": target_node})])
+
+	assert_eq(captured["source"]["pierce"], 5, "pierce comes from the resolved stats, not the table's zero")
+	t.free()
+	target_node.free()
 	return true
