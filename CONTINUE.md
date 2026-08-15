@@ -154,10 +154,15 @@ the core slice never had — slowing and gold-per-kill. Pierce and detection are
 wired but dormant: their machinery already exists in `Damage.resolve` and
 `Targeting`, and only lacks armoured and phased enemies to bite on.
 
-**Start at Task 1** — the 32-tier data table. It is pure data plus its pinning
-test, needs no UI, and lands green on its own. Each task leads with a failing
-test and ends with a mutation-test step; dispatch a fresh subagent per task, as
-§8 explains.
+**Progress: 1 of 11 tasks complete.** Task 1 (the 32-tier data table) landed in
+`40942a9`; suite green at 4224 checks. Resume at **Task 2** — tier legality,
+cost and investment in `sim/upgrades.gd`. The live ledger, with every ruling
+and deferred minor, is at
+`.superpowers/sdd/2026-08-14-tower-upgrades/progress.md` (git-ignored) — trust
+it and `git log` over any summary, including this line.
+
+Each task leads with a failing test and ends with a mutation-test step;
+dispatch a fresh subagent per task, as §8 explains.
 
 **One open decision inside that plan.** Long Range's `Tungsten Core` tier is
 pierce-only in the reference, so it would be 260 gold for no effect until
