@@ -1,0 +1,213 @@
+extends TestCase
+
+# Ported from the Phaser build's sim/upgrades.test.ts. Only the tests that
+# exercise Task 2's surface (emptyTiers, canUpgrade, withUpgrade, upgradeCost,
+# totalInvested) are ported here — resolveTowerStats, visualTier and
+# spriteFrameFor belong to Tasks 3/4, which append to the same sim file.
+#
+# The cross-path rule is the load-bearing one: a branch may pass tier 2 only
+# while the other sits at or below CROSS_PATH_CAP. Without it gold is the only
+# constraint and every tower converges on the same shape, so its boundaries
+# get more coverage than anything else here.
+
+func _tiers(sustained: int, burst: int) -> Dictionary:
+	return {&"sustained": sustained, &"burst": burst}
+
+# --------------------------------------------------------------------------
+# constants and empty_tiers
+# --------------------------------------------------------------------------
+
+func test_max_tier_is_four() -> bool:
+	assert_eq(UpgradesSim.MAX_TIER, 4, "four tiers per branch")
+	return true
+
+func test_cross_path_cap_is_two() -> bool:
+	assert_eq(UpgradesSim.CROSS_PATH_CAP, 2, "the off-branch may sit at two")
+	return true
+
+# From "caps the off-branch below the maximum, so both cannot be maxed" -
+# a sanity check on the constants themselves, not on any function. Without
+# it, setting CROSS_PATH_CAP >= MAX_TIER would silently make the cross-path
+# rule toothless (nothing would ever exceed the cap) while every other test
+# below still passed on its own fixed tier values.
+func test_cross_path_cap_is_below_max_tier() -> bool:
+	assert_true(UpgradesSim.CROSS_PATH_CAP < UpgradesSim.MAX_TIER,
+		"a branch must be able to exceed the cap, or it is not a cap")
+	return true
+
+func test_empty_tiers_starts_both_branches_at_zero() -> bool:
+	var t := UpgradesSim.empty_tiers()
+	assert_eq(t[&"sustained"], 0, "sustained starts at zero")
+	assert_eq(t[&"burst"], 0, "burst starts at zero")
+	return true
+
+# From "returns a fresh object each time" - guards against a shared/cached
+# dictionary being handed back, which would let mutating one caller's tiers
+# corrupt every other caller's "empty" starting point.
+func test_empty_tiers_returns_a_fresh_dictionary_each_time() -> bool:
+	var a := UpgradesSim.empty_tiers()
+	a[&"sustained"] = 3
+	assert_eq(UpgradesSim.empty_tiers()[&"sustained"], 0,
+		"mutating one empty_tiers() result must not affect the next call")
+	return true
+
+# --------------------------------------------------------------------------
+# can_upgrade
+# --------------------------------------------------------------------------
+
+func test_can_upgrade_allows_the_first_tier_on_either_branch() -> bool:
+	assert_true(UpgradesSim.can_upgrade(_tiers(0, 0), &"sustained"), "sustained from zero")
+	assert_true(UpgradesSim.can_upgrade(_tiers(0, 0), &"burst"), "burst from zero")
+	return true
+
+# From "allows climbing to the cross-path cap on both branches" - the other
+# branch sitting exactly at the cap (not over it, and not far below it) must
+# still permit reaching the cap.
+func test_can_upgrade_allows_climbing_to_the_cap_when_the_other_is_already_at_it() -> bool:
+	assert_true(UpgradesSim.can_upgrade(_tiers(1, 2), &"sustained"),
+		"sustained 1 -> 2 is at the cap, allowed even with burst already at the cap")
+	assert_true(UpgradesSim.can_upgrade(_tiers(2, 1), &"burst"),
+		"burst 1 -> 2 is at the cap, allowed even with sustained already at the cap")
+	return true
+
+func test_can_upgrade_refuses_past_max_tier() -> bool:
+	assert_false(UpgradesSim.can_upgrade(_tiers(4, 0), &"sustained"), "already at MAX_TIER")
+	return true
+
+# The exact boundary the rule exists for. At the cap on both, either branch
+# may still commit; one step past, the other is locked out.
+func test_can_upgrade_allows_passing_the_cap_while_the_other_branch_is_at_it() -> bool:
+	assert_true(UpgradesSim.can_upgrade(_tiers(2, 2), &"sustained"),
+		"2/2 may still commit either way")
+	assert_true(UpgradesSim.can_upgrade(_tiers(2, 2), &"burst"),
+		"2/2 may still commit either way")
+	return true
+
+func test_can_upgrade_refuses_passing_the_cap_once_the_other_branch_has() -> bool:
+	assert_false(UpgradesSim.can_upgrade(_tiers(2, 3), &"sustained"),
+		"burst already committed, so sustained cannot pass the cap")
+	assert_false(UpgradesSim.can_upgrade(_tiers(3, 2), &"burst"),
+		"sustained already committed, so burst cannot pass the cap")
+	return true
+
+# From "still allows deepening the branch that already committed" - the
+# complement of the test above. Once a branch has itself gone past the cap
+# (with the other still at or below it), it must keep being allowed to climb
+# further, all the way to MAX_TIER. Without this, a stray `!=` in place of
+# `>` on the *committing* branch's own next-tier check (as opposed to the
+# other branch's) would lock a tower out of its own chosen path after one
+# step past the cap.
+func test_can_upgrade_allows_deepening_the_branch_that_already_committed() -> bool:
+	assert_true(UpgradesSim.can_upgrade(_tiers(3, 2), &"sustained"),
+		"sustained already past the cap and burst still at it: sustained may keep climbing")
+	assert_true(UpgradesSim.can_upgrade(_tiers(2, 3), &"burst"),
+		"burst already past the cap and sustained still at it: burst may keep climbing")
+	return true
+
+# Below the cap the other branch's depth is irrelevant - a committed tower can
+# still fill its shallow side out to the cap.
+func test_can_upgrade_allows_reaching_the_cap_regardless_of_the_other_branch() -> bool:
+	assert_true(UpgradesSim.can_upgrade(_tiers(1, 4), &"sustained"),
+		"sustained 1 -> 2 is at the cap, always allowed")
+	return true
+
+func test_can_upgrade_refuses_an_unknown_branch() -> bool:
+	assert_false(UpgradesSim.can_upgrade(_tiers(0, 0), &"nonsense"),
+		"an unknown branch is not upgradeable")
+	return true
+
+# --------------------------------------------------------------------------
+# with_upgrade
+# --------------------------------------------------------------------------
+
+func test_with_upgrade_increments_only_the_named_branch() -> bool:
+	var t := UpgradesSim.with_upgrade(_tiers(1, 2), &"sustained")
+	assert_eq(t[&"sustained"], 2, "sustained advanced")
+	assert_eq(t[&"burst"], 2, "burst untouched")
+	return true
+
+func test_with_upgrade_does_not_mutate_its_argument() -> bool:
+	var original := _tiers(1, 1)
+	UpgradesSim.with_upgrade(original, &"burst")
+	assert_eq(original[&"burst"], 1, "the caller's dictionary is unchanged")
+	return true
+
+# The reference throws here. GDScript has no exceptions and assert() compiles
+# out of release builds, so this returns the tiers unchanged and pushes an
+# error instead: loud in tests, inert in a shipped build. Callers gate on
+# can_upgrade first.
+func test_with_upgrade_returns_tiers_unchanged_on_an_illegal_buy() -> bool:
+	var t := UpgradesSim.with_upgrade(_tiers(2, 3), &"sustained")
+	assert_eq(t[&"sustained"], 2, "illegal cross-path buy did not apply")
+	assert_eq(t[&"burst"], 3, "and nothing else moved")
+	return true
+
+# From "can walk a legal path to tier 4" - repeated legal buys on one branch,
+# leaving the other untouched, land exactly on MAX_TIER. Exercises the
+# composition of can_upgrade and with_upgrade across every intermediate step
+# (0->1->2->3->4), including the two steps that cross CROSS_PATH_CAP.
+func test_with_upgrade_can_walk_a_legal_path_to_max_tier() -> bool:
+	var current := UpgradesSim.empty_tiers()
+	for i in range(UpgradesSim.MAX_TIER):
+		current = UpgradesSim.with_upgrade(current, &"burst")
+	assert_eq(current[&"burst"], UpgradesSim.MAX_TIER, "four legal buys reach MAX_TIER")
+	assert_eq(current[&"sustained"], 0, "the untouched branch stays at zero")
+	return true
+
+# --------------------------------------------------------------------------
+# upgrade_cost
+# --------------------------------------------------------------------------
+
+func test_upgrade_cost_reads_the_next_tiers_price() -> bool:
+	assert_eq(UpgradesSim.upgrade_cost(&"basic", &"sustained", 0), 30, "first tier")
+	assert_eq(UpgradesSim.upgrade_cost(&"basic", &"sustained", 3), 260, "fourth tier")
+	return true
+
+func test_upgrade_cost_is_zero_when_maxed_or_negative() -> bool:
+	assert_eq(UpgradesSim.upgrade_cost(&"basic", &"sustained", 4), 0, "nothing left to buy")
+	assert_eq(UpgradesSim.upgrade_cost(&"basic", &"sustained", -1), 0, "a bad tier is inert, not a crash")
+	return true
+
+# From "quotes a positive price for every reachable tier" - swept over every
+# tower kind and both branches, not just basic/sustained. Doubles as a data
+# guard: a zero or missing cost anywhere in Task 1's table would surface here.
+func test_upgrade_cost_is_positive_for_every_reachable_tier_on_every_tower() -> bool:
+	for kind in Towers.KINDS:
+		for branch in Upgrades.BRANCHES:
+			for tier in range(UpgradesSim.MAX_TIER):
+				assert_true(UpgradesSim.upgrade_cost(kind, branch, tier) > 0,
+					"%s/%s tier %d costs something" % [kind, branch, tier])
+	return true
+
+# From "gets more expensive as tiers climb" - each tier costs strictly more
+# than the one before it, for every kind and branch. This is the general form
+# of what test_upgrade_cost_reads_the_next_tiers_price checks for one kind.
+func test_upgrade_cost_increases_with_every_tier_for_every_tower() -> bool:
+	for kind in Towers.KINDS:
+		for branch in Upgrades.BRANCHES:
+			for tier in range(1, UpgradesSim.MAX_TIER):
+				assert_true(
+					UpgradesSim.upgrade_cost(kind, branch, tier) >
+					UpgradesSim.upgrade_cost(kind, branch, tier - 1),
+					"%s/%s tier %d costs more than tier %d" % [kind, branch, tier, tier - 1])
+	return true
+
+# --------------------------------------------------------------------------
+# total_invested
+# --------------------------------------------------------------------------
+
+func test_total_invested_is_zero_for_an_unupgraded_tower() -> bool:
+	assert_eq(UpgradesSim.total_invested(&"basic", UpgradesSim.empty_tiers()), 0, "nothing sunk in")
+	return true
+
+func test_total_invested_sums_every_purchased_tier_on_both_branches() -> bool:
+	# basic sustained 1-2 = 30 + 60, burst 1-3 = 30 + 65 + 145.
+	assert_eq(UpgradesSim.total_invested(&"basic", _tiers(2, 3)), 330,
+		"sums both branches up to their current tier")
+	return true
+
+func test_total_invested_counts_a_fully_committed_branch() -> bool:
+	# long burst 1-4 = 60 + 130 + 260 + 500, sustained 1-2 = 60 + 120.
+	assert_eq(UpgradesSim.total_invested(&"long", _tiers(2, 4)), 1130,
+		"a maxed branch plus a capped one")
+	return true
