@@ -71,13 +71,15 @@ godot --headless --quit --script test/run_tests.gd
 A hand-rolled runner, not an addon — Godot 4.7 was new enough at the time this
 was built that betting the whole suite on third-party addon compatibility was
 a risk worth avoiding. Exit code 0 means pass, 1 means fail. As of this
-writing the suite is green at **4577 checks across 29 files**.
+writing the suite is green at **4589 checks across 29 files**.
 
-A passing run is noisy: it prints roughly fifty `SCRIPT ERROR` lines to
-stderr. That is expected and documented at the top of
-`test/test_game_board.gd` and in `CONTINUE.md` §3 — most come from `@onready`
-resolution being deliberately probed outside a live scene tree. Judge the run
-by the summary line and the exit code, not by stderr volume.
+A passing run is noisy: it prints around 118 `SCRIPT ERROR` lines to stderr.
+That is expected and documented at the top of `test/test_game_board.gd` and in
+`CONTINUE.md` §3 — nearly all come from `@onready` resolution being
+deliberately probed outside a live scene tree. Judge the run by the summary
+line and the exit code, not by stderr volume. *New* noise is a defect, and has
+been: the bug where pressing an upgrade row failed to refresh the panel was
+found by reading these lines, not by a failing test.
 
 ## How to export (Web)
 
