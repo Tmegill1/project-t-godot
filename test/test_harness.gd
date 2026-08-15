@@ -432,3 +432,99 @@ func test_every_wave_undefended_terminates_at_the_default_tick_size() -> bool:
 #   lieutenants/bosses are out of scope for the core slice (see
 #   PROGRESS.md).
 # --------------------------------------------------------------------------
+
+# --------------------------------------------------------------------------
+# Upgrades in the harness: tiers, slow and gold
+#
+# The harness exists so a balance claim is a test rather than an assertion.
+# That only holds if it runs the SAME upgrade rules the game does, so these
+# resolve stats through UpgradesSim rather than pinning numbers by hand.
+# --------------------------------------------------------------------------
+
+# A slowed enemy must take measurably longer over the same path. This is the
+# proof that slow is a real mechanic rather than a number nothing reads.
+func test_a_slowing_tower_makes_a_wave_take_longer() -> bool:
+	var path := _path()
+	var position := Grid.tile_to_world_center(5, 3)
+	# Damage-free by construction: what is being measured is the delay, and a
+	# tower that also killed things would confound it. Suppression tier 4 is
+	# the only slow in the table, so its damage comes along - wave 20's bees
+	# outrun the fast tower's reach in numbers, leaving plenty alive to time.
+	var plain := Harness.run_wave({"wave": 20, "path": path, "towers": [
+		{"kind": &"fast", "position": position, "tiers": {&"sustained": 0, &"burst": 0}},
+	]})
+	var slowed := Harness.run_wave({"wave": 20, "path": path, "towers": [
+		{"kind": &"fast", "position": position, "tiers": {&"sustained": 4, &"burst": 0}},
+	]})
+	assert_true(slowed["ticks"] > plain["ticks"],
+		"the slowing tower held the wave up: %d ticks against %d" % [slowed["ticks"], plain["ticks"]])
+	assert_false(slowed["timed_out"], "and the wave still finished")
+	# Regression pin, measured from this implementation rather than guessed,
+	# in the same spirit as the undefended wave-1 pin above. "Longer" alone
+	# cannot catch a slow that never EXPIRES - that direction is also longer.
+	# An exact count can: drop the per-tick Slow.tick and this number moves.
+	assert_eq(slowed["ticks"], 3491, "wave 20 against one Deep Freeze fast tower takes exactly this long")
+	assert_eq(plain["ticks"], 3397, "and the same build without the slow takes exactly this long")
+	return true
+
+# The termination guard from the soft-lock fix, re-run with slowing in play.
+# Slow only ever reduces step size, so it moves away from the fixed-step
+# oscillation hazard - but that is an argument, and this is the check.
+func test_every_wave_with_a_slowing_tower_still_terminates() -> bool:
+	var path := _path()
+	for wave in range(1, Waves.MAX_WAVES + 1):
+		var result := Harness.run_wave({
+			"wave": wave, "path": path,
+			"towers": [{"kind": &"fast", "position": Grid.tile_to_world_center(5, 3),
+				"tiers": {&"sustained": 4, &"burst": 0}}],
+		})
+		assert_false(result["timed_out"],
+			"wave %d terminates with a slowing tower present" % wave)
+	return true
+
+func test_harness_resolves_tower_stats_through_the_upgrade_rules() -> bool:
+	var path := _path()
+	var position := Grid.tile_to_world_center(5, 3)
+	var base := Harness.run_wave({"wave": 5, "path": path,
+		"towers": [{"kind": &"basic", "position": position}]})
+	var upgraded := Harness.run_wave({"wave": 5, "path": path,
+		"towers": [{"kind": &"basic", "position": position,
+			"tiers": {&"sustained": 0, &"burst": 4}}]})
+	assert_true(upgraded["kills"] > base["kills"],
+		"a fully upgraded tower kills more than a bare one: %d against %d"
+			% [upgraded["kills"], base["kills"]])
+	return true
+
+# A tower with no tiers key must behave exactly as it did before upgrades
+# existed. Every balance pin above this line depends on it.
+func test_a_tower_without_tiers_resolves_to_its_table_stats() -> bool:
+	var path := _path()
+	var position := Grid.tile_to_world_center(5, 3)
+	var implicit := Harness.run_wave({"wave": 5, "path": path,
+		"towers": [{"kind": &"basic", "position": position}]})
+	var explicit := Harness.run_wave({"wave": 5, "path": path,
+		"towers": [{"kind": &"basic", "position": position,
+			"tiers": {&"sustained": 0, &"burst": 0}}]})
+	assert_eq(implicit["kills"], explicit["kills"], "same kills")
+	assert_eq(implicit["ticks"], explicit["ticks"], "same tick count")
+	assert_eq(implicit["gold_earned"], explicit["gold_earned"], "same gold")
+	return true
+
+# Gold effects are paid per kill, by the tower that made it.
+func test_kills_pay_through_the_killing_towers_gold_effects() -> bool:
+	var path := _path()
+	var plain_towers: Array = []
+	var rich_towers: Array = []
+	for col in [3, 5, 7, 9, 11]:
+		var position := Grid.tile_to_world_center(col, 3)
+		plain_towers.append({"kind": &"fast", "position": position})
+		rich_towers.append({"kind": &"fast", "position": position,
+			"tiers": {&"sustained": 0, &"burst": 4}})
+	var plain := Harness.run_wave({"wave": 1, "path": path, "towers": plain_towers})
+	var rich := Harness.run_wave({"wave": 1, "path": path, "towers": rich_towers})
+
+	assert_true(plain["kills"] > 0, "precondition: the plain build kills something")
+	assert_eq(plain["gold_earned"], plain["kills"] * 5, "a slime pays its table reward")
+	assert_true(rich["kills"] > 0, "precondition: the upgraded build kills something too")
+	assert_eq(rich["gold_earned"], rich["kills"] * 12, "5 * 2 + 2 per slime, through kill_reward")
+	return true

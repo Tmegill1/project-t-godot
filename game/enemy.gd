@@ -39,6 +39,7 @@ func setup(enemy_kind: StringName, path: PackedVector2Array, wave: int) -> void:
 		"alive": true,
 		"dying": false,
 		"path_index": Movement.starting_path_index(path[0], path),
+		"slow": Slow.none(),
 	}
 
 	position = path[0]
@@ -56,8 +57,12 @@ func _physics_process(delta: float) -> void:
 	if not sim["alive"] or sim["dying"]:
 		return
 
+	# The slow runs down before the step it governs, matching sim/harness.gd's
+	# loop order so a wave times the same headlessly as it plays.
+	tick_slow(delta * 1000.0)
+
 	var result := Movement.advance(position, sim["path_index"], _path,
-		sim["speed"], delta * 1000.0)
+		current_speed(), delta * 1000.0)
 	position = result["position"]
 	sim["path_index"] = result["path_index"]
 
@@ -72,12 +77,26 @@ func _physics_process(delta: float) -> void:
 			{"life_loss": Enemies.DEFS[kind]["life_loss"], "health": sim["health"]}, _wave))
 		queue_free()
 
+## Speed after any active slow. Movement reads this, never sim["speed"].
+func current_speed() -> float:
+	return Slow.effective_speed(float(sim["speed"]), sim["slow"])
+
+func tick_slow(delta_ms: float) -> void:
+	sim["slow"] = Slow.tick(sim["slow"], delta_ms)
+
 func take_damage(source: Dictionary) -> Dictionary:
+	# Unconditional: Slow.apply ignores a factor of 1.0 or above, which is
+	# what a source with no slow effect carries, so a tower that cannot slow
+	# leaves a running slow untouched rather than refreshing or clearing it.
+	# The slow lands even when the hit does no damage - being hit is what
+	# chills the target, not being hurt by it.
+	sim["slow"] = Slow.apply(sim["slow"], float(source.get(&"slow_factor", 1.0)),
+		float(source.get(&"slow_duration_ms", 0.0)))
 	var result := Damage.resolve(source, sim)
 	sim["health"] = result["remaining_health"]
 	_update_health_bar()
 	if result["lethal"]:
-		_die()
+		_die(source)
 	return result
 
 func to_candidate() -> Dictionary:
@@ -90,10 +109,13 @@ func to_candidate() -> Dictionary:
 func get_sim_state() -> Dictionary:
 	return sim
 
-func _die() -> void:
+## `source` is the killing shot's payload: the reward is paid through the
+## firing tower's gold effects, so a kill pays according to which tower made
+## it - splash kills included, since they carry the same dictionary.
+func _die(source: Dictionary) -> void:
 	sim["dying"] = true
 	sim["alive"] = false
-	died.emit(int(Enemies.DEFS[kind]["reward"]), kind)
+	died.emit(EconomySim.kill_reward(int(Enemies.DEFS[kind]["reward"]), source), kind)
 	_health_bar.visible = false
 	_sprite.play("death_%s" % _facing)
 	await _sprite.animation_finished
