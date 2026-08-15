@@ -1,0 +1,129 @@
+name: Deploy web build to Pages
+
+# Exports the Godot web build and publishes it to GitHub Pages at
+# play.project-tgames.com.
+#
+# The export is done here rather than committed because export/ is gitignored
+# and a 37MB wasm has no business in git history. Everything the build needs -
+# the engine binary and the export templates - is downloaded at run time and
+# pinned to the same version the project is developed against.
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+# Least privilege: read the repo, mint an OIDC token for the Pages deploy, and
+# write to Pages. Nothing here needs contents: write.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time. cancel-in-progress is false deliberately: cancelling a
+# half-finished deploy can leave the site serving a partial upload, and these
+# runs are minutes apart at worst.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  GODOT_VERSION: 4.7.1
+  # The custom domain. GitHub serves it from a CNAME file in the published
+  # artifact; keeping it here rather than only in repo settings means the
+  # domain survives a settings reset and is visible in review.
+  CUSTOM_DOMAIN: play.project-tgames.com
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The templates archive is 1.2GB. Caching it keyed on the engine version
+      # turns a two-minute download into a few seconds on every run after the
+      # first, and it only ever changes when GODOT_VERSION does.
+      - name: Cache export templates
+        id: templates-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/godot/export_templates
+          key: godot-export-templates-${{ env.GODOT_VERSION }}-stable
+
+      - name: Install Godot ${{ env.GODOT_VERSION }}
+        run: |
+          set -euo pipefail
+          base="https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable"
+          curl -fsSL -o godot.zip "${base}/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          unzip -q godot.zip
+          mv "Godot_v${GODOT_VERSION}-stable_linux.x86_64" /usr/local/bin/godot
+          chmod +x /usr/local/bin/godot
+          godot --version
+
+      - name: Install export templates
+        if: steps.templates-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          base="https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable"
+          curl -fsSL -o templates.tpz "${base}/Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
+          # A .tpz is a zip whose contents sit in a single templates/ directory.
+          unzip -q templates.tpz
+          mkdir -p ~/.local/share/godot/export_templates
+          mv templates "$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.stable"
+
+      # Required before anything else touches the project: Godot resolves
+      # class_name identifiers from a cache that only an import pass builds,
+      # and .godot/ is gitignored so a fresh checkout never has one. Skipping
+      # this produces a bare "Identifier not declared" parse error.
+      #
+      # The import writes errors to stderr on a clean project too, so its exit
+      # code is not a useful signal here - the export and test steps below are.
+      - name: Import project
+        run: godot --headless --import || true
+
+      # The build is only worth publishing if the rules still hold. This is the
+      # same suite run locally; exit 0 means pass. A green run prints ~54
+      # SCRIPT ERROR lines to stderr by design, so judge it by the exit code.
+      - name: Run tests
+        run: godot --headless --quit --script test/run_tests.gd
+
+      - name: Export web build
+        run: |
+          set -euo pipefail
+          mkdir -p export/web
+          godot --headless --export-release "Web" export/web/index.html
+          test -f export/web/index.wasm
+          test -f export/web/index.pck
+
+      # GitHub Pages serves a custom domain only when the published artifact
+      # carries a CNAME file. Without it the site falls back to the
+      # github.io address and the custom domain 404s.
+      - name: Add CNAME
+        run: echo "${CUSTOM_DOMAIN}" > export/web/CNAME
+
+      # Jekyll would otherwise ignore files and directories beginning with an
+      # underscore. Godot does not emit any today, but the cost of being wrong
+      # here is a silently missing asset at run time.
+      - name: Disable Jekyll processing
+        run: touch export/web/.nojekyll
+
+      - name: Report build size
+        run: |
+          echo "### Web build" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          ls -lh export/web | awk 'NR>1 {printf "%-34s %s\n", $9, $5}' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: export/web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
