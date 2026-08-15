@@ -63,6 +63,12 @@ func get_lives() -> int: return _lives
 func get_wave() -> int: return _wave
 func is_wave_active() -> bool: return _wave_active
 
+## Which map is loaded. The board picks it (_map_name) and everything sized
+## against the map - currently TowerPanel, which butts its left edge up
+## against the map's right edge - has to ask rather than assume Maps.FIRST,
+## so a second map with different dimensions still lays out correctly.
+func get_map_name() -> StringName: return _map_name
+
 func get_tower_count(kind: StringName) -> int:
 	return _counts.get(kind, 0)
 

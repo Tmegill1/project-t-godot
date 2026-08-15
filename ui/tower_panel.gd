@@ -18,6 +18,17 @@ func bind(board: GameBoard) -> void:
 	board.gold_changed.connect(_refresh)
 	board.tower_placed.connect(_on_tower_placed)
 
+	# Butt the panel's left edge against the map's right edge; the scene
+	# anchors the other three sides to the viewport. The map is a fixed pixel
+	# size but the viewport is not - window/stretch/aspect="expand" hands the
+	# surplus width of any window wider than the 1244x672 design box to the
+	# viewport - so a fixed-width panel pinned right leaves that surplus as
+	# bare background between the two. Absorbing it here means the panel is
+	# 140px at the design ratio, wider on a wider screen, and never narrower.
+	# Asked of the board rather than read from Maps.FIRST so a later map of
+	# different dimensions still lines up.
+	offset_left = float(Maps.pixel_size(board.get_map_name()).x)
+
 	var container: VBoxContainer = $Buttons
 	# free(), not queue_free(). queue_free() only unparents a node once a frame
 	# actually processes, which never happens inside a single synchronous test

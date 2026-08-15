@@ -44,6 +44,95 @@ func test_bind_creates_one_button_per_kind_with_base_price_and_label() -> bool:
 	p.free(); b.free()
 	return true
 
+# --------------------------------------------------------------------------
+# panel geometry
+# --------------------------------------------------------------------------
+
+# The map is 1104px wide and the panel was a fixed 140px pinned to the right
+# edge of a 1244px design viewport, so the two tiled exactly and nothing
+# showed between them. That only holds at the design aspect ratio.
+# window/stretch/aspect="expand" gives every surplus pixel of a wider window
+# to viewport width; the map keeps its fixed pixel size and the panel kept
+# its fixed width, so the surplus opened as bare engine background between
+# them - 114 viewport px of it at 1920x950.
+#
+# Anchoring the panel's left edge to the map's right edge and its right edge
+# to the viewport closes that at every width: the panel absorbs whatever
+# expand hands out instead of ignoring it. The panel can never be squeezed
+# below its original 140px either, because viewport width never drops under
+# the 1244 design width - a window narrower in aspect than the design box
+# grows viewport height instead, leaving width at exactly 1244.
+#
+# Asserted as anchors and offsets, not a computed rect: containers only lay
+# out inside a live tree, which this harness never provides (see the header
+# note), so size stays at its unlaid-out default here.
+func test_panel_spans_from_the_maps_right_edge_to_the_viewport_edge() -> bool:
+	var p := _ready_panel()
+	var b := _ready_board()
+
+	p.bind(b)
+
+	assert_eq(p.anchor_left, 0.0, "left edge is measured from the viewport's left, not its right")
+	assert_eq(p.offset_left, float(Maps.pixel_size(b.get_map_name()).x),
+		"panel starts exactly where the map ends, leaving nothing between them")
+	assert_eq(p.anchor_right, 1.0, "right edge tracks the viewport's right edge")
+	assert_eq(p.offset_right, 0.0, "and sits flush against it, so no gap can open at any width")
+	assert_eq(p.anchor_bottom, 1.0, "runs down to the viewport's bottom edge")
+	assert_eq(p.offset_bottom, 0.0, "flush with it")
+	p.free(); b.free()
+	return true
+
+# Checked on the composed game.tscn, not on a standalone tower_panel.tscn:
+# the panel's vertical placement was an *instance override* in game.tscn
+# (offset_top = 52), so a test that instantiates the panel scene by itself
+# reads the panel's own 0 and passes no matter what game.tscn says - it
+# cannot see the override that actually renders. Asserting here on the
+# composed tree is the only way this catches a reintroduced offset.
+#
+# instantiate() alone, with no NOTIFICATION_READY: building the node tree
+# applies every scene-file and instance-override property, which is all this
+# needs, and skipping the notification avoids running Game._ready()'s whole
+# bind() chain for a layout assertion.
+func test_composed_game_scene_leaves_no_bare_strip_above_the_panel() -> bool:
+	# Explicitly typed: load() is untyped, so `:=` cannot infer from
+	# .instantiate() and hard-fails to parse on 4.7.1 - same inference gap
+	# game/map_renderer.gd documents for its array-literal loop variable.
+	var game: Node = load("res://game/game.tscn").instantiate()
+	var panel: Control = game.get_node("Hud/TowerPanel")
+	assert_eq(panel.offset_top, 0.0,
+		"panel runs to the top of the viewport, so no bare background shows beside the map's top rows")
+	game.free()
+	return true
+
+# The panel's Control spans the full viewport height so its background covers
+# the whole column beside the map - closing the strip that was otherwise left
+# bare between the map's right edge and the top of the screen. The buttons
+# themselves still have to start below the HUD bar, which is 44px tall
+# (hud.tscn's Top offset_bottom) plus an 8px breather, so that inset moves to
+# the Buttons container rather than the panel.
+#
+# The panel is added to Hud after Top, so it draws over the HUD strip in this
+# column. Nothing is lost to that: Message is the only HUD item that could
+# reach this far, it starts after the Sell button around x=452, and the
+# longest string the board emits ("You cannot build any more of that tower.")
+# runs out well before the map's 1104px right edge.
+func test_buttons_container_clears_the_hud_bar() -> bool:
+	var p := _ready_panel()
+	var buttons: Control = p.get_node("Buttons")
+	assert_eq(buttons.offset_top, 52.0, "buttons start below the 44px HUD bar plus an 8px gap")
+	p.free()
+	return true
+
+# The panel asks the board which map is loaded rather than assuming
+# Maps.FIRST, so this pins the accessor it depends on. Without it, a second
+# map of a different width would silently lay the panel out against the
+# first map's edge.
+func test_get_map_name_returns_the_map_the_board_loaded() -> bool:
+	var b := _ready_board()
+	assert_eq(b.get_map_name(), Maps.FIRST, "board reports the map it built its tiles from")
+	b.free()
+	return true
+
 func test_min_tap_size_constant_matches_the_brief() -> bool:
 	# Grew from 48 to 56 when the tower icon was added beside the label, so the
 	# artwork and two text lines both fit. Still well above the 44x44 floor.
