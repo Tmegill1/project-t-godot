@@ -1,6 +1,6 @@
 extends TestCase
 
-# Hud's @onready fields (_gold, _lives, _wave, _start, _sell, _message) only
+# Hud's @onready fields (_gold, _lives, _wave, _start, _message) only
 # resolve on NOTIFICATION_READY, which add_child() does NOT deliver in this
 # harness (test/run_tests.gd runs entirely inside SceneTree._initialize(),
 # before the tree's own root has entered a tree - Task 17's finding,
@@ -61,29 +61,9 @@ func test_bind_wires_start_button_to_board_start_next_wave() -> bool:
 	h.free(); b.free()
 	return true
 
-# SCRIPT ERROR noise from this test's placement/selection flow is expected
-# per test_game_board.gd's documented pattern: Tower's own @onready fields
-# (_sprite, _range_indicator) never resolve here because the tower is
-# add_child()'d under a board that itself never entered a live tree, so
-# set_range_visible() aborts partway through - but every board-owned field
-# it needs (kind, price_paid, grid_col/grid_row, the _counts map) is set
-# before that crash point, so the assertions below are unaffected.
-func test_bind_wires_sell_button_to_board_sell_selected_tower() -> bool:
-	var h := _ready_hud()
-	var b := _ready_board()
-	b._gold = 1000
-	var tile := _find_buildable_tile(b)
-	b.select_tower_kind(&"basic")
-	b._try_place(tile.x, tile.y)
-	b._handle_tap(Grid.tile_to_world_center(tile.x, tile.y))  # selects the placed tower
-	assert_true(b._selected_tower != null, "precondition: a tower is selected")
-	h.bind(b)
-
-	h._sell.pressed.emit()
-
-	assert_eq(b.get_tower_count(&"basic"), 0, "pressing Sell invoked board.sell_selected_tower and it sold")
-	h.free(); b.free()
-	return true
+# Sell moved out of the HUD into ui/tower_inspector.tscn, beside the tiers
+# its refund is half of; test_tower_inspector.gd owns its wiring now. The test
+# that used to live here pressed h._sell and asserted the board sold.
 
 func test_bind_connects_gold_changed_to_the_label() -> bool:
 	var h := _ready_hud()
@@ -254,12 +234,20 @@ func test_message_seconds_constant_is_two_seconds() -> bool:
 	assert_eq(Hud.MESSAGE_SECONDS, 2.0, "MESSAGE_SECONDS matches the brief's literal 2.0 seconds")
 	return true
 
-func test_start_and_sell_buttons_meet_the_44x44_minimum_tap_target() -> bool:
+func test_the_start_button_meets_the_44x44_minimum_tap_target() -> bool:
 	var h := _ready_hud()
 	assert_true(h._start.custom_minimum_size.x >= 44.0 and h._start.custom_minimum_size.y >= 44.0,
 		"StartButton has at least a 44x44 tap target")
-	assert_true(h._sell.custom_minimum_size.x >= 44.0 and h._sell.custom_minimum_size.y >= 44.0,
-		"SellButton has at least a 44x44 tap target")
+	h.free()
+	return true
+
+# Sell is gone from this bar. Asserted rather than assumed, so a reinstated
+# copy here - two Sell buttons, one of them quoting nothing about upgrades -
+# fails loudly.
+func test_the_hud_no_longer_carries_a_sell_button() -> bool:
+	var h := _ready_hud()
+	assert_true(h.get_node_or_null("Top/SellButton") == null,
+		"Sell belongs to the tower inspector now")
 	h.free()
 	return true
 

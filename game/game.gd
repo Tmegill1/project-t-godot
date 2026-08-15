@@ -11,10 +11,12 @@ const VICTORY_SCENE := preload("res://ui/victory.tscn")
 @onready var _board: GameBoard = $GameBoard
 @onready var _hud: Hud = $Hud
 @onready var _panel: TowerPanel = $Hud/TowerPanel
+@onready var _inspector: TowerInspector = $Hud/TowerPanel/TowerInspector
 
 func _ready() -> void:
 	_hud.bind(_board)
 	_panel.bind(_board)
+	_inspector.bind(_board)
 	_board.game_over.connect(_on_game_over)
 	_board.victory.connect(_on_victory)
 

@@ -1,0 +1,312 @@
+extends TestCase
+
+# The inspector is a view over the board: it decides nothing about legality or
+# affordability, it asks UpgradesSim and the board. These tests pin that it
+# asks, and that it refreshes when the answers change.
+#
+# @onready resolution follows the project-wide pattern - notification(
+# NOTIFICATION_READY) directly, because add_child() does not deliver it in
+# this harness. See test_hud.gd's header for the full finding.
+#
+# SCRIPT ERROR noise from the placement flow below is expected, per
+# test_game_board.gd's documented pattern: a tower the board instantiates
+# never resolves its own @onready fields, so Tower.setup() and
+# set_range_visible() abort partway. Every field the inspector reads (kind,
+# tiers, price_paid, the resolved stats) is assigned before that point.
+
+func _ready_inspector() -> TowerInspector:
+	var i: TowerInspector = load("res://ui/tower_inspector.tscn").instantiate()
+	i.notification(Node.NOTIFICATION_READY)
+	return i
+
+func _ready_board() -> GameBoard:
+	var b: GameBoard = load("res://game/game_board.tscn").instantiate()
+	b.notification(Node.NOTIFICATION_READY)
+	return b
+
+func _first_buildable_tile(b: GameBoard) -> Vector2i:
+	for r in b._tiles.size():
+		for c in b._tiles[r].size():
+			if b._tiles[r][c] == Tiles.BUILDABLE:
+				return Vector2i(c, r)
+	return Vector2i(-1, -1)
+
+func _ready_tower_on(b: GameBoard) -> Tower:
+	b._gold = 5000
+	var tile := _first_buildable_tile(b)
+	b.select_tower_kind(&"basic")
+	b._try_place(tile.x, tile.y)
+	return b._towers_root.get_child(0)
+
+func test_starts_empty_with_no_tower_shown() -> bool:
+	var i := _ready_inspector()
+	assert_false(i.has_tower(), "nothing selected at start")
+	assert_eq(i.branch_rows().size(), 0, "and no rows drawn")
+	i.free()
+	return true
+
+func test_show_tower_lists_one_row_per_branch() -> bool:
+	var i := _ready_inspector()
+	var b := _ready_board()
+	i.bind(b)
+	var t := _ready_tower_on(b)
+
+	i.show_tower(t)
+
+	assert_true(i.has_tower(), "a tower is shown")
+	assert_eq(i.branch_rows().size(), Upgrades.BRANCHES.size(), "one row per branch")
+	for branch in Upgrades.BRANCHES:
+		assert_true(i.branch_rows().has(branch), "a row for %s" % branch)
+	i.free(); b.free()
+	return true
+
+func test_a_row_shows_the_next_tiers_label_and_cost() -> bool:
+	var i := _ready_inspector()
+	var b := _ready_board()
+	i.bind(b)
+	var t := _ready_tower_on(b)
+
+	i.show_tower(t)
+
+	var row: Button = i.branch_rows()[&"sustained"]
+	assert_true(row.text.contains("Quick Loader"), "names the tier being bought: %s" % row.text)
+	assert_true(row.text.contains("30"), "and its price: %s" % row.text)
+	assert_true(row.text.contains("Barrage"), "and the branch it belongs to: %s" % row.text)
+	i.free(); b.free()
+	return true
+
+# The description is the tooltip rather than a third line of button text: the
+# sidebar is 140px wide at the design ratio and a Button does not wrap, so a
+# sentence on the face of it would simply be cut off.
+func test_a_row_carries_the_tiers_description_as_its_tooltip() -> bool:
+	var i := _ready_inspector()
+	var b := _ready_board()
+	i.bind(b)
+	var t := _ready_tower_on(b)
+
+	i.show_tower(t)
+
+	assert_eq(i.branch_rows()[&"sustained"].tooltip_text,
+		String(Upgrades.DEFS[&"basic"][&"sustained"]["tiers"][0]["description"]),
+		"the tier's own description, not a paraphrase")
+	i.free(); b.free()
+	return true
+
+# The row must follow the tower, not restate tier 1 forever.
+func test_a_row_advances_to_the_next_tier_after_a_purchase() -> bool:
+	var i := _ready_inspector()
+	var b := _ready_board()
+	b._gold = 5000
+	i.bind(b)
+	var t := _ready_tower_on(b)
+	b._selected_tower = t
+	i.show_tower(t)
+
+	b.upgrade_selected_tower(&"sustained")
+
+	var row: Button = i.branch_rows()[&"sustained"]
+	assert_true(row.text.contains("Drum Feed"), "now offers tier 2: %s" % row.text)
+	assert_true(row.text.contains("60"), "at tier 2's price: %s" % row.text)
+	i.free(); b.free()
+	return true
+
+func test_a_row_is_disabled_when_the_player_cannot_afford_it() -> bool:
+	var i := _ready_inspector()
+	var b := _ready_board()
+	i.bind(b)
+	var t := _ready_tower_on(b)
+	b._gold = 0
+
+	i.show_tower(t)
+
+	assert_true(i.branch_rows()[&"sustained"].disabled, "cannot buy what you cannot afford")
+	i.free(); b.free()
+	return true
+
+# The reference carries a comment recording this exact bug: its panel was drawn
+# once on selection, so a tower selected while broke stayed greyed out after a
+# wave paid out and the player had to reselect to see it.
+func test_rows_re_enable_when_gold_arrives_without_reselecting() -> bool:
+	var i := _ready_inspector()
+	var b := _ready_board()
+	i.bind(b)
+	var t := _ready_tower_on(b)
+	b._gold = 0
+	i.show_tower(t)
+	assert_true(i.branch_rows()[&"sustained"].disabled, "precondition: greyed out")
+
+	b._gold = 500
+	b.gold_changed.emit(500)
+
+	assert_false(i.branch_rows()[&"sustained"].disabled,
+		"the row re-enabled on the gold signal alone")
+	i.free(); b.free()
+	return true
+
+func test_a_row_is_disabled_when_the_cross_path_rule_locks_the_branch() -> bool:
+	var i := _ready_inspector()
+	var b := _ready_board()
+	b._gold = 5000
+	i.bind(b)
+	var t := _ready_tower_on(b)
+	t.tiers = {&"sustained": 2, &"burst": 3}
+
+	i.show_tower(t)
+
+	assert_true(i.branch_rows()[&"sustained"].disabled,
+		"locked by commitment, not by price")
+	assert_false(i.branch_rows()[&"burst"].disabled,
+		"while the committed branch is still open")
+	i.free(); b.free()
+	return true
+
+func test_a_maxed_branch_is_disabled_too() -> bool:
+	var i := _ready_inspector()
+	var b := _ready_board()
+	b._gold = 5000
+	i.bind(b)
+	var t := _ready_tower_on(b)
+	t.tiers = {&"sustained": 0, &"burst": UpgradesSim.MAX_TIER}
+
+	i.show_tower(t)
+
+	assert_true(i.branch_rows()[&"burst"].disabled, "there is nothing left to buy")
+	i.free(); b.free()
+	return true
+
+func test_pressing_a_row_asks_the_board_to_buy_that_branch() -> bool:
+	var i := _ready_inspector()
+	var b := _ready_board()
+	b._gold = 5000
+	i.bind(b)
+	var t := _ready_tower_on(b)
+	b._selected_tower = t
+	i.show_tower(t)
+
+	i.branch_rows()[&"burst"].pressed.emit()
+
+	assert_eq(t.tiers[&"burst"], 1, "the board bought the tier")
+	assert_eq(t.tiers[&"sustained"], 0, "the branch pressed is the branch bought, not the first one listed")
+	i.free(); b.free()
+	return true
+
+# Sell lives here now, beside the tiers it refunds, and has to quote what the
+# tower is actually worth - placement plus every upgrade since.
+func test_the_sell_row_quotes_the_refund_including_upgrades() -> bool:
+	var i := _ready_inspector()
+	var b := _ready_board()
+	b._gold = 5000
+	i.bind(b)
+	var t := _ready_tower_on(b)
+	b._selected_tower = t
+	i.show_tower(t)
+	b.upgrade_selected_tower(&"sustained")
+
+	var sell: Button = i.sell_row()
+	assert_true(sell.text.contains(str(EconomySim.sell_refund(t.price_paid))),
+		"quotes half of placement plus the tier just bought: %s" % sell.text)
+	i.free(); b.free()
+	return true
+
+func test_pressing_sell_sells_the_selected_tower() -> bool:
+	var i := _ready_inspector()
+	var b := _ready_board()
+	b._gold = 5000
+	i.bind(b)
+	var t := _ready_tower_on(b)
+	b._selected_tower = t
+	i.show_tower(t)
+
+	i.sell_row().pressed.emit()
+
+	assert_eq(b.get_tower_count(&"basic"), 0, "the board sold it")
+	i.free(); b.free()
+	return true
+
+func test_clear_empties_the_inspector() -> bool:
+	var i := _ready_inspector()
+	var b := _ready_board()
+	i.bind(b)
+	i.show_tower(_ready_tower_on(b))
+
+	i.clear()
+
+	assert_false(i.has_tower(), "nothing shown after deselection")
+	assert_eq(i.branch_rows().size(), 0, "and no stale rows left behind")
+	assert_eq(i._rows_root.get_child_count(), 0, "nor any stale nodes under Rows")
+	i.free(); b.free()
+	return true
+
+# Selecting a tower on the board has to reach the inspector without anyone
+# calling show_tower by hand - that wiring is what makes the panel appear.
+func test_selecting_a_tower_on_the_board_shows_it() -> bool:
+	var i := _ready_inspector()
+	var b := _ready_board()
+	i.bind(b)
+	var t := _ready_tower_on(b)
+
+	b._handle_tap(Grid.tile_to_world_center(t.grid_col, t.grid_row))
+
+	assert_true(i.has_tower(), "the tap selected it and the inspector followed")
+	assert_eq(i.branch_rows().size(), Upgrades.BRANCHES.size(), "with its rows drawn")
+
+	b._deselect_tower()
+
+	assert_false(i.has_tower(), "and deselecting clears it again")
+	i.free(); b.free()
+	return true
+
+# Rebuilding must not leave the previous tower's rows behind - the harness
+# never processes a frame, so queue_free() would not remove them.
+func test_showing_a_second_tower_replaces_the_first_towers_rows() -> bool:
+	var i := _ready_inspector()
+	var b := _ready_board()
+	i.bind(b)
+	var t := _ready_tower_on(b)
+
+	i.show_tower(t)
+	var first_count := i._rows_root.get_child_count()
+	i.show_tower(t)
+
+	assert_eq(i._rows_root.get_child_count(), first_count,
+		"the rows were replaced, not appended to")
+	i.free(); b.free()
+	return true
+
+func test_rows_meet_the_minimum_tap_target() -> bool:
+	assert_true(TowerInspector.MIN_TAP_SIZE.x >= 44.0 and TowerInspector.MIN_TAP_SIZE.y >= 44.0,
+		"MIN_TAP_SIZE satisfies the touch-first 44x44 floor")
+	var i := _ready_inspector()
+	var b := _ready_board()
+	i.bind(b)
+	i.show_tower(_ready_tower_on(b))
+	for branch in i.branch_rows():
+		var button: Button = i.branch_rows()[branch]
+		assert_eq(button.custom_minimum_size, TowerInspector.MIN_TAP_SIZE,
+			"the %s row is built at the tap-target size" % branch)
+	assert_eq(i.sell_row().custom_minimum_size, TowerInspector.MIN_TAP_SIZE,
+		"and so is Sell")
+	i.free(); b.free()
+	return true
+
+# The header is the only place the tower says what it is and how far down each
+# branch it has gone.
+func test_the_header_names_the_tower_and_its_tiers() -> bool:
+	var i := _ready_inspector()
+	var b := _ready_board()
+	b._gold = 5000
+	i.bind(b)
+	var t := _ready_tower_on(b)
+	b._selected_tower = t
+	i.show_tower(t)
+	b.upgrade_selected_tower(&"sustained")
+
+	var header: Label = i._rows_root.get_child(0)
+	assert_true(header.text.contains(String(Towers.DEFS[&"basic"]["label"])),
+		"names the tower: %s" % header.text)
+	assert_true(header.text.contains("1/%d" % UpgradesSim.MAX_TIER),
+		"and shows the branch that has been bought into: %s" % header.text)
+	assert_true(header.text.contains("0/%d" % UpgradesSim.MAX_TIER),
+		"and the one that has not: %s" % header.text)
+	i.free(); b.free()
+	return true

@@ -104,6 +104,20 @@ func test_composed_game_scene_leaves_no_bare_strip_above_the_panel() -> bool:
 	game.free()
 	return true
 
+# game.gd binds the inspector through $Hud/TowerPanel/TowerInspector, a path
+# no other test walks: the inspector's own suite instantiates its scene
+# directly. Without this, renaming or moving the node would leave the game
+# unable to bind it and nothing would fail until someone ran it.
+func test_composed_game_scene_carries_the_tower_inspector_in_the_sidebar() -> bool:
+	var game: Node = load("res://game/game.tscn").instantiate()
+	var inspector = game.get_node_or_null("Hud/TowerPanel/TowerInspector")
+	assert_true(inspector != null, "the sidebar carries an inspector where game.gd looks for it")
+	assert_true(inspector is TowerInspector, "and it is the inspector, not some other Control")
+	assert_true(inspector.offset_top > 0.0,
+		"placed below the build buttons rather than on top of them")
+	game.free()
+	return true
+
 # The panel's Control spans the full viewport height so its background covers
 # the whole column beside the map - closing the strip that was otherwise left
 # bare between the map's right edge and the top of the screen. The buttons
@@ -113,9 +127,10 @@ func test_composed_game_scene_leaves_no_bare_strip_above_the_panel() -> bool:
 #
 # The panel is added to Hud after Top, so it draws over the HUD strip in this
 # column. Nothing is lost to that: Message is the only HUD item that could
-# reach this far, it starts after the Sell button around x=452, and the
-# longest string the board emits ("You cannot build any more of that tower.")
-# runs out well before the map's 1104px right edge.
+# reach this far, it starts after the Start button (earlier than it used to,
+# now that Sell has moved into the tower inspector), and the longest string
+# the board emits ("You cannot build any more of that tower.") runs out well
+# before the map's 1104px right edge.
 func test_buttons_container_clears_the_hud_bar() -> bool:
 	var p := _ready_panel()
 	var buttons: Control = p.get_node("Buttons")

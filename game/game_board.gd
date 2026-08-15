@@ -16,6 +16,8 @@ signal game_over()
 signal victory()
 signal tower_placed(kind: StringName)
 signal tower_upgraded(branch: StringName)
+signal tower_selected(tower: Tower)
+signal tower_deselected()
 signal placement_rejected(reason: String)
 
 const ENEMY_SCENE := preload("res://game/enemy.tscn")
@@ -247,15 +249,19 @@ func _on_projectile_hit(target_node: Node2D, source: Dictionary, splash: float) 
 		if Damage.in_splash(target_node.global_position, enemy.global_position, splash):
 			enemy.take_damage(source)
 
+## Selection is announced as well as drawn: the range ring is the board's own
+## feedback, and the inspector is a separate view that has to follow it.
 func _select_tower(tower: Tower) -> void:
 	_deselect_tower()
 	_selected_tower = tower
 	tower.set_range_visible(true)
+	tower_selected.emit(tower)
 
 func _deselect_tower() -> void:
 	if _selected_tower != null and is_instance_valid(_selected_tower):
 		_selected_tower.set_range_visible(false)
 	_selected_tower = null
+	tower_deselected.emit()
 
 ## Buys the next tier on a branch of the selected tower.
 ##
