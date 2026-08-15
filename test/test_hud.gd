@@ -262,3 +262,38 @@ func test_start_and_sell_buttons_meet_the_44x44_minimum_tap_target() -> bool:
 		"SellButton has at least a 44x44 tap target")
 	h.free()
 	return true
+
+# --------------------------------------------------------------------------
+# top bar inset
+# --------------------------------------------------------------------------
+
+# Top anchors across the full viewport width, so with both horizontal offsets
+# left at 0 its first child begins at viewport x=0: "Gold N" is drawn hard
+# against the screen edge, over the tilemap, with no backing panel behind it.
+# Nothing is truncated - the glyph is whole - but at web-export scale it reads
+# as cut off, which is what sent us looking for a clipping bug that was really
+# a missing inset.
+#
+# The computed label rect cannot be asserted here. Containers only lay out
+# their children once inside a live tree, which this harness never provides
+# (see the header note), so GoldLabel's position stays at its unlaid-out
+# default no matter what the offsets say. Pin the offsets that drive the
+# layout instead.
+#
+# Both sides are pinned deliberately: Message is the right-most child and
+# expands to fill, so a regression that dropped only offset_right would push
+# it back onto the right edge while a left-only assertion stayed green.
+func test_top_bar_is_inset_from_both_viewport_edges() -> bool:
+	var h := _ready_hud()
+	var top: Control = h.get_node("Top")
+	assert_eq(top.offset_left, Hud.EDGE_INSET, "Top bar starts EDGE_INSET in from the left viewport edge")
+	assert_eq(top.offset_right, -Hud.EDGE_INSET, "Top bar stops EDGE_INSET short of the right viewport edge")
+	h.free()
+	return true
+
+# Pins the constant itself. Without this, editing EDGE_INSET and the scene
+# together would keep the test above green while silently changing the layout
+# - the "constant pinned from one side only" failure this suite has hit before.
+func test_edge_inset_constant_is_twelve_pixels() -> bool:
+	assert_eq(Hud.EDGE_INSET, 12.0, "EDGE_INSET matches the 12px separation already used between HUD items")
+	return true

@@ -10,6 +10,14 @@ extends CanvasLayer
 
 const MESSAGE_SECONDS := 2.0
 
+## Horizontal inset of the Top bar from the viewport edges. The bar anchors
+## edge to edge, so without this its first and last children sit flush on the
+## screen border with the tilemap showing through behind them. Mirrors the
+## 12px separation the bar already puts between its own items. The scene file
+## carries the literal (offset_left/offset_right on Top); this names it and
+## test_hud.gd pins both against each other.
+const EDGE_INSET := 12.0
+
 @onready var _gold: Label = $Top/GoldLabel
 @onready var _lives: Label = $Top/LivesLabel
 @onready var _wave: Label = $Top/WaveLabel
