@@ -211,3 +211,73 @@ func test_total_invested_counts_a_fully_committed_branch() -> bool:
 	assert_eq(UpgradesSim.total_invested(&"long", _tiers(2, 4)), 1130,
 		"a maxed branch plus a capped one")
 	return true
+
+# --------------------------------------------------------------------------
+# visual tier
+# --------------------------------------------------------------------------
+
+# Four looks, not seven. A tower can hold six tiers across both branches, but
+# six silhouettes are not readable at tile size, and the useful signal is "how
+# much is invested here" rather than the exact tier. Driven by the total across
+# both branches, so a tower taken deep down one path and one taken evenly both
+# read as expensive.
+#
+# Every boundary is pinned: ceil(total / 2) capped at VISUAL_TIERS - 1 is easy
+# to write as floor, or to leave uncapped, and either passes a test that only
+# samples the middle.
+func test_visual_tier_maps_total_investment_onto_four_looks() -> bool:
+	assert_eq(UpgradesSim.visual_tier(_tiers(0, 0)), 0, "0 tiers -> frame 0")
+	assert_eq(UpgradesSim.visual_tier(_tiers(1, 0)), 1, "1 tier -> frame 1")
+	assert_eq(UpgradesSim.visual_tier(_tiers(2, 0)), 1, "2 tiers -> frame 1")
+	assert_eq(UpgradesSim.visual_tier(_tiers(2, 1)), 2, "3 tiers -> frame 2")
+	assert_eq(UpgradesSim.visual_tier(_tiers(2, 2)), 2, "4 tiers -> frame 2")
+	assert_eq(UpgradesSim.visual_tier(_tiers(3, 2)), 3, "5 tiers -> frame 3")
+	assert_eq(UpgradesSim.visual_tier(_tiers(4, 2)), 3, "6 tiers -> frame 3, the cap")
+	return true
+
+func test_visual_tiers_constant_is_four() -> bool:
+	assert_eq(UpgradesSim.VISUAL_TIERS, 4, "four distinct looks")
+	return true
+
+func test_visual_tier_treats_negative_tiers_as_zero() -> bool:
+	assert_eq(UpgradesSim.visual_tier(_tiers(-3, 0)), 0,
+		"a bad value is inert rather than a negative frame index")
+	return true
+
+# The cap is unreachable through legal play: the cross-path rule holds total
+# tiers at 6, and ceil(6 / 2) already equals VISUAL_TIERS - 1. That makes it
+# defensive code, and defensive code the suite cannot exercise is code nobody
+# knows still works - removing the cap entirely would pass every other test
+# here. Pinned with an out-of-range total for the same reason the negative
+# case above is pinned: sprite_frame_for indexes an array with this result,
+# so an uncapped value is an out-of-bounds read rather than a wrong picture.
+func test_visual_tier_caps_totals_beyond_the_legal_maximum() -> bool:
+	assert_eq(UpgradesSim.visual_tier(_tiers(5, 5)), UpgradesSim.VISUAL_TIERS - 1,
+		"a total of 10 clamps to the last look rather than indexing past it")
+	return true
+
+# --------------------------------------------------------------------------
+# sprite_frame_for
+# --------------------------------------------------------------------------
+
+func test_sprite_frame_for_indexes_the_kinds_own_frame_list() -> bool:
+	# basic's upgrade_frames are [8, 9, 11, 17].
+	assert_eq(UpgradesSim.sprite_frame_for(&"basic", _tiers(0, 0)), 8, "unupgraded basic")
+	assert_eq(UpgradesSim.sprite_frame_for(&"basic", _tiers(1, 0)), 9, "one tier in")
+	assert_eq(UpgradesSim.sprite_frame_for(&"basic", _tiers(2, 1)), 11, "three tiers in")
+	assert_eq(UpgradesSim.sprite_frame_for(&"basic", _tiers(4, 2)), 17, "fully committed")
+	return true
+
+func test_sprite_frame_for_uses_each_kinds_distinct_frames() -> bool:
+	assert_eq(UpgradesSim.sprite_frame_for(&"fast", _tiers(0, 0)), 1, "fast starts at frame 1")
+	assert_eq(UpgradesSim.sprite_frame_for(&"mortar", _tiers(0, 0)), 5, "mortar at 5")
+	assert_eq(UpgradesSim.sprite_frame_for(&"long", _tiers(0, 0)), 2, "long at 2")
+	return true
+
+# The frame list is data and could be shortened; clamping to its length keeps
+# a short list from indexing off the end rather than crashing mid-render.
+func test_sprite_frame_for_clamps_to_the_available_frames() -> bool:
+	var frames: Array = Towers.DEFS[&"basic"]["upgrade_frames"]
+	assert_eq(UpgradesSim.sprite_frame_for(&"basic", _tiers(4, 2)), int(frames[frames.size() - 1]),
+		"never indexes past the last frame")
+	return true

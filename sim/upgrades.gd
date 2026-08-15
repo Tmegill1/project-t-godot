@@ -61,3 +61,24 @@ static func total_invested(kind: StringName, tiers: Dictionary) -> int:
 		for tier in range(int(tiers.get(branch, 0))):
 			total += upgrade_cost(kind, branch, tier)
 	return total
+
+## How many distinct looks a tower has, from unupgraded to fully committed.
+##
+## Four, not seven. A tower can hold six tiers in total, but six silhouettes
+## are not readable at tile size - and the useful signal is "how much is
+## invested here", not the exact tier.
+const VISUAL_TIERS := 4
+
+## Which look a tower should be wearing, from its purchased tiers. Driven by
+## total investment across both branches, so a tower taken deep down one path
+## and one taken evenly both look like what they are: expensive.
+static func visual_tier(tiers: Dictionary) -> int:
+	var total := maxi(0, int(tiers.get(&"sustained", 0))) + maxi(0, int(tiers.get(&"burst", 0)))
+	# 0 -> 0, 1-2 -> 1, 3-4 -> 2, 5-6 -> 3.
+	return mini(VISUAL_TIERS - 1, int(ceil(float(total) / 2.0)))
+
+## The sprite frame a tower should be showing.
+static func sprite_frame_for(kind: StringName, tiers: Dictionary) -> int:
+	var frames: Array = Towers.DEFS[kind]["upgrade_frames"]
+	var tier := mini(visual_tier(tiers), frames.size() - 1)
+	return int(frames[tier])
