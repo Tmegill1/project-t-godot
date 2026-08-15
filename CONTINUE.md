@@ -154,11 +154,18 @@ the core slice never had — slowing and gold-per-kill. Pierce and detection are
 wired but dormant: their machinery already exists in `Damage.resolve` and
 `Targeting`, and only lacks armoured and phased enemies to bite on.
 
-**Progress: 3 of 11 tasks complete.** Task 1 (the 32-tier data table) landed in
+**Progress: 4 of 11 tasks complete.** Task 1 (the 32-tier data table) landed in
 `40942a9`, Task 2 (tier legality, the cross-path rule, cost and total
-investment in `sim/upgrades.gd`) in `ae3f356`, Task 3 (visual tier and sprite frame) in `6709c62`; suite green
-at 4331 checks. Resume at **Task 4** — stat resolution, the last piece of
-`sim/upgrades.gd`. The live ledger, with every ruling
+investment in `sim/upgrades.gd`) in `ae3f356`, Task 3 (visual tier and sprite frame) in `6709c62`, Task 4 (stat
+resolution) in `abf49ee` + `c0d4ca6`; suite green at 4355 checks. That
+completes `sim/upgrades.gd` and every pure rule the feature needs. Resume at
+**Task 5** — the slow mechanic, a new `sim/slow.gd`.
+
+Mutation testing has already earned its place twice here: it caught an
+unreachable clamp in `visual_tier` that guards an array index, and a missing
+composition test that would have let `damage_multiplier` stop composing
+silently. A third gap, `range_multiplier`, was caught by review. Keep insisting
+implementers mutation-test and report survivors honestly. The live ledger, with every ruling
 and deferred minor, is at
 `.superpowers/sdd/2026-08-14-tower-upgrades/progress.md` (git-ignored) — trust
 it and `git log` over any summary, including this line.
