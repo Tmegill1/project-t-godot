@@ -45,11 +45,11 @@ win or lose → retry or menu, with sound.
 | `data/` — 9 modules | ✅ complete, reviewed |
 | `assets/` — 61 files | ✅ imported, sliced, verified visually |
 | `game/` — board, enemy, tower, projectile, map renderer | ✅ complete |
-| `ui/` — menu, HUD (with a 2x speed toggle), build panel, tower inspector, game-over, victory | ✅ complete |
+| `ui/` — menu, HUD (with a 1.5x speed toggle), build panel, tower inspector, game-over, victory | ✅ complete |
 | `audio/` — pooled playback, 17 core-slice events | ✅ complete |
 | Web export | ✅ preset + build; **boots and renders in a browser; not yet played in one** |
 | Deploy | ✅ live at **https://tmegill1.github.io/project-t-godot/** — every push to `master` republishes, at the address GitHub assigns (no custom domain) |
-| Tests | ✅ 4793 checks across 29 files, exit 0 |
+| Tests | ✅ 4798 checks across 29 files, exit 0 |
 | Tower upgrades | ✅ **all 11 tasks done** — rules, tower, board, harness, inspector, verified in the running game. See §4 |
 
 **The repo is public** and the game is deployed from it.
@@ -278,11 +278,14 @@ read in a doc.
 - **`Engine.time_scale` scales the physics DELTA on 4.7.1; it does not change
   the tick rate.** Measured directly: at `time_scale = 2` the delta handed to
   `_physics_process` goes from 0.01667s to 0.03333s while 120 ticks still take
-  ~2 seconds of wall clock. So the HUD's 2x button doubles every enemy's step,
-  which is the oscillation shape that soft-locked waves 19 and 20 — safe only
-  because of the waypoint clamp, and held by
-  `test_every_wave_undefended_terminates_at_the_doubled_tick_size`. Anything
-  that changes movement must keep passing that sweep as well as the 1x one.
+  ~2 seconds of wall clock. So the HUD's fast-play button grows every enemy's
+  step, which is the oscillation shape that soft-locked waves 19 and 20 — safe
+  only because of the waypoint clamp, and held by
+  `test_every_wave_undefended_terminates_at_the_doubled_tick_size`. That sweep
+  runs at DOUBLE the step size while the button applies 1.5x, deliberately:
+  the setting keeps headroom over what is tested. Anything that changes
+  movement must keep passing that sweep as well as the 1x one, and raising
+  `Hud.FAST_TIME_SCALE` past 2.0 would leave its cover.
 - **Running the game through the Godot MCP rewrites `project.godot`.** It injects an
   `[autoload] McpInteractionServer` entry, and leaves an empty `[autoload]` section
   behind on stop. That is local debug tooling — committing it breaks the project for
@@ -447,7 +450,7 @@ the player runs, not only in the thing the tests run.
 ```bash
 cd ~/Projects/project-t-godot
 godot --headless --import                            # once, after a fresh clone
-godot --headless --quit --script test/run_tests.gd   # expect 4793 checks, exit 0
+godot --headless --quit --script test/run_tests.gd   # expect 4798 checks, exit 0
 godot --path .                                       # and actually play a run
 ```
 

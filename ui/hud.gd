@@ -18,14 +18,16 @@ extends CanvasLayer
 
 const MESSAGE_SECONDS := 2.0
 
-## What the fast-play button multiplies time by.
+## What the fast-play button multiplies time by. 1.5x rather than 2x, which
+## played too fast.
 ##
-## Engine.time_scale DOUBLES the delta passed to _physics_process on 4.7.1 - it
-## does not raise the tick rate - so at 2x every enemy takes steps twice the
-## size. That is the shape that soft-locked waves 19 and 20 before the waypoint
-## clamp landed; test_harness.gd sweeps all twenty waves at twice the tick size
-## to hold it, and this constant is the number that sweep assumes.
-const FAST_TIME_SCALE := 2.0
+## Engine.time_scale scales the delta passed to _physics_process on 4.7.1 - it
+## does not raise the tick rate - so at 1.5x every enemy takes steps half again
+## as long. Bigger steps are the shape that soft-locked waves 19 and 20 before
+## the waypoint clamp landed, so test_harness.gd sweeps all twenty waves at
+## DOUBLE the tick size: a bound above what this button applies, deliberately,
+## so the setting has headroom instead of sitting on the tested edge.
+const FAST_TIME_SCALE := 1.5
 
 ## Horizontal inset of the Top bar from the viewport edges. The bar anchors
 ## edge to edge, so without this its first and last children sit flush on the
@@ -92,8 +94,15 @@ func _toggle_speed() -> void:
 	_apply_speed()
 
 func _apply_speed() -> void:
-	Engine.time_scale = FAST_TIME_SCALE if _fast else 1.0
-	_speed.text = "Speed 2x" if _fast else "Speed 1x"
+	var factor := FAST_TIME_SCALE if _fast else 1.0
+	Engine.time_scale = factor
+	_speed.text = _speed_label(factor)
+
+## "Speed 1x", "Speed 1.5x". Derived from the multiplier rather than written
+## beside it, so a change to FAST_TIME_SCALE cannot leave the button
+## advertising the old number.
+func _speed_label(factor: float) -> String:
+	return "Speed %sx" % ("%.1f" % factor).trim_suffix(".0")
 
 func _show_message(text: String) -> void:
 	_message.text = text

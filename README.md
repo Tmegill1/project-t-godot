@@ -71,7 +71,7 @@ godot --headless --quit --script test/run_tests.gd
 A hand-rolled runner, not an addon — Godot 4.7 was new enough at the time this
 was built that betting the whole suite on third-party addon compatibility was
 a risk worth avoiding. Exit code 0 means pass, 1 means fail. As of this
-writing the suite is green at **4793 checks across 29 files**.
+writing the suite is green at **4798 checks across 29 files**.
 
 A passing run is noisy: it prints around 118 `SCRIPT ERROR` lines to stderr.
 That is expected and documented at the top of `test/test_game_board.gd` and in
@@ -248,14 +248,15 @@ colour means one thing only.
 
 ### Playing faster
 
-`Speed 1x` in the HUD toggles to `Speed 2x`. It drives `Engine.time_scale`,
-which on 4.7.1 **doubles the physics delta** rather than raising the tick rate —
-so every enemy's step doubles at 2x. That is the same shape that soft-locked
-waves 19 and 20 before the waypoint clamp landed, which is why
+`Speed 1x` in the HUD toggles to `Speed 1.5x`. It drives `Engine.time_scale`,
+which on 4.7.1 **scales the physics delta** rather than raising the tick rate —
+so every enemy's step grows by the same factor. Bigger steps are the shape that
+soft-locked waves 19 and 20 before the waypoint clamp landed, which is why
 `test_every_wave_undefended_terminates_at_the_doubled_tick_size` sweeps all
-twenty waves at twice the step size. A defended run at 2x is not bit-identical
-to the same run at 1x — a shot may land a frame either side — it simply never
-hangs.
+twenty waves at *double* the step size: a bound deliberately above what the
+button applies, so the setting has headroom rather than sitting on the tested
+edge. A defended run at 1.5x is not bit-identical to the same run at 1x — a
+shot may land a frame either side — it simply never hangs.
 
 ## What is deliberately deferred — not a bug, not forgotten
 

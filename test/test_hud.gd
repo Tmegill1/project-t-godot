@@ -314,8 +314,8 @@ func test_pressing_speed_toggles_between_normal_and_double() -> bool:
 	h.bind(b)
 
 	h._speed.pressed.emit()
-	assert_almost_eq(Engine.time_scale, Hud.FAST_TIME_SCALE, 0.0001, "the game runs at double speed")
-	assert_true(h._speed.text.contains("2x"), "and the button says so: %s" % h._speed.text)
+	assert_almost_eq(Engine.time_scale, Hud.FAST_TIME_SCALE, 0.0001, "the game runs faster")
+	assert_true(h._speed.text.contains("1.5x"), "and the button says so: %s" % h._speed.text)
 
 	h._speed.pressed.emit()
 	assert_almost_eq(Engine.time_scale, 1.0, 0.0001, "and back to normal")
@@ -325,12 +325,26 @@ func test_pressing_speed_toggles_between_normal_and_double() -> bool:
 	h.free(); b.free()
 	return true
 
-# Doubling has to be exactly doubling: the harness's termination sweep at twice
-# the tick size (test_harness.gd) is what says 2x is safe, and it only covers
-# this game if this is the number the button applies.
-func test_the_fast_speed_is_exactly_two() -> bool:
-	assert_almost_eq(Hud.FAST_TIME_SCALE, 2.0, 0.0001,
-		"2x, matching the tick size the harness sweep proves terminates")
+# 1.5x, chosen by the owner over 2x, which played too fast. The harness sweep
+# in test_harness.gd runs at DOUBLE the tick size deliberately - a bound above
+# what the button applies - so this constant has headroom rather than sitting
+# exactly on the tested edge. Raising it past 2.0 would leave that cover.
+func test_the_fast_speed_is_the_one_the_termination_sweep_covers() -> bool:
+	assert_almost_eq(Hud.FAST_TIME_SCALE, 1.5, 0.0001, "1.5x, not 2x")
+	assert_true(Hud.FAST_TIME_SCALE > 1.0, "and it is actually faster than normal")
+	assert_true(Hud.FAST_TIME_SCALE <= 2.0,
+		"and no faster than the step size test_harness.gd sweeps for termination")
+	return true
+
+# The label is derived from the number rather than written beside it, so the
+# two cannot drift: a speed change that forgot the text would show the old
+# multiplier on a button that applies the new one.
+func test_the_speed_label_is_derived_from_the_multiplier() -> bool:
+	var h := _ready_hud()
+	assert_eq(h._speed_label(1.0), "Speed 1x", "a whole number loses its decimal")
+	assert_eq(h._speed_label(1.5), "Speed 1.5x", "a fractional one keeps it")
+	assert_eq(h._speed_label(2.0), "Speed 2x", "and 2.0 does not read as 2.0x")
+	h.free()
 	return true
 
 func test_the_speed_button_meets_the_44x44_minimum_tap_target() -> bool:
