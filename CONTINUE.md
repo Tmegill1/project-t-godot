@@ -48,7 +48,7 @@ win or lose → retry or menu, with sound.
 | `ui/` — menu, HUD, build panel, tower inspector, game-over, victory | ✅ complete |
 | `audio/` — pooled playback, 17 core-slice events | ✅ complete |
 | Web export | ✅ preset + build; **boots and renders in a browser; not yet played in one** |
-| Deploy | ✅ live at **https://tmegill1.github.io/project-t-godot/** — every push to `master` republishes |
+| Deploy | ✅ live at **https://tmegill1.github.io/project-t-godot/** — every push to `master` republishes, at the address GitHub assigns (no custom domain) |
 | Tests | ✅ 4724 checks across 29 files, exit 0 |
 | Tower upgrades | ✅ **all 11 tasks done** — rules, tower, board, harness, inspector, verified in the running game. See §4 |
 

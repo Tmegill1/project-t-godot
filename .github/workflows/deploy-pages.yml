@@ -29,10 +29,6 @@ concurrency:
 
 env:
   GODOT_VERSION: 4.7.1
-  # The custom domain. GitHub serves it from a CNAME file in the published
-  # artifact; keeping it here rather than only in repo settings means the
-  # domain survives a settings reset and is visible in review.
-  CUSTOM_DOMAIN: play.project-tgames.com
 
 jobs:
   build:
@@ -95,11 +91,12 @@ jobs:
           test -f export/web/index.wasm
           test -f export/web/index.pck
 
-      # GitHub Pages serves a custom domain only when the published artifact
-      # carries a CNAME file. Without it the site falls back to the
-      # github.io address and the custom domain 404s.
-      - name: Add CNAME
-        run: echo "${CUSTOM_DOMAIN}" > export/web/CNAME
+      # No CNAME file: the site is published at the address GitHub assigns,
+      # https://tmegill1.github.io/project-t-godot/. This step used to write
+      # play.project-tgames.com, which does not resolve - and because Pages
+      # reads that file on every deploy, leaving it in place risks flipping
+      # the live site onto a dead domain. Re-add it only alongside DNS that
+      # actually points here.
 
       # Jekyll would otherwise ignore files and directories beginning with an
       # underscore. Godot does not emit any today, but the cost of being wrong
