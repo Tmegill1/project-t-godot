@@ -23,17 +23,25 @@ static func run_wave(config: Dictionary) -> Dictionary:
 	var tick_ms: float = config.get("tick_ms", DEFAULT_TICK_MS)
 	var max_ticks: int = config.get("max_ticks", DEFAULT_MAX_TICKS)
 
+	# Stats come from the upgrade rules, not the table, so a build tested here
+	# is the build the player gets. A tower given no tiers resolves to exactly
+	# its table values, which is what every balance pin above depends on.
 	var towers: Array = []
 	for t in config.get("towers", []):
-		var def: Dictionary = Towers.DEFS[t["kind"]]
+		var tiers: Dictionary = t.get("tiers", UpgradesSim.empty_tiers())
+		var stats := UpgradesSim.resolve_tower_stats(t["kind"], tiers)
 		towers.append({
 			"position": t["position"],
-			"range": float(def["range"]),
-			"fire_rate": float(def["fire_rate"]),
-			"damage": float(def["damage"]),
-			"pierce": int(def["pierce"]),
-			"detection": bool(def["detection"]),
-			"splash": float(def["base_splash_radius"]),
+			"range": float(stats["range"]),
+			"fire_rate": float(stats["fire_rate"]),
+			"damage": float(stats["damage"]),
+			"pierce": int(stats["pierce"]),
+			"detection": bool(stats["detection"]),
+			"splash": float(stats["splash_radius"]),
+			"slow_factor": float(stats["slow_factor"]),
+			"slow_duration_ms": float(stats["slow_duration_ms"]),
+			"gold_multiplier": float(stats["gold_multiplier"]),
+			"bonus_gold_per_kill": int(stats["bonus_gold_per_kill"]),
 			"priority": Targeting.DEFAULT_PRIORITY,
 			"cooldown": 0.0,
 		})
@@ -70,6 +78,7 @@ static func run_wave(config: Dictionary) -> Dictionary:
 				"speed": Enemies.scaled_speed(kind, modifiers["speed_modifier"]),
 				"alive": true,
 				"dying": false,
+				"slow": Slow.none(),
 			})
 			next_id += 1
 			spawned += 1
@@ -79,8 +88,12 @@ static func run_wave(config: Dictionary) -> Dictionary:
 		for e in enemies:
 			if not e["alive"]:
 				continue
+			# The slow runs down before the step it governs, matching
+			# game/enemy.gd's _physics_process so a wave times the same here
+			# as it does on screen.
+			e["slow"] = Slow.tick(e["slow"], tick_ms)
 			var m := Movement.advance(e["position"], e["path_index"], path,
-				e["speed"], tick_ms)
+				Slow.effective_speed(float(e["speed"]), e["slow"]), tick_ms)
 			e["position"] = m["position"]
 			e["path_index"] = m["path_index"]
 			if m["reached_goal"]:
@@ -102,6 +115,16 @@ static func run_wave(config: Dictionary) -> Dictionary:
 			if target == null:
 				continue
 			tower["cooldown"] = tower["fire_rate"]
+			# The same shape game/tower.gd emits with wants_to_fire, so the
+			# rules downstream cannot tell the harness from the live game.
+			var source := {
+				"damage": tower["damage"],
+				"pierce": tower["pierce"],
+				"gold_multiplier": tower["gold_multiplier"],
+				"bonus_gold_per_kill": tower["bonus_gold_per_kill"],
+				"slow_factor": tower["slow_factor"],
+				"slow_duration_ms": tower["slow_duration_ms"],
+			}
 			var hit_list: Array = [target]
 			if tower["splash"] > 0.0:
 				for e in enemies:
@@ -111,12 +134,19 @@ static func run_wave(config: Dictionary) -> Dictionary:
 							and Damage.in_splash(target["position"], e["position"], tower["splash"]):
 						hit_list.append(e)
 			for e in hit_list:
-				var r := Damage.resolve({"damage": tower["damage"], "pierce": tower["pierce"]}, e)
+				# Every enemy the blast caught takes the whole payload, slow
+				# included - Projectile.applyTo does the same for its splash
+				# victims, and game/game_board.gd hands the same source to
+				# every enemy in range.
+				e["slow"] = Slow.apply(e["slow"], float(source["slow_factor"]),
+					float(source["slow_duration_ms"]))
+				var r := Damage.resolve(source, e)
 				e["health"] = r["remaining_health"]
 				if r["lethal"]:
 					e["alive"] = false
 					kills += 1
-					gold_earned += int(Enemies.DEFS[e["kind"]]["reward"])
+					gold_earned += EconomySim.kill_reward(
+						int(Enemies.DEFS[e["kind"]]["reward"]), source)
 
 		enemies = enemies.filter(func(e): return e["alive"])
 

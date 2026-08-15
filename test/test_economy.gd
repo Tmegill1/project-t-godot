@@ -178,3 +178,89 @@ func test_sell_refund_matches_integer_halving_across_zero_to_five_hundred() -> b
 		assert_eq(EconomySim.sell_refund(paid), expected,
 			"sell_refund(%d) == %d" % [paid, expected])
 	return true
+
+# --------------------------------------------------------------------------
+# kill_reward
+#
+# The multiplier applies before the flat bonus, so a flat bonus is never
+# multiplied. Order matters: the other way round, fast/burst tier 4 would pay
+# (5 + 2) * 2 = 14 rather than 5 * 2 + 2 = 12, and no tier text says that.
+#
+# Rounding follows the reference, which pays
+# `Math.round(reward * goldMultiplier) + bonusGold` in BaseEnemy's death
+# handler and rounds the same way in spawn.ts and harness.ts. The plan for this
+# task specified floor instead; see the ledger for the ruling. No live number
+# distinguishes them today (every reward times every multiplier in the table is
+# a whole number), which is exactly why the choice is pinned here rather than
+# left to be discovered when a reward changes.
+# --------------------------------------------------------------------------
+
+func test_kill_reward_is_the_base_when_the_source_has_no_gold_effects() -> bool:
+	assert_eq(EconomySim.kill_reward(5, {"damage": 4.0}), 5,
+		"a source without gold fields pays the plain reward")
+	return true
+
+func test_kill_reward_applies_the_multiplier() -> bool:
+	assert_eq(EconomySim.kill_reward(5, {&"gold_multiplier": 1.6}), 8, "5 * 1.6")
+	return true
+
+func test_kill_reward_adds_the_flat_bonus() -> bool:
+	assert_eq(EconomySim.kill_reward(5, {&"bonus_gold_per_kill": 2}), 7, "5 + 2")
+	return true
+
+func test_kill_reward_multiplies_before_adding_the_flat_bonus() -> bool:
+	assert_eq(EconomySim.kill_reward(5, {&"gold_multiplier": 2.0, &"bonus_gold_per_kill": 2}), 12,
+		"5 * 2 + 2, not (5 + 2) * 2")
+	return true
+
+# Rounds to nearest rather than flooring: 4.8 is 5 gold, not 4.
+func test_kill_reward_rounds_a_fractional_result_to_the_nearest_gold() -> bool:
+	assert_eq(EconomySim.kill_reward(3, {&"gold_multiplier": 1.6}), 5, "4.8 rounds up to 5")
+	assert_eq(EconomySim.kill_reward(7, {&"gold_multiplier": 1.6}), 11, "11.2 rounds down to 11")
+	return true
+
+# And a half goes up, matching JavaScript's Math.round for the non-negative
+# rewards this game deals in.
+func test_kill_reward_rounds_a_half_upward() -> bool:
+	assert_eq(EconomySim.kill_reward(5, {&"gold_multiplier": 1.5}), 8, "7.5 rounds up to 8")
+	return true
+
+# The flat bonus is added after rounding, so it can never be scaled or rounded
+# itself - two half-gold multipliers must not compound into a rounding drift.
+func test_kill_reward_adds_the_flat_bonus_after_rounding() -> bool:
+	assert_eq(EconomySim.kill_reward(5, {&"gold_multiplier": 1.5, &"bonus_gold_per_kill": 1}), 9,
+		"round(7.5) + 1")
+	return true
+
+func test_kill_reward_never_pays_less_than_zero() -> bool:
+	assert_eq(EconomySim.kill_reward(0, {&"gold_multiplier": 2.0}), 0, "nothing from nothing")
+	assert_eq(EconomySim.kill_reward(-5, {}), 0, "a bad reward is inert, not a gold sink")
+	return true
+
+# The outer clamp guards the other way in: a negative flat bonus (nothing in
+# the table carries one, and nothing should) must not turn a kill into a
+# withdrawal.
+func test_kill_reward_clamps_a_negative_flat_bonus() -> bool:
+	assert_eq(EconomySim.kill_reward(5, {&"bonus_gold_per_kill": -100}), 0,
+		"a kill never costs the player gold")
+	return true
+
+# The seam this function exists to serve: the dictionary it reads is the one
+# resolve_tower_stats produces, so the two must agree on key names. A rename on
+# either side would silently pay base gold forever.
+func test_kill_reward_reads_the_keys_resolve_tower_stats_writes() -> bool:
+	var maxed_income := UpgradesSim.resolve_tower_stats(&"fast", {&"sustained": 0, &"burst": 4})
+	assert_eq(EconomySim.kill_reward(5, maxed_income), 12,
+		"a fully upgraded Bounty Hunter pays 5 * 2 + 2 on a slime")
+	var plain := UpgradesSim.resolve_tower_stats(&"fast", UpgradesSim.empty_tiers())
+	assert_eq(EconomySim.kill_reward(5, plain), 5, "and an unupgraded one pays the plain reward")
+	return true
+
+# The inner clamp, which the outer one does not subsume: with a flat bonus in
+# play, an unclamped negative reward would eat into the bonus instead of being
+# ignored. Nothing produces a negative reward today - the clamp is here because
+# the price side has carried the same guard since the core slice.
+func test_kill_reward_ignores_a_negative_reward_rather_than_netting_it_off() -> bool:
+	assert_eq(EconomySim.kill_reward(-5, {&"bonus_gold_per_kill": 10}), 10,
+		"the bonus is paid in full, not reduced to 5")
+	return true

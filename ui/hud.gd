@@ -1,12 +1,15 @@
 class_name Hud
 extends CanvasLayer
 
-## HUD strip: gold, lives, wave, Start/Sell buttons and a transient message
+## HUD strip: gold, lives, wave, the Start button and a transient message
 ## line. Purely a view over GameBoard's signals and accessors - it decides
 ## nothing about gold, lives, wave progression or placement rules; that is
-## the board's job. StartButton and SellButton in the scene each carry a
-## custom_minimum_size of at least 44x44 (touch-first requirement; see
-## task-20-21-amendments.md amendment 3).
+## the board's job. StartButton carries a custom_minimum_size of at least
+## 44x44 (touch-first requirement; see task-20-21-amendments.md amendment 3).
+##
+## Sell used to live here too. It moved to ui/tower_inspector.gd, beside the
+## upgrade tiers whose cost its refund is half of - a sell price that counts
+## upgrades means nothing next to the wave counter.
 
 const MESSAGE_SECONDS := 2.0
 
@@ -22,7 +25,6 @@ const EDGE_INSET := 12.0
 @onready var _lives: Label = $Top/LivesLabel
 @onready var _wave: Label = $Top/WaveLabel
 @onready var _start: Button = $Top/StartButton
-@onready var _sell: Button = $Top/SellButton
 @onready var _message: Label = $Top/Message
 
 var _board: GameBoard
@@ -36,7 +38,6 @@ func bind(board: GameBoard) -> void:
 	board.wave_state_changed.connect(_on_wave_state_changed)
 	board.placement_rejected.connect(_show_message)
 	_start.pressed.connect(board.start_next_wave)
-	_sell.pressed.connect(board.sell_selected_tower)
 
 	_on_gold_changed(board.get_gold())
 	_on_lives_changed(board.get_lives())

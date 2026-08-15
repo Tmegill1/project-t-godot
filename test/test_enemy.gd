@@ -487,3 +487,173 @@ func test_frame_size_frames_per_sheet_and_fps_constants_match_the_brief() -> boo
 	assert_eq(Enemy.WALK_FPS, 8.0, "WALK_FPS")
 	assert_eq(Enemy.DEATH_FPS, 10.0, "DEATH_FPS")
 	return true
+
+# --------------------------------------------------------------------------
+# slow and gold
+#
+# Both arrive on the source dictionary a tower emits with its shot, and both
+# reach every enemy a splash catches, not only the one aimed at - the
+# reference's Projectile.applyTo does the same for its splash victims.
+# --------------------------------------------------------------------------
+
+func test_setup_starts_the_enemy_unslowed() -> bool:
+	var e := _ready_enemy()
+	e.setup(&"slime", _straight_path(), 1)
+	assert_almost_eq(e.sim["slow"]["factor"], 1.0, 0.0001, "no slow to begin with")
+	assert_almost_eq(e.sim["slow"]["remaining_ms"], 0.0, 0.0001, "and no clock running")
+	assert_almost_eq(e.current_speed(), float(e.sim["speed"]), 0.0001, "so it moves at its full speed")
+	e.free()
+	return true
+
+func test_taking_a_hit_from_a_slowing_source_slows_the_enemy() -> bool:
+	var e := _ready_enemy()
+	e.setup(&"slime", _straight_path(), 1)
+	var full: float = e.sim["speed"]
+	e.take_damage({"damage": 0.0, "slow_factor": 0.5, "slow_duration_ms": 1000.0})
+	assert_almost_eq(e.current_speed(), full * 0.5, 0.0001, "moving at half speed")
+	e.free()
+	return true
+
+# The slow lands on a hit that did no damage at all. Being hit is what chills
+# the target, not being hurt by it - the reference says so at the same seam.
+func test_a_slow_lands_even_when_the_hit_does_no_damage() -> bool:
+	var e := _ready_enemy()
+	e.setup(&"slime", _straight_path(), 1)
+	var health_before: float = e.sim["health"]
+	e.take_damage({"damage": 0.0, "slow_factor": 0.5, "slow_duration_ms": 1000.0})
+	assert_almost_eq(e.sim["health"], health_before, 0.0001, "precondition: the hit did nothing to its health")
+	assert_almost_eq(e.sim["slow"]["factor"], 0.5, 0.0001, "and it is slowed regardless")
+	e.free()
+	return true
+
+func test_a_stronger_slow_replaces_a_weaker_one() -> bool:
+	var e := _ready_enemy()
+	e.setup(&"slime", _straight_path(), 1)
+	var full: float = e.sim["speed"]
+	e.take_damage({"damage": 0.0, "slow_factor": 0.7, "slow_duration_ms": 1500.0})
+	e.take_damage({"damage": 0.0, "slow_factor": 0.45, "slow_duration_ms": 2500.0})
+	assert_almost_eq(e.current_speed(), full * 0.45, 0.0001, "the deeper slow won")
+	e.take_damage({"damage": 0.0, "slow_factor": 0.7, "slow_duration_ms": 1500.0})
+	assert_almost_eq(e.current_speed(), full * 0.45, 0.0001, "and a weaker one after it does not undo it")
+	e.free()
+	return true
+
+func test_a_hit_with_no_slow_leaves_a_running_slow_alone() -> bool:
+	var e := _ready_enemy()
+	e.setup(&"slime", _straight_path(), 1)
+	var full: float = e.sim["speed"]
+	e.take_damage({"damage": 0.0, "slow_factor": 0.5, "slow_duration_ms": 1000.0})
+	e.take_damage({"damage": 0.0})
+	assert_almost_eq(e.current_speed(), full * 0.5, 0.0001, "a tower that cannot slow cannot cure one either")
+	e.free()
+	return true
+
+func test_a_slow_expires_after_its_duration() -> bool:
+	var e := _ready_enemy()
+	e.setup(&"slime", _straight_path(), 1)
+	var full: float = e.sim["speed"]
+	e.take_damage({"damage": 0.0, "slow_factor": 0.5, "slow_duration_ms": 1000.0})
+	e.tick_slow(1000.0)
+	assert_almost_eq(e.current_speed(), full, 0.0001, "back to full speed")
+	e.free()
+	return true
+
+# The mechanic only exists if the movement step actually reads it. Slime moves
+# 10px in 100ms unslowed (test_physics_process_advances_position_toward_the_
+# first_waypoint pins that); half speed must cover half the ground.
+func test_physics_process_moves_a_slowed_enemy_at_the_slowed_speed() -> bool:
+	var e := _ready_enemy()
+	e.setup(&"slime", _straight_path(), 1)
+	e.take_damage({"damage": 0.0, "slow_factor": 0.5, "slow_duration_ms": 1000.0})
+	e._physics_process(0.1)
+	assert_almost_eq(e.position.x, 5.0, 0.001, "5px, not the unslowed 10px")
+	e.free()
+	return true
+
+# And the clock has to run down as the enemy moves, or a slow would be
+# permanent.
+func test_physics_process_counts_the_slow_down() -> bool:
+	var e := _ready_enemy()
+	e.setup(&"slime", _straight_path(), 1)
+	e.take_damage({"damage": 0.0, "slow_factor": 0.5, "slow_duration_ms": 100.0})
+	e._physics_process(0.05)
+	assert_almost_eq(e.sim["slow"]["remaining_ms"], 50.0, 0.001, "50ms of the 100 spent")
+	e._physics_process(0.05)
+	assert_almost_eq(e.current_speed(), float(e.sim["speed"]), 0.0001, "and the slow lapsed on the tick that used it up")
+	e.free()
+	return true
+
+# died() carries (reward, kind) - both arguments. The handler below takes both
+# deliberately; a one-argument lambda would fail to connect and this test would
+# abort rather than fail.
+func test_a_lethal_hit_pays_the_sources_gold_effects() -> bool:
+	var e := _ready_enemy()
+	e.setup(&"slime", _straight_path(), 1)
+	var rewards: Array = []
+	e.died.connect(func(reward, _kind): rewards.append(reward))
+
+	e.take_damage({"damage": 9999.0, "gold_multiplier": 2.0, "bonus_gold_per_kill": 1})
+
+	var base := int(Enemies.DEFS[e.kind]["reward"])
+	assert_eq(rewards.size(), 1, "one death, one payout")
+	assert_eq(rewards[0], EconomySim.kill_reward(base, {"gold_multiplier": 2.0, "bonus_gold_per_kill": 1}),
+		"the killing tower's gold effects applied")
+	assert_eq(rewards[0], 11, "5 * 2 + 1, resolved not guessed")
+	assert_true(rewards[0] > base, "and it is more than the plain reward")
+	e.free()
+	return true
+
+func test_a_lethal_hit_from_a_plain_source_pays_the_base_reward() -> bool:
+	var e := _ready_enemy()
+	e.setup(&"slime", _straight_path(), 1)
+	var rewards: Array = []
+	e.died.connect(func(reward, _kind): rewards.append(reward))
+
+	e.take_damage({"damage": 9999.0})
+
+	assert_eq(rewards[0], int(Enemies.DEFS[e.kind]["reward"]),
+		"a source with no gold effects still pays exactly the table's reward")
+	e.free()
+	return true
+
+# The kind still travels with the reward - the board plays a per-kind death
+# sound off it.
+func test_a_lethal_hit_still_reports_which_kind_died() -> bool:
+	var e := _ready_enemy()
+	e.setup(&"ogre", _straight_path(), 1)
+	var kinds: Array = []
+	e.died.connect(func(_reward, kind): kinds.append(kind))
+
+	e.take_damage({"damage": 9999.0, "gold_multiplier": 2.0})
+
+	assert_eq(kinds, [&"ogre"], "died carries both arguments, not just the reward")
+	e.free()
+	return true
+
+# A tower with no slow effect must not slow anything. The default the source
+# is read with has to be 1.0 - "no slow" - and this is what says so.
+func test_a_hit_with_no_slow_effect_leaves_the_enemy_at_full_speed() -> bool:
+	var e := _ready_enemy()
+	e.setup(&"slime", _straight_path(), 1)
+	e.take_damage({"damage": 1.0})
+	assert_almost_eq(e.current_speed(), float(e.sim["speed"]), 0.0001, "still at full speed")
+	assert_almost_eq(e.sim["slow"]["remaining_ms"], 0.0, 0.0001, "and no timer was started")
+	e.free()
+	return true
+
+# A tower that cannot slow must leave no residue for the next slow to inherit.
+# Nothing else would notice one: a factor with no duration on it is inert by
+# itself (Slow.effective_speed gates on the timer), and it only surfaces when
+# a real slow lands beside it and the strongest-wins rule reads the leftover.
+# Reading slow_factor with a default of anything below 1.0 produces exactly
+# that, which is why this test exists rather than an assertion on the default.
+func test_a_plain_hit_leaves_no_residue_for_a_later_slow_to_inherit() -> bool:
+	var e := _ready_enemy()
+	e.setup(&"slime", _straight_path(), 1)
+	var full: float = e.sim["speed"]
+	e.take_damage({"damage": 1.0})
+	e.take_damage({"damage": 0.0, "slow_factor": 0.7, "slow_duration_ms": 1500.0})
+	assert_almost_eq(e.current_speed(), full * 0.7, 0.0001,
+		"the weak slow is exactly as weak as it should be")
+	e.free()
+	return true

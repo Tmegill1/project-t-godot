@@ -866,3 +866,176 @@ func test_tower_fired_spawns_a_projectile_with_the_towers_speed_and_arc_flag() -
 
 	target.free(); b.free()
 	return true
+
+# --------------------------------------------------------------------------
+# upgrades
+#
+# The board is where an upgrade is paid for, so these tests care about the
+# gate and the gold as much as the tier. The rules themselves belong to
+# sim/upgrades.gd and are pinned there; what is pinned here is that the board
+# actually consults them instead of trusting its caller.
+# --------------------------------------------------------------------------
+
+func _place_and_select(b: GameBoard, kind: StringName) -> Tower:
+	b._gold = 5000
+	var tile := _find_buildable_tiles(b, 1)[0]
+	b.select_tower_kind(kind)
+	b._try_place(tile.x, tile.y)
+	b._handle_tap(Grid.tile_to_world_center(tile.x, tile.y))
+	return b._selected_tower
+
+func test_upgrade_selected_tower_advances_the_branch_and_charges_for_it() -> bool:
+	var b := _ready_board()
+	var tower := _place_and_select(b, &"basic")
+	var gold_before := b.get_gold()
+
+	b.upgrade_selected_tower(&"sustained")
+
+	assert_eq(tower.tiers[&"sustained"], 1, "the branch advanced")
+	assert_eq(b.get_gold(), gold_before - 30, "and the tier's cost was deducted")
+	b.free()
+	return true
+
+func test_upgrade_selected_tower_announces_the_new_gold() -> bool:
+	var b := _ready_board()
+	_place_and_select(b, &"basic")
+	var events: Array = []
+	b.gold_changed.connect(func(g): events.append(g))
+
+	b.upgrade_selected_tower(&"sustained")
+
+	assert_eq(events, [b.get_gold()], "gold_changed emitted exactly once, carrying the new total")
+	b.free()
+	return true
+
+func test_upgrade_selected_tower_is_a_no_op_with_nothing_selected() -> bool:
+	var b := _ready_board()
+	b._gold = 5000
+	var gold_before := b.get_gold()
+
+	b.upgrade_selected_tower(&"sustained")
+
+	assert_eq(b.get_gold(), gold_before, "no selection means no purchase")
+	b.free()
+	return true
+
+func test_upgrade_selected_tower_refuses_when_gold_is_short() -> bool:
+	var b := _ready_board()
+	var tower := _place_and_select(b, &"basic")
+	b._gold = 5
+
+	b.upgrade_selected_tower(&"sustained")
+
+	assert_eq(tower.tiers[&"sustained"], 0, "the branch did not advance")
+	assert_eq(b.get_gold(), 5, "and nothing was spent")
+	assert_eq(tower.price_paid, EconomySim.tower_price(&"basic", 0),
+		"nor was anything recorded against the tower")
+	b.free()
+	return true
+
+# The cross-path rule has to be enforced at the purchase point, not only in
+# the UI - a board method that trusts its caller is one bug away from a tower
+# with both branches maxed.
+func test_upgrade_selected_tower_enforces_the_cross_path_rule() -> bool:
+	var b := _ready_board()
+	var tower := _place_and_select(b, &"basic")
+	var gold_before := b.get_gold()
+	for i in 3:
+		b.upgrade_selected_tower(&"burst")
+	assert_eq(tower.tiers[&"burst"], 3, "precondition: burst is committed")
+
+	for i in 3:
+		b.upgrade_selected_tower(&"sustained")
+
+	assert_eq(tower.tiers[&"sustained"], 2,
+		"sustained stopped at the cross-path cap despite ample gold")
+	assert_eq(b.get_gold(), gold_before - (30 + 65 + 145) - (30 + 60),
+		"and the refused tier cost nothing - only the five legal ones were charged")
+	b.free()
+	return true
+
+# A maxed branch is the other way can_upgrade says no, and the one a player
+# reaches by clicking the same button once too often.
+func test_upgrade_selected_tower_refuses_past_the_top_tier() -> bool:
+	var b := _ready_board()
+	var tower := _place_and_select(b, &"basic")
+	for i in 4:
+		b.upgrade_selected_tower(&"burst")
+	assert_eq(tower.tiers[&"burst"], UpgradesSim.MAX_TIER, "precondition: the branch is maxed")
+	var gold_before := b.get_gold()
+
+	b.upgrade_selected_tower(&"burst")
+
+	assert_eq(tower.tiers[&"burst"], UpgradesSim.MAX_TIER, "a fifth buy adds nothing")
+	assert_eq(b.get_gold(), gold_before, "and costs nothing")
+	b.free()
+	return true
+
+func test_upgrade_selected_tower_emits_tower_upgraded() -> bool:
+	var b := _ready_board()
+	_place_and_select(b, &"basic")
+	var seen: Array = []
+	b.tower_upgraded.connect(func(branch): seen.append(branch))
+
+	b.upgrade_selected_tower(&"sustained")
+
+	assert_eq(seen.size(), 1, "one signal per purchase")
+	assert_eq(seen[0], &"sustained", "carrying the branch bought")
+	b.free()
+	return true
+
+# A refusal must be silent on tower_upgraded, or the inspector redraws a tier
+# the player did not get.
+func test_upgrade_selected_tower_emits_nothing_when_it_refuses() -> bool:
+	var b := _ready_board()
+	_place_and_select(b, &"basic")
+	b._gold = 5
+	var seen: Array = []
+	b.tower_upgraded.connect(func(branch): seen.append(branch))
+
+	b.upgrade_selected_tower(&"sustained")
+
+	assert_eq(seen.size(), 0, "no purchase, no signal")
+	b.free()
+	return true
+
+func test_upgrade_selected_tower_reports_why_it_refused() -> bool:
+	var b := _ready_board()
+	var tower := _place_and_select(b, &"basic")
+	var messages: Array = []
+	b.placement_rejected.connect(func(text): messages.append(text))
+
+	b._gold = 5
+	b.upgrade_selected_tower(&"sustained")
+	assert_eq(messages.size(), 1, "the player is told why")
+	assert_true(String(messages[0]).contains("30"),
+		"a refusal for gold names the price, so the two reasons cannot be swapped: %s" % messages[0])
+
+	b._gold = 5000
+	for i in 3:
+		b.upgrade_selected_tower(&"burst")
+	for i in 3:
+		b.upgrade_selected_tower(&"sustained")
+	assert_eq(messages.size(), 2, "and once more when the cross-path rule refuses")
+	assert_false(String(messages[1]).contains("gold"),
+		"a locked branch is not a gold problem: %s" % messages[1])
+	assert_eq(tower.tiers[&"sustained"], 2, "precondition: it really was the cross-path refusal")
+	b.free()
+	return true
+
+func test_selling_an_upgraded_tower_refunds_half_of_everything_sunk_in() -> bool:
+	var b := _ready_board()
+	var tower := _place_and_select(b, &"basic")
+	b.upgrade_selected_tower(&"sustained")   # 30
+	b.upgrade_selected_tower(&"sustained")   # 60
+	var invested := tower.price_paid
+	assert_eq(invested, EconomySim.tower_price(&"basic", 0) + 30 + 60,
+		"precondition: price_paid carries placement plus both tiers")
+	var gold_before := b.get_gold()
+
+	b.sell_selected_tower()
+
+	assert_eq(b.get_gold(), gold_before + EconomySim.sell_refund(invested),
+		"refund covers placement and upgrades together")
+	b.free()
+	return true

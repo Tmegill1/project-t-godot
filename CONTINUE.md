@@ -3,16 +3,13 @@
 **Point an assistant at this file and say "continue this project."** It contains
 everything needed to resume with no prior conversation.
 
-Last updated: 2026-08-14 · Branch `master` · **core slice complete and merged;
-tower upgrades specced and planned, not started**
+Last updated: 2026-08-15 · Branch `feat/tower-upgrades` · **core slice complete
+and merged; tower upgrades complete — all 11 tasks, playable end to end,
+unmerged and unpushed**
 
-> **Starting the next piece of work?** Go straight to
-> [`docs/superpowers/plans/2026-08-14-tower-upgrades.md`](docs/superpowers/plans/2026-08-14-tower-upgrades.md).
-> It is a complete eleven-task implementation plan with the code for every
-> task, and its design rationale is in
-> [`docs/superpowers/specs/2026-08-14-tower-upgrades-design.md`](docs/superpowers/specs/2026-08-14-tower-upgrades-design.md).
-> Read §5 and §6 of this file first — the engine facts and the standing rules
-> apply to that plan too. See §4 for the one open decision inside it.
+> **Starting the next piece of work?** The tower-upgrades branch is finished
+> and needs merging, not continuing — see §4. Read §5 and §6 first whatever you
+> do next; the engine facts and the standing rules apply to everything here.
 
 > This file is the *orientation* document: state, how to run things, and the
 > hard-won facts that are expensive to rediscover. The per-task status table and
@@ -44,16 +41,16 @@ win or lose → retry or menu, with sound.
 
 | Layer | State |
 |---|---|
-| `sim/` — 9 modules | ✅ complete, reviewed |
-| `data/` — 8 modules | ✅ complete, reviewed |
+| `sim/` — 11 modules | ✅ complete, reviewed |
+| `data/` — 9 modules | ✅ complete, reviewed |
 | `assets/` — 61 files | ✅ imported, sliced, verified visually |
 | `game/` — board, enemy, tower, projectile, map renderer | ✅ complete |
-| `ui/` — menu, HUD, build panel, game-over, victory | ✅ complete |
+| `ui/` — menu, HUD, build panel, tower inspector, game-over, victory | ✅ complete |
 | `audio/` — pooled playback, 17 core-slice events | ✅ complete |
 | Web export | ✅ preset + build; **boots and renders in a browser; not yet played in one** |
 | Deploy | ✅ live at **https://tmegill1.github.io/project-t-godot/** — every push to `master` republishes |
-| Tests | ✅ 4054 checks across 25 files, exit 0 |
-| Tower upgrades | 📋 specced and planned, **not started** — see §4 |
+| Tests | ✅ 4589 checks across 29 files, exit 0 |
+| Tower upgrades | ✅ **all 11 tasks done** — rules, tower, board, harness, inspector, verified in the running game. See §4 |
 
 **The repo is public** and the game is deployed from it.
 `.github/workflows/deploy-pages.yml` exports the build in CI and publishes it
@@ -101,38 +98,55 @@ broken once already when the binary moved.
 
 ### A green run is noisy. Do not panic.
 
-A passing suite prints **54 `SCRIPT ERROR` lines** to stderr. All are expected:
+A passing suite prints **118 `SCRIPT ERROR` lines** to stderr. All are expected:
 
-- **3** from `test/test_harness_selfcheck.gd`, which crashes deliberately on
+- **6** from `test/test_harness_selfcheck.gd`, which crashes deliberately on
   purpose to prove the runner's crash sentinel works.
-- **51** from `Tower.setup` / `Tower.set_range_visible` / `Enemy.setup` aborting on
-  unresolved `@onready` in nodes the *board* instantiated (see §5 — the board's own
-  `add_child()` does not deliver `NOTIFICATION_READY` in a frameless test either).
-  Documented at the top of `test/test_game_board.gd`.
+- **~110** from `Tower.setup` / `Tower._refresh_visuals` /
+  `Tower.set_range_visible` / `Enemy.setup` aborting on unresolved `@onready` in
+  nodes the *board* instantiated (see §5 — the board's own `add_child()` does
+  not deliver `NOTIFICATION_READY` in a frameless test either). Documented at
+  the top of `test/test_game_board.gd`. The count grew with the upgrade work
+  because far more tests now place a tower through the board, and because
+  `apply_upgrade` refreshes the sprite, which aborts the same way.
+- **1** from `test_tower.gd`'s
+  `test_setup_lands_tiers_and_stats_even_when_the_sprite_half_aborts`, which
+  reproduces that state deliberately.
 
 Judge the run by the **summary line and the exit code**, never by stderr volume.
 `FAIL` lines and the counters in the summary are the signal. *New* noise is a
-defect; this noise is not.
+defect; this noise is not — **but do read it**. The bug where pressing an
+upgrade row bought the tier and left the panel stale was found in these lines
+and in nothing else: it failed no test and looked correct in every screenshot.
 
 ---
 
 ## 4. What is left
 
-The 23-task plan is finished. What remains is not implementation:
+Both feature branches are finished. What remains is not implementation:
 
-**1. Play the web build in a browser.** It has been *opened* in one now — it
-boots, the menu draws and the play field renders — but no click has ever been
-put through it. Placing a tower, starting a wave and hearing it fire are all
-still unverified in the browser specifically.
+**1. Merge `feat/tower-upgrades`.** All 11 tasks are complete, reviewed by
+mutation, and verified in the running game; the branch is **unpushed**. Nothing
+in it is half-done. The live ledger is
+`.superpowers/sdd/2026-08-14-tower-upgrades/progress.md` (git-ignored) — trust
+it and `git log` over any summary, including this file. It carries every ruling
+and a short list of deferred minors for a whole-branch review.
+
+**2. Play the web build in a browser.** Still the one thing nobody has done. It
+has been *opened* in one — it boots, the menu draws and the play field renders
+— but no click has ever been put through it. Placing a tower, buying a tier and
+running a wave are all still unverified in a browser specifically. The build
+re-exports cleanly with the upgrades in it (`index.pck` 826KB, `index.wasm`
+39.5MB).
 
 ```bash
 godot --headless --export-release "Web" export/web/index.html
 python3 -m http.server 8000 --directory export/web   # then open http://localhost:8000
 ```
 
-Expect the menu, then a run: place a tower, start wave 1, hear it fire. Audio needs
-a user gesture in browsers — the menu's Play button supplies it, so no explicit
-unlock call exists or is needed.
+Expect the menu, then a run: place a tower, tap it, buy a tier, start wave 1,
+hear it fire. Audio needs a user gesture in browsers — the menu's Play button
+supplies it, so no explicit unlock call exists or is needed.
 
 Worth knowing if you are driving this from an agent: the boot sequence is legible
 in the server's own access log. `index.html` → `index.js` → `index.wasm` →
@@ -141,43 +155,39 @@ that follow are made by the engine *at runtime*, after the wasm has instantiated
 and the pack has been read — so seeing them is decent evidence the engine started,
 short of seeing a pixel.
 
-**2. Build tower upgrades — this is the next real piece of work.** The design
-and the plan are both written, reviewed and merged; nothing has been
-implemented.
+**3. Decide the open art question in §9** — the squashed stone tiles.
 
-- Spec: [`docs/superpowers/specs/2026-08-14-tower-upgrades-design.md`](docs/superpowers/specs/2026-08-14-tower-upgrades-design.md)
-- Plan: [`docs/superpowers/plans/2026-08-14-tower-upgrades.md`](docs/superpowers/plans/2026-08-14-tower-upgrades.md)
+**4. Playtest and tune.** Nothing here has been balanced, and the upgrade tiers
+are as unplaytested as everything else. See §9. `sim/harness.gd` now takes
+`tiers` per tower, so a build can be simulated headlessly:
 
-Two branches per tower, four tiers each, and a cross-path rule that lets only
-one branch pass tier 2. It also builds the two mechanics those tiers need and
-the core slice never had — slowing and gold-per-kill. Pierce and detection are
-wired but dormant: their machinery already exists in `Damage.resolve` and
-`Targeting`, and only lacks armoured and phased enemies to bite on.
+```gdscript
+Harness.run_wave({"wave": 20, "path": path, "towers": [
+    {"kind": &"fast", "position": pos, "tiers": {&"sustained": 4, &"burst": 0}},
+]})
+```
 
-**Start at Task 1** — the 32-tier data table. It is pure data plus its pinning
-test, needs no UI, and lands green on its own. Each task leads with a failing
-test and ends with a mutation-test step; dispatch a fresh subagent per task, as
-§8 explains.
+### What the upgrade work added
 
-**One open decision inside that plan.** Long Range's `Tungsten Core` tier is
-pierce-only in the reference, so it would be 260 gold for no effect until
-armoured enemies exist — and it is the mandatory step to the tier behind it.
-The plan gives it an interim `damage_multiplier` of 1.3 and a "(no effect yet)"
-note, pinned by its own test so the divergence is deliberate. Reverse it if you
-would rather it stayed faithful and inert; nothing else depends on it.
+Two branches of four tiers for every tower, the cross-path rule (a branch
+passes tier 2 only while the other sits at 2 or below), per-tier costs, sprite
+frames driven by *total* investment (`ceil(total / 2)`, capped — the look
+changes at 1, 3 and 5 tiers), a tower inspector in the sidebar with Sell moved
+into it, and the two mechanics the tiers needed: **slowing** (`sim/slow.gd`) and
+**gold per kill** (`EconomySim.kill_reward`). Pierce and detection are wired but
+dormant until armoured and phased enemies exist.
 
-**3. The branch is merged.** The whole-branch review and its fix wave were
-completed and verified, and `feat/core-slice` is in `master`. Nothing to do.
-
-**4. Decide the open art question in §9** — the squashed stone tiles.
-
-**5. Playtest and tune.** Nothing here has been balanced. See §9.
+One divergence from the reference is deliberate and temporary: Long Range's
+**Tungsten Core** is pierce-only upstream, which would be 260 gold for no effect
+today and is a mandatory step to the tier behind it, so it carries an interim
+`damage_multiplier` of 1.3 and a "(no effect yet)" note, pinned by its own test.
+Delete both when enemy properties land. A second, smaller divergence: an expired
+slow clears its factor here, where upstream leaves a lapsed slow's factor in
+place forever and takes the strongest of it and the next slow.
 
 Note for whoever touches `project.godot`: the `[autoload]` entry for `AudioManager`
 is *legitimate*. §5's strip-before-commit warning is about the Godot MCP's
 `McpInteractionServer` entry only — do not let the habit delete the real one.
-
----
 
 ## 5. Engine and harness facts — do not re-derive these
 
@@ -241,11 +251,35 @@ read in a doc.
   sub-scene alone — `TowerPanel`'s vertical placement lived in `game.tscn`, so the
   standalone test read the panel's own value and passed regardless. Assert on the
   composed scene when the value being pinned lives on the instance.
+- **A tower's live stats come from `UpgradesSim.resolve_tower_stats(kind, tiers)`,
+  never from `Towers.DEFS`.** `game/tower.gd` caches the result and refreshes it
+  whenever its tiers change; `sim/harness.gd` resolves the same way from the
+  `tiers` in its config. An unupgraded tower resolves to exactly its table
+  values, which is why every pre-existing balance pin still holds. Reading the
+  table directly is the mistake to watch for — it compiles, it passes most
+  tests, and it silently ignores every upgrade the player bought. `get_def()`
+  survives for the two things no tier touches: projectile speed and arc.
+- **A tower's `setup()` assigns its rules state BEFORE anything visual**, and it
+  has to stay that way. A board-instantiated tower aborts `setup()` at the first
+  `@onready` field it touches (below), and `tiers`/`_stats` must land before
+  that point or every board-placed tower is unupgradeable in tests.
+- **Godot refuses to `free()` an object while it is emitting a signal** —
+  "Object is locked and can't be freed" — and the failure aborts the enclosing
+  call, so a teardown that starts inside a button's own `pressed` handler stops
+  halfway. This is why `ui/tower_inspector.gd` builds its rows once and rewrites
+  them in place: a rebuild triggered by pressing a row bought the tier and then
+  left the panel advertising it. `ui/tower_panel.gd`'s rebuild is safe only
+  because it runs from `bind()`, never from a press.
 - **Running the game through the Godot MCP rewrites `project.godot`.** It injects an
   `[autoload] McpInteractionServer` entry, and leaves an empty `[autoload]` section
   behind on stop. That is local debug tooling — committing it breaks the project for
   anyone without the MCP. **`git diff project.godot` and strip it before every
   commit made after running the game.**
+- **The MCP's injected clicks reach Control nodes but NOT
+  `GameBoard._unhandled_input`.** Clicking a build button works; clicking the map
+  never places a tower, with `_selected_kind` and the tile both verified correct.
+  Drive the board through `_handle_tap()` / `upgrade_selected_tower()` with
+  `game_eval` instead — the same path the tests take — and use clicks for the UI.
 
 ---
 
@@ -379,9 +413,17 @@ the player runs, not only in the thing the tests run.
   build panel was re-anchored: its old fixed `-140` offset silently encoded
   "1244 − 1104", and it now derives the number from
   `Maps.pixel_size(board.get_map_name())` instead.
-- `game/game_board.gd` is ~250 lines and owns state, spawn scheduling, tower
-  ticking, hit resolution, input and placement. Not urgent; worth splitting if it
-  grows again.
+- `game/game_board.gd` is ~270 lines and owns state, spawn scheduling, tower
+  ticking, hit resolution, input, placement and now upgrades. Not urgent; worth
+  splitting if it grows again.
+- The upgrade branch's deferred minors are in
+  `.superpowers/sdd/2026-08-14-tower-upgrades/progress.md`, for a whole-branch
+  review. Two are worth knowing without reading it: `GameBoard`'s
+  no-selection guards (`sell_selected_tower`, `upgrade_selected_tower`) cannot be
+  pinned by this harness — without them the method dereferences null, which
+  aborts its own frame and looks to the caller exactly like the no-op the guard
+  produces — and the effect VALUES in `data/upgrades.gd` are unpinned beyond
+  Tungsten Core, so a magnitude slip using a legal key (1.4 -> 1.5) would pass.
 
 ---
 
@@ -389,26 +431,26 @@ the player runs, not only in the thing the tests run.
 
 ```bash
 cd ~/Projects/project-t-godot
-git checkout master
+git checkout feat/tower-upgrades                     # master has only the core slice
 godot --headless --import                            # once, after a fresh clone
-godot --headless --quit --script test/run_tests.gd   # expect 4054 checks, exit 0
+godot --headless --quit --script test/run_tests.gd   # expect 4589 checks, exit 0
 godot --path .                                       # and actually play a run
 ```
 
 Then pick one of two things.
 
-**To build the next feature**, open
-[`docs/superpowers/plans/2026-08-14-tower-upgrades.md`](docs/superpowers/plans/2026-08-14-tower-upgrades.md)
-and start at Task 1. That plan is self-contained: every task carries its own
-tests and code, and §4 above names the one decision left open inside it.
+**To ship what is built**, review and merge `feat/tower-upgrades` — it is
+complete and unpushed. `superpowers:finishing-a-development-branch` is the
+process; the ledger at `.superpowers/sdd/2026-08-14-tower-upgrades/progress.md`
+lists what a whole-branch review should look at first.
 
 **To close the last verification gap**, play the deployed build at
-https://tmegill1.github.io/project-t-godot/ — place a tower, run a wave, hear
-it fire. It is confirmed to boot and render in a browser; nobody has yet put a
-click through it. That takes two minutes and needs a human, because it cannot
-be automated on this setup.
+https://tmegill1.github.io/project-t-godot/ — place a tower, buy a tier, run a
+wave, hear it fire. It is confirmed to boot and render in a browser; nobody has
+yet put a click through it. That takes two minutes and needs a human, because it
+cannot be automated on this setup.
 
 Play a full run before changing any number. The balance has never been playtested
 and every value came across from a prototype whose own notes call them
-placeholders; `sim/harness.gd` can simulate whole waves headlessly, so tuning does
-not mean sitting through twenty of them.
+placeholders; `sim/harness.gd` can simulate whole waves headlessly — upgrade
+tiers included — so tuning does not mean sitting through twenty of them.
