@@ -327,6 +327,21 @@ func test_resolve_composes_damage_multipliers_across_tiers() -> bool:
 		"two 60% damage boosts compose to 2.56x base, not overwrite to 1.6x")
 	return true
 
+# long/sustained tiers 1 and 4 (Long Barrel, Carpet Fire) are the only tiers
+# on any tower that both carry range_multiplier: 1.2 and 1.33. They must
+# compose to 1.596x, not overwrite to 1.33x. Tiers 2-3 add fire-rate and
+# splash effects that don't touch range, so buying all four still isolates
+# range composition specifically. Expected value is hand-computed from the
+# tower's base range and the tiers' own multipliers, not derived from the
+# function's own output, so it cannot be tautological the way comparing a
+# result to round(that same result) would be.
+func test_resolve_composes_range_multipliers_across_tiers() -> bool:
+	var base := float(Towers.DEFS[&"long"]["range"])
+	var s := UpgradesSim.resolve_tower_stats(&"long", _tiers(4, 0))
+	assert_almost_eq(s["range"], round(base * 1.2 * 1.33), 0.5,
+		"two range multipliers compose to 1.596x base, not overwrite to 1.33x")
+	return true
+
 # mortar/sustained tier 1 sets splash 70, tier 3 sets 95. The larger wins; they
 # must not sum to 165.
 func test_resolve_takes_the_strongest_splash_rather_than_stacking() -> bool:
