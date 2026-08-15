@@ -142,6 +142,19 @@ func test_with_upgrade_returns_tiers_unchanged_on_an_illegal_buy() -> bool:
 	assert_eq(t[&"burst"], 3, "and nothing else moved")
 	return true
 
+# The refusal path returns early, so it is the one place a caller could be
+# handed back the very dictionary it passed in; writing to the result would
+# then reach into the tower's own tiers. The legal path's copy is pinned by
+# test_with_upgrade_does_not_mutate_its_argument, this one is the other half.
+# Prints the "Illegal upgrade" error, as the test above does - that push_error
+# is the point of the call.
+func test_with_upgrade_returns_a_copy_even_when_it_refuses() -> bool:
+	var original := _tiers(2, 3)
+	var refused := UpgradesSim.with_upgrade(original, &"sustained")
+	refused[&"sustained"] = 99
+	assert_eq(original[&"sustained"], 2, "a refusal does not alias the caller's tiers")
+	return true
+
 # From "can walk a legal path to tier 4" - repeated legal buys on one branch,
 # leaving the other untouched, land exactly on MAX_TIER. Exercises the
 # composition of can_upgrade and with_upgrade across every intermediate step
@@ -384,11 +397,23 @@ func test_resolve_takes_the_strongest_gold_multiplier_and_flat_bonus() -> bool:
 
 # Damage is applied per hit and compared against integer health, so the number
 # the player is shown and the number the sim applies have to be the same one.
+# Fire rate and range round for the same reason, and because upgrades.ts rounds
+# all three at the same point.
+#
+# This test used to compare each stat to round() of ITSELF, which is true of
+# every float and pinned nothing - deleting the fire_rate or range rounding
+# passed all 4589 checks. Each case below is a tier whose arithmetic actually
+# lands off a whole number, with the rounded result written out.
 func test_resolve_rounds_damage_fire_rate_and_range() -> bool:
-	var s := UpgradesSim.resolve_tower_stats(&"basic", _tiers(0, 1))
-	assert_almost_eq(s["damage"], round(s["damage"]), 0.0001, "damage is whole")
-	assert_almost_eq(s["fire_rate"], round(s["fire_rate"]), 0.0001, "fire rate is whole")
-	assert_almost_eq(s["range"], round(s["range"]), 0.0001, "range is whole")
+	# 4 * 1.4 = 5.6
+	assert_almost_eq(UpgradesSim.resolve_tower_stats(&"basic", _tiers(0, 1))["damage"],
+		6.0, 0.0001, "damage 5.6 resolves to 6")
+	# 500 * 0.75 * 0.75 = 281.25
+	assert_almost_eq(UpgradesSim.resolve_tower_stats(&"fast", _tiers(2, 0))["fire_rate"],
+		281.0, 0.0001, "fire rate 281.25 resolves to 281")
+	# 150 * 1.2 * 1.33 = 239.4
+	assert_almost_eq(UpgradesSim.resolve_tower_stats(&"long", _tiers(4, 0))["range"],
+		239.0, 0.0001, "range 239.4 resolves to 239")
 	return true
 
 func test_resolve_does_not_mutate_the_tower_def() -> bool:

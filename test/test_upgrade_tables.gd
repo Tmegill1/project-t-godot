@@ -34,6 +34,66 @@ const EXPECTED_TIER_LABELS := {
 	},
 }
 
+
+const EXPECTED_EFFECTS := {
+	&"basic": {
+		&"sustained": [
+			{&"fire_rate_multiplier": 0.8},
+			{&"fire_rate_multiplier": 0.8},
+			{&"splash_radius": 45.0, &"fire_rate_multiplier": 0.9},
+			{&"damage_multiplier": 1.5, &"splash_radius": 75.0},
+		],
+		&"burst": [
+			{&"damage_multiplier": 1.4},
+			{&"damage_multiplier": 1.4},
+			{&"detection": true, &"damage_multiplier": 1.5},
+			{&"range_multiplier": 1.25, &"damage_multiplier": 2.0},
+		],
+	},
+	&"fast": {
+		&"sustained": [
+			{&"fire_rate_multiplier": 0.75},
+			{&"fire_rate_multiplier": 0.75},
+			{&"slow_duration_ms": 1500, &"slow_factor": 0.7},
+			{&"slow_duration_ms": 2500, &"slow_factor": 0.45, &"fire_rate_multiplier": 0.8},
+		],
+		&"burst": [
+			{&"damage_multiplier": 1.5},
+			{&"bonus_gold_per_kill": 1},
+			{&"gold_multiplier": 1.6, &"damage_multiplier": 1.4},
+			{&"gold_multiplier": 2.0, &"bonus_gold_per_kill": 2},
+		],
+	},
+	&"mortar": {
+		&"sustained": [
+			{&"splash_radius": 70.0},
+			{&"fire_rate_multiplier": 0.75},
+			{&"splash_radius": 95.0, &"fire_rate_multiplier": 0.85},
+			{&"damage_multiplier": 1.5, &"splash_radius": 130.0},
+		],
+		&"burst": [
+			{&"damage_multiplier": 1.6},
+			{&"damage_multiplier": 1.6},
+			{&"range_multiplier": 1.2, &"damage_multiplier": 2.0},
+			{&"damage_multiplier": 2.0},
+		],
+	},
+	&"long": {
+		&"sustained": [
+			{&"range_multiplier": 1.2},
+			{&"fire_rate_multiplier": 0.7},
+			{&"splash_radius": 55.0},
+			{&"range_multiplier": 1.33, &"splash_radius": 90.0},
+		],
+		&"burst": [
+			{&"damage_multiplier": 1.4},
+			{&"damage_multiplier": 1.4},
+			{&"pierce_bonus": 5, &"damage_multiplier": 1.3},
+			{&"pierce_bonus": 10, &"damage_multiplier": 2.0},
+		],
+	},
+}
+
 func test_branches_are_sustained_and_burst() -> bool:
 	assert_eq(Upgrades.BRANCHES.size(), 2, "exactly two branches")
 	assert_true(Upgrades.BRANCHES.has(&"sustained"), "sustained branch exists")
@@ -114,4 +174,39 @@ func test_tungsten_core_carries_an_interim_live_effect() -> bool:
 func test_get_branch_returns_the_branch_definition() -> bool:
 	var branch := Upgrades.get_branch(&"basic", &"sustained")
 	assert_eq(branch["label"], "Barrage", "basic's sustained branch is Barrage")
+	return true
+
+# Pins every effect VALUE, not just the key vocabulary
+# test_every_effect_key_is_recognised already covers. The keys catch a
+# misspelling; they do not catch a magnitude. The whole-branch review changed
+# six values by mutation - Cryo Rounds' 1500ms slow to 15ms, and five of six
+# splash radii to a tenth of themselves - and all six passed the entire suite,
+# because tests resolve towers almost only at tier 0 and tier 4 of one branch,
+# and because strongest-wins hides any value a higher tier overrides.
+#
+# These numbers are a snapshot of data/upgrades.gd taken after Task 1's review
+# had checked all thirty-two tiers against upstream by hand. Their job is the
+# same as EXPECTED_COSTS': to be a second, independent statement of the table,
+# so that changing it takes two deliberate edits rather than one slip.
+#
+# The type caveat at the top of this file applies here too: 1500 and 1500.0
+# compare equal, so a value that became a float would pass.
+func test_tier_effects_match_the_reference_table() -> bool:
+	for kind in Towers.KINDS:
+		for branch in Upgrades.BRANCHES:
+			var expected: Array = EXPECTED_EFFECTS[kind][branch]
+			var tiers: Array = Upgrades.DEFS[kind][branch]["tiers"]
+			assert_eq(tiers.size(), expected.size(), "%s/%s tier count" % [kind, branch])
+			for i in tiers.size():
+				var actual: Dictionary = tiers[i]["effects"]
+				var want: Dictionary = expected[i]
+				# Size as well as contents, so an effect ADDED to a tier fails
+				# here rather than passing every key the table happens to name.
+				assert_eq(actual.size(), want.size(),
+					"%s/%s tier %d carries exactly %d effect(s)" % [kind, branch, i + 1, want.size()])
+				for key in want:
+					assert_true(actual.has(key),
+						"%s/%s tier %d carries %s" % [kind, branch, i + 1, key])
+					assert_eq(actual.get(key), want[key],
+						"%s/%s tier %d %s" % [kind, branch, i + 1, key])
 	return true
