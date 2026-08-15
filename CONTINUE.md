@@ -3,7 +3,16 @@
 **Point an assistant at this file and say "continue this project."** It contains
 everything needed to resume with no prior conversation.
 
-Last updated: 2026-08-14 · Branch `feat/core-slice` · **all 23 tasks complete**
+Last updated: 2026-08-14 · Branch `master` · **core slice complete and merged;
+tower upgrades specced and planned, not started**
+
+> **Starting the next piece of work?** Go straight to
+> [`docs/superpowers/plans/2026-08-14-tower-upgrades.md`](docs/superpowers/plans/2026-08-14-tower-upgrades.md).
+> It is a complete eleven-task implementation plan with the code for every
+> task, and its design rationale is in
+> [`docs/superpowers/specs/2026-08-14-tower-upgrades-design.md`](docs/superpowers/specs/2026-08-14-tower-upgrades-design.md).
+> Read §5 and §6 of this file first — the engine facts and the standing rules
+> apply to that plan too. See §4 for the one open decision inside it.
 
 > This file is the *orientation* document: state, how to run things, and the
 > hard-won facts that are expensive to rediscover. The per-task status table and
@@ -42,7 +51,19 @@ win or lose → retry or menu, with sound.
 | `ui/` — menu, HUD, build panel, game-over, victory | ✅ complete |
 | `audio/` — pooled playback, 17 core-slice events | ✅ complete |
 | Web export | ✅ preset + build; **boots and renders in a browser; not yet played in one** |
+| Deploy | ✅ live at **https://tmegill1.github.io/project-t-godot/** — every push to `master` republishes |
 | Tests | ✅ 4054 checks across 25 files, exit 0 |
+| Tower upgrades | 📋 specced and planned, **not started** — see §4 |
+
+**The repo is public** and the game is deployed from it.
+`.github/workflows/deploy-pages.yml` exports the build in CI and publishes it
+to GitHub Pages on every push to `master`; it downloads the engine and the
+export templates at run time pinned to `GODOT_VERSION`, runs the full suite
+before publishing, and caches the 1.2GB template archive on that version. It
+was put on GitHub Pages rather than Cloudflare Pages for one reason:
+`index.wasm` is 37.68 MiB and Cloudflare Pages rejects any asset over 25 MiB.
+Serving the wasm pre-gzipped (9.62 MiB) was tested and does work in a browser,
+so that route stays open if it is ever wanted.
 
 The web build was opened in Firefox for the first time on 2026-08-14: the wasm
 compiles, the `.pck` loads, the main menu draws, and past it the play field
@@ -120,12 +141,37 @@ that follow are made by the engine *at runtime*, after the wasm has instantiated
 and the pack has been read — so seeing them is decent evidence the engine started,
 short of seeing a pixel.
 
-**2. Merge the branch.** The final whole-branch review and its fix wave are both
-complete and verified.
+**2. Build tower upgrades — this is the next real piece of work.** The design
+and the plan are both written, reviewed and merged; nothing has been
+implemented.
 
-**3. Decide the open art question in §9** — the squashed stone tiles.
+- Spec: [`docs/superpowers/specs/2026-08-14-tower-upgrades-design.md`](docs/superpowers/specs/2026-08-14-tower-upgrades-design.md)
+- Plan: [`docs/superpowers/plans/2026-08-14-tower-upgrades.md`](docs/superpowers/plans/2026-08-14-tower-upgrades.md)
 
-**4. Playtest and tune.** Nothing here has been balanced. See §9.
+Two branches per tower, four tiers each, and a cross-path rule that lets only
+one branch pass tier 2. It also builds the two mechanics those tiers need and
+the core slice never had — slowing and gold-per-kill. Pierce and detection are
+wired but dormant: their machinery already exists in `Damage.resolve` and
+`Targeting`, and only lacks armoured and phased enemies to bite on.
+
+**Start at Task 1** — the 32-tier data table. It is pure data plus its pinning
+test, needs no UI, and lands green on its own. Each task leads with a failing
+test and ends with a mutation-test step; dispatch a fresh subagent per task, as
+§8 explains.
+
+**One open decision inside that plan.** Long Range's `Tungsten Core` tier is
+pierce-only in the reference, so it would be 260 gold for no effect until
+armoured enemies exist — and it is the mandatory step to the tier behind it.
+The plan gives it an interim `damage_multiplier` of 1.3 and a "(no effect yet)"
+note, pinned by its own test so the divergence is deliberate. Reverse it if you
+would rather it stayed faithful and inert; nothing else depends on it.
+
+**3. The branch is merged.** The whole-branch review and its fix wave were
+completed and verified, and `feat/core-slice` is in `master`. Nothing to do.
+
+**4. Decide the open art question in §9** — the squashed stone tiles.
+
+**5. Playtest and tune.** Nothing here has been balanced. See §9.
 
 Note for whoever touches `project.godot`: the `[autoload]` entry for `AudioManager`
 is *legitimate*. §5's strip-before-commit warning is about the Godot MCP's
@@ -343,15 +389,24 @@ the player runs, not only in the thing the tests run.
 
 ```bash
 cd ~/Projects/project-t-godot
-git checkout feat/core-slice
+git checkout master
 godot --headless --import                            # once, after a fresh clone
 godot --headless --quit --script test/run_tests.gd   # expect 4054 checks, exit 0
 godot --path .                                       # and actually play a run
 ```
 
-Then do the browser check in §4 — the build is confirmed to boot and render, so
-what is left is playing a run through it, and that takes two minutes. After that
-the branch is ready to merge.
+Then pick one of two things.
+
+**To build the next feature**, open
+[`docs/superpowers/plans/2026-08-14-tower-upgrades.md`](docs/superpowers/plans/2026-08-14-tower-upgrades.md)
+and start at Task 1. That plan is self-contained: every task carries its own
+tests and code, and §4 above names the one decision left open inside it.
+
+**To close the last verification gap**, play the deployed build at
+https://tmegill1.github.io/project-t-godot/ — place a tower, run a wave, hear
+it fire. It is confirmed to boot and render in a browser; nobody has yet put a
+click through it. That takes two minutes and needs a human, because it cannot
+be automated on this setup.
 
 Play a full run before changing any number. The balance has never been playtested
 and every value came across from a prototype whose own notes call them
