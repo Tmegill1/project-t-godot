@@ -3,13 +3,13 @@
 **Point an assistant at this file and say "continue this project."** It contains
 everything needed to resume with no prior conversation.
 
-Last updated: 2026-08-15 · Branch `feat/tower-upgrades` · **core slice complete
-and merged; tower upgrades complete — all 11 tasks, playable end to end,
-unmerged and unpushed**
+Last updated: 2026-08-15 · Branch `master` · **core slice and tower upgrades
+both complete and merged; playable end to end and deployed**
 
-> **Starting the next piece of work?** The tower-upgrades branch is finished
-> and needs merging, not continuing — see §4. Read §5 and §6 first whatever you
-> do next; the engine facts and the standing rules apply to everything here.
+> **Starting the next piece of work?** Everything planned so far is built and
+> merged; §4 is what is left, and none of it is implementation. Read §5 and §6
+> first whatever you do next — the engine facts and the standing rules apply to
+> everything here.
 
 > This file is the *orientation* document: state, how to run things, and the
 > hard-won facts that are expensive to rediscover. The per-task status table and
@@ -125,12 +125,16 @@ and in nothing else: it failed no test and looked correct in every screenshot.
 
 Both feature branches are finished. What remains is not implementation:
 
-**1. Merge `feat/tower-upgrades`.** All 11 tasks are complete, reviewed by
-mutation, and verified in the running game; the branch is **unpushed**. Nothing
-in it is half-done. The live ledger is
+**1. The whole-branch review that never happened.** `feat/tower-upgrades` went
+into `master` (`b969a1f`) at the owner's direction without one. Each of its 11
+tasks was mutation-tested as it landed and the result was verified in the
+running game, but nobody has read the branch end to end — and on the core slice
+it was exactly that pass which caught the waves 19/20 soft-lock, after a task
+review had seen the same defect and dismissed it. The live ledger is
 `.superpowers/sdd/2026-08-14-tower-upgrades/progress.md` (git-ignored) — trust
 it and `git log` over any summary, including this file. It carries every ruling
-and a short list of deferred minors for a whole-branch review.
+and the deferred minors such a review should start from; `git diff
+fdd6e62..b969a1f` is the whole change.
 
 **2. Play the web build in a browser.** Still the one thing nobody has done. It
 has been *opened* in one — it boots, the menu draws and the play field renders
@@ -431,7 +435,6 @@ the player runs, not only in the thing the tests run.
 
 ```bash
 cd ~/Projects/project-t-godot
-git checkout feat/tower-upgrades                     # master has only the core slice
 godot --headless --import                            # once, after a fresh clone
 godot --headless --quit --script test/run_tests.gd   # expect 4589 checks, exit 0
 godot --path .                                       # and actually play a run
@@ -439,10 +442,10 @@ godot --path .                                       # and actually play a run
 
 Then pick one of two things.
 
-**To ship what is built**, review and merge `feat/tower-upgrades` — it is
-complete and unpushed. `superpowers:finishing-a-development-branch` is the
-process; the ledger at `.superpowers/sdd/2026-08-14-tower-upgrades/progress.md`
-lists what a whole-branch review should look at first.
+**To close the review gap**, read `feat/tower-upgrades` end to end — it went
+into `master` without a whole-branch review. The ledger at
+`.superpowers/sdd/2026-08-14-tower-upgrades/progress.md` lists what to look at
+first, and `git diff fdd6e62..b969a1f` is the whole change.
 
 **To close the last verification gap**, play the deployed build at
 https://tmegill1.github.io/project-t-godot/ — place a tower, buy a tier, run a
