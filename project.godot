@@ -8,14 +8,19 @@
 
 config_version=5
 
+[autoload]
+
+AudioManager="*res://audio/audio_manager.gd"
+
 [application]
 
 config/name="project-t-godot"
+run/main_scene="res://ui/main_menu.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 
 [display]
 
-window/size/viewport_width=1104
+window/size/viewport_width=1244
 window/size/viewport_height=672
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"

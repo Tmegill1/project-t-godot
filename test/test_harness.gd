@@ -281,20 +281,16 @@ func test_timestep_gives_close_results_at_different_resolutions() -> bool:
 # every test above (see task-14-report.md's mutation table). These two close
 # that gap directly.
 #
-# Note: tick_ms=40.0 (not 100.0) is used here because it was discovered
-# empirically that a large enough tick_ms interacts with Movement.advance's
-# documented "no clamping to the waypoint" quirk (movement.gd's own
-# comment: "at current speeds this is imperceptible") to produce a genuine
-# non-converging oscillation: when the per-tick step size divides the 48px
-# tile spacing so that both the remainder r and (step - r) land at or above
-# the strict `< 2.0` arrival radius, position bounces between two distances
-# forever without ever satisfying "arrived". tick_ms=100 hits exactly this
-# case for a wave-1 slime (speed 100: remainder pair {8, 2}, and 2 is not
-# strictly less than 2.0) and the wave times out rather than completing —
-# confirmed empirically, not a Task 14 defect (Movement.advance is Task 8's
-# already-shipped, already-tested pure function, reused verbatim per this
-# task's "do not reimplement any rule" constraint). tick_ms=40 divides 48
-# evenly (move distance 4.0, exactly 12 steps) and does not trigger it.
+# Historical note, kept because it is the story of the Critical below: this
+# block used to explain that tick_ms=40.0 was chosen over 100.0 to avoid
+# Movement.advance's "no clamping to the waypoint" quirk, which at a large
+# enough tick size produced a genuine non-converging oscillation (when both
+# the approach remainder and the overshoot land at or above the strict `< 2.0`
+# arrival radius, position bounces between two distances forever). That quirk
+# has since been removed — see sim/movement.gd's arrival test — because the
+# same oscillation was reachable at the DEFAULT tick size on waves 19 and 20
+# and soft-locked the real game. tick_ms=40.0 is retained here only because
+# the surrounding tests' exact tick pins are calibrated to it.
 # --------------------------------------------------------------------------
 
 func test_tick_ms_override_is_honored() -> bool:
@@ -309,9 +305,15 @@ func test_tick_ms_override_is_honored() -> bool:
 	# Regression pin, exact. The "<" comparison above tolerates a spawn-timing
 	# off-by-one-tick defect that mutation testing found survives it (the
 	# schedule boundary check accepting a spawn "<=" the current elapsed time
-	# vs. only "<" it — a one-tick spawn delay shifts this scenario's total
-	# from 712 to 713 without disturbing the inequality above).
-	assert_eq(coarser_run["ticks"], 712, "exact tick count at tick_ms=40 for this scenario")
+	# vs. only "<" it — a one-tick spawn delay shifts this scenario's total by
+	# one without disturbing the inequality above).
+	#
+	# Re-derived from 712 to 710 when movement.gd's un-clamped overshoot was
+	# removed, and this is the largest pacing shift the removal produced
+	# anywhere in the suite: at tick_ms=40 a wave-1 slime moves exactly 4.0
+	# px/tick, so it is one of the few scenarios where a step exceeds the 2px
+	# arrival radius at all. Two ticks out of 712 is 0.3%.
+	assert_eq(coarser_run["ticks"], 710, "exact tick count at tick_ms=40 for this scenario")
 	return true
 
 func test_max_ticks_override_is_honored() -> bool:
@@ -323,40 +325,90 @@ func test_max_ticks_override_is_honored() -> bool:
 	assert_eq(r["ticks"], 2, "the loop stops exactly at the overridden cap")
 	return true
 
-# This is the flip side of the tick_ms note above: it turns the discovered
-# oscillation into a positive assertion that the tick cap is what stands
-# between "unusual input" and "hangs forever". Without max_ticks/timed_out,
-# the while loop above would never exit for this exact input.
-func test_an_extreme_tick_size_times_out_rather_than_hanging() -> bool:
+# INVERTED (was test_an_extreme_tick_size_times_out_rather_than_hanging).
+#
+# This test used to assert that tick_ms=100 times out, and framed that as a
+# feature: proof that max_ticks is what stands between unusual input and an
+# infinite loop. That framing was wrong in an important way — it treated a
+# non-terminating movement rule as acceptable so long as the harness could
+# survive it, which is exactly the reasoning that let waves 19 and 20 ship
+# soft-locked (see the wave sweep below). The live game has no tick cap.
+#
+# With movement.gd's un-clamped overshoot removed, arrival is guaranteed at any
+# step size, so an extreme tick size now completes instead of hanging. A tick
+# cap is still worth having and is still pinned as honoured — by
+# test_max_ticks_override_is_honored above, which does it directly rather than
+# by relying on a real defect to trigger it.
+func test_an_extreme_tick_size_completes_rather_than_oscillating() -> bool:
 	var r := Harness.run_wave({"wave": 1, "towers": [], "path": _path(), "tick_ms": 100.0})
-	assert_true(r["timed_out"], "the run is abandoned rather than looping forever")
-	assert_eq(r["ticks"], Harness.DEFAULT_MAX_TICKS, "it ran the full tick budget before giving up")
+	assert_false(r["timed_out"], "a 100ms tick completes rather than oscillating forever")
+	assert_eq(r["ticks"], 312, "exact tick count at tick_ms=100 for this scenario")
+	assert_eq(r["leaks"], 5, "all five slimes still walk off the end")
 	return true
 
 # --------------------------------------------------------------------------
-# Finding, not a Task 14 defect: at the DEFAULT tick size, waves 19 and 20
-# (undefended, no towers at all) time out. Confirmed deterministic (two runs
-# produce an identical result) and confirmed NOT a property of every late
-# wave (wave 18 and every wave below it complete in under 3200 ticks; the
-# jump to a full 60000-tick timeout is sudden at 19, not a gradual climb —
-# swept every wave 1-20 to find this boundary). Root cause, traced by hand:
-# waves past 5 apply Waves.get_modifiers's speed_modifier (+5%/wave) to
-# every enemy's speed via Enemies.scaled_speed; at wave 19-20 that speed,
-# combined with the default ~16.667ms tick, makes some enemy's per-tick move
-# distance divide the 48px tile spacing into a remainder that lands the
-# enemy in the exact non-convergent cycle movement.gd's own docstring warns
-# about ("QUIRK: no clamping to the waypoint... at current speeds this is
-# imperceptible") — imperceptible at the speeds Task 8 was written against,
-# reachable at the speeds twenty accumulated +5%/wave bumps produce. This is
-# Movement.advance (Task 8, already shipped, reused verbatim per this task's
-# "do not reimplement any rule" constraint), not anything in this file — the
-# harness's max_ticks/timed_out is exactly the mechanism that keeps this from
-# being a genuine infinite loop, and this test pins that it fires here.
+# THE CRITICAL, and the record of how it survived review. This block used to
+# document waves 19 and 20 timing out as a finding-but-not-a-defect, and the
+# test below used to assert the timeout. Both are now inverted.
+#
+# What the original diagnosis got RIGHT — all of it, and it is worth keeping:
+# at the default tick size, waves 19 and 20 undefended timed out; the result
+# was deterministic; it was not a gradual climb but a sudden cliff at 19 (wave
+# 18 and everything below finished under 3200 ticks), found by sweeping every
+# wave; and the root cause was correctly traced to Waves.get_modifiers's
+# +5%/wave speed_modifier pushing an enemy's per-tick step into the exact
+# non-convergent cycle movement.gd's own docstring warned about. Every one of
+# those statements was true and independently reconfirmed.
+#
+# What it got WRONG was one inference: that the harness's max_ticks/timed_out
+# "is exactly the mechanism that keeps this from being a genuine infinite
+# loop". That is true OF THE HARNESS and false of the game. GameBoard has no
+# tick cap. A stuck enemy never reaches the goal, so it never leaks, never
+# emits, and never frees — `_enemies_root.get_child_count() == 0` is therefore
+# never satisfied, `_on_wave_cleared()` never runs, `wave_state_changed(false)`
+# never fires, the Start button stays disabled forever and `victory` is
+# unreachable. The player cannot win and cannot lose. Restarting is the only
+# exit. Containment reasoning that stops at the test harness does not transfer
+# to a caller with a different timing model, and Tasks 17 and 19 then wired
+# this same function to exactly such a caller.
+#
+# The rule was fixed in sim/movement.gd rather than worked around here. The
+# sweep below is the assertion that should have existed from the start: it
+# states the intent ("every wave terminates") in one line rather than encoding
+# one wave's symptom as expected behaviour.
 # --------------------------------------------------------------------------
 
-func test_wave_twenty_undefended_times_out_at_the_default_tick_size() -> bool:
+func test_wave_twenty_undefended_completes_at_the_default_tick_size() -> bool:
 	var r := Harness.run_wave({"wave": 20, "towers": [], "path": _path()})
-	assert_true(r["timed_out"], "wave 20 does not finish within the default tick budget")
+	assert_false(r["timed_out"], "wave 20 finishes within the default tick budget")
+	# Exact pin. The bee speed that used to trap (150 * 1.75 = 4.375 px/tick)
+	# is still the fastest thing in the game, so this number is the direct
+	# regression witness for the Critical: a revert to the un-clamped step
+	# turns it back into DEFAULT_MAX_TICKS.
+	assert_eq(r["ticks"], 3397, "wave 20 undefended takes exactly this many ticks")
+	assert_eq(r["leaks"], 161, "every wave-20 enemy walks off the end")
+	assert_eq(r["lives_lost"], 644, "lives lost at wave 20's health-based leak cost")
+	return true
+
+# The one-line-of-intent test. Waves 19 and 20 soft-locked the game for six
+# task-commits while three reviews looked at the code, because nothing anywhere
+# asserted the only thing that actually mattered: that a wave ends. Every other
+# harness test here picks a wave and pins its numbers, so a wave nobody picked
+# was a wave nobody checked. This sweeps all twenty at the tick size the real
+# game runs at, undefended (the slowest, longest-running configuration — every
+# tower only removes enemies sooner), so the class of bug cannot come back
+# silently.
+func test_every_wave_undefended_terminates_at_the_default_tick_size() -> bool:
+	var path := _path()
+	for wave in range(1, Waves.MAX_WAVES + 1):
+		var r := Harness.run_wave({"wave": wave, "towers": [], "path": path})
+		assert_false(r["timed_out"], "wave %d undefended terminates" % wave)
+		assert_true(r["ticks"] < Harness.DEFAULT_MAX_TICKS,
+			"wave %d finishes inside the tick budget, took %d" % [wave, r["ticks"]])
+		# Termination alone is satisfiable by a wave that ends because its
+		# enemies vanish. Every enemy must still be accounted for.
+		assert_eq(r["kills"] + r["leaks"], _total_spawn_count(wave),
+			"wave %d: every enemy reached an ending" % wave)
 	return true
 
 # --------------------------------------------------------------------------

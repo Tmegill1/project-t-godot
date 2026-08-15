@@ -1,5 +1,7 @@
 # Progress
 
+
+> **Resuming after a break?** Read [CONTINUE.md](CONTINUE.md) — it has the full state, every remaining task with its implementation approach, and the gotchas already established.
 Live status of the Godot port. Updated as tasks complete.
 
 **Project location on this machine:** `~/Projects/project-t-godot`
@@ -26,16 +28,16 @@ Full reasoning lives in:
 
 ## How to run it
 
-Nothing is playable yet — the first playable build arrives at Task 21.
+The game is playable: main menu → game → win or lose → retry or menu.
 
 ```bash
 cd ~/Projects/project-t-godot
 
-# Run the test suite (works now)
-godot --headless --quit --script test/run_tests.gd
-
-# Open in the editor
+# Play it
 godot --path .
+
+# Run the test suite
+godot --headless --quit --script test/run_tests.gd
 ```
 
 ---
@@ -58,15 +60,15 @@ godot --path .
 | 12 | Economy arithmetic | ✅ |
 | 13 | Purity guard | ✅ |
 | 14 | Headless wave harness | ✅ ← **checkpoint: rules layer complete** |
-| 15 | Asset import and atlas extraction | ⬜ |
-| 16 | Map renderer | ⬜ |
-| 17 | Enemy view | ⬜ |
-| 18 | Tower and projectile views | ⬜ |
-| 19 | Game board | ⬜ |
-| 20 | HUD and tower panel | ⬜ |
-| 21 | Scene flow and main scene | ⬜ ← **first playable** |
-| 22 | Audio | ⬜ |
-| 23 | Web export and README | ⬜ |
+| 15 | Asset import and atlas extraction | ✅ |
+| 16 | Map renderer | ✅ |
+| 17 | Enemy view | ✅ |
+| 18 | Tower and projectile views | ✅ |
+| 19 | Game board | ✅ |
+| 20 | HUD and tower panel | ✅ |
+| 21 | Scene flow and main scene | ✅ ← **first playable** |
+| 22 | Audio | ✅ |
+| 23 | Web export and README | ✅ |
 
 Legend: ⬜ not started · 🔧 in progress · ✅ done
 

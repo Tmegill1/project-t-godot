@@ -1,0 +1,13 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://game/enemy.gd" id="1_enemy"]
+
+[node name="Enemy" type="Node2D"]
+script = ExtResource("1_enemy")
+
+[node name="Sprite" type="AnimatedSprite2D" parent="."]
+
+[node name="HealthBar" type="ColorRect" parent="."]
+position = Vector2(-16, -22)
+size = Vector2(32, 4)
+color = Color(0, 1, 0, 1)

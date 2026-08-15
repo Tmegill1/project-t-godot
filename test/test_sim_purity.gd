@@ -2,6 +2,13 @@ extends TestCase
 
 ## sim/ and data/ must never touch the engine's scene layer, or the headless
 ## harness becomes impossible and balance stops being testable.
+##
+## The ban covers two things, not one. Scene types and resource loading break
+## the *headless* claim (the harness could not run at all). Engine RNG, wall
+## clocks and process/platform state break the *reproducible* claim, which is
+## the more insidious of the two: a sim module that reads Time.get_ticks_msec()
+## still runs headlessly and still passes every test — until the day two runs
+## of the same wave disagree and no test says why. Both classes belong here.
 
 const FORBIDDEN := [
 	"extends Node", "extends Node2D", "extends Control", "extends Sprite2D",
@@ -10,6 +17,14 @@ const FORBIDDEN := [
 	"randf(", "randi(", "RandomNumberGenerator",
 	"load(", "ResourceLoader",
 	"randi_range(", "randf_range(", "randfn(", "randomize()", "seed(",
+	# Nondeterminism that is not RNG. Time.* is a wall/monotonic clock, so a
+	# result derived from it is unreproducible by construction. Engine.* leaks
+	# frame counts, physics/process deltas, time scale and editor-vs-runtime
+	# state — the sim is handed its delta by its caller and must never ask.
+	# OS.* leaks platform, locale, environment, command line and process id.
+	# All three would sail past every check above while making a balance result
+	# depend on when and where it ran.
+	"Time.", "Engine.", "OS.",
 ]
 
 const GUARDED_DIRS := ["res://sim", "res://data"]
@@ -99,6 +114,11 @@ func test_forbidden_token_list_is_not_empty() -> bool:
 	assert_true(FORBIDDEN.has("get_tree()"), "get_tree() must remain a forbidden token")
 	assert_true(FORBIDDEN.has("preload("), "preload( must remain a forbidden token")
 	assert_true(FORBIDDEN.has("extends Node2D"), "extends Node2D must remain a forbidden token")
+	# One representative of each ban class, so dropping a whole class is loud.
+	assert_true(FORBIDDEN.has("randf("), "engine RNG must remain forbidden")
+	assert_true(FORBIDDEN.has("Time."), "Time. must remain forbidden (wall clock)")
+	assert_true(FORBIDDEN.has("Engine."), "Engine. must remain forbidden (frame/process state)")
+	assert_true(FORBIDDEN.has("OS."), "OS. must remain forbidden (platform/process state)")
 	return true
 
 # The detector must be able to detect. Without these, the guard above could
@@ -144,6 +164,39 @@ func test_detector_flags_the_remaining_rng_entry_points() -> bool:
 		"randomize() is detected")
 	assert_true(_contains_outside_comments("seed(12345)", "seed("),
 		"seed( is detected")
+	return true
+
+# The non-RNG nondeterminism sources. Without these the guard bans dice but not
+# clocks: a sim module reading the wall time, the frame counter or the platform
+# would pass every other detector while breaking reproducibility just as
+# thoroughly. The trailing "." is what makes each token specific — it matches
+# the static-class access that is the only way to reach these in GDScript.
+func test_detector_flags_the_non_rng_nondeterminism_sources() -> bool:
+	assert_true(_contains_outside_comments("var t = Time.get_ticks_msec()", "Time."),
+		"Time.get_ticks_msec is detected")
+	assert_true(_contains_outside_comments("var d = Engine.get_physics_frames()", "Engine."),
+		"Engine.get_physics_frames is detected")
+	assert_true(_contains_outside_comments("var n = OS.get_unix_time()", "OS."),
+		"OS. static access is detected")
+	assert_true(_contains_outside_comments("if Engine.is_editor_hint():", "Engine."),
+		"Engine.is_editor_hint is detected")
+	# And they route through the real scan pipeline, not just the detector.
+	assert_eq(_scan_text_for_offences("res://sim/fake.gd", "var t = Time.get_ticks_msec()").size(), 1,
+		"the scan pipeline surfaces a wall-clock violation")
+	return true
+
+# The new tokens are bare substrings, so they must not fire on ordinary code
+# that merely contains those letters. Confirms the ban is specific enough to
+# live in a guard that fails the build.
+func test_detector_does_not_false_positive_on_the_new_tokens() -> bool:
+	assert_false(_contains_outside_comments("var elapsed_time = 0.0", "Time."),
+		"a snake_case local named elapsed_time is not a clock read")
+	assert_false(_contains_outside_comments("var engine := 5", "Engine."),
+		"a lowercase identifier is not Engine.")
+	assert_false(_contains_outside_comments("var cost = 5", "OS."),
+		"clean arithmetic is not OS access")
+	assert_eq(_scan_text_for_offences("res://sim/fake.gd", "var elapsed_time = 0.0").size(), 0,
+		"the scan pipeline stays quiet on clean time-ish code")
 	return true
 
 # $ and % are Godot's node-path and unique-name shorthand ($Sprite,

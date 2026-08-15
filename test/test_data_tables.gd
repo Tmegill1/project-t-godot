@@ -127,3 +127,16 @@ func test_first_map_definition() -> bool:
 	assert_eq(m["tower_budget"], 16, "tower budget")
 	assert_eq(m["starting_gold"], 100, "starting gold")
 	return true
+
+# pixel_size() went untested while nothing called it. TowerPanel now anchors
+# its left edge to the value this returns, so a wrong answer here is a
+# visible gap (or an overlap) between the map and the build panel rather
+# than a dormant arithmetic bug. Both components are checked: multiplying by
+# the wrong axis' count would still produce a plausible-looking number.
+func test_map_pixel_size_multiplies_both_axes_by_tile_size() -> bool:
+	var m := Maps.get_def(Maps.FIRST)
+	var size := Maps.pixel_size(Maps.FIRST)
+	assert_eq(size.x, int(m["cols"]) * int(m["tile_size"]), "width is cols * tile_size")
+	assert_eq(size.y, int(m["rows"]) * int(m["tile_size"]), "height is rows * tile_size")
+	assert_eq(size, Vector2i(1104, 672), "the first map is 1104x672 px at 23x14 tiles of 48")
+	return true

@@ -20,11 +20,67 @@ func test_arrival_consumes_the_whole_tick() -> bool:
 	assert_eq(r["position"], Vector2(99.5, 0), "no distance covered this tick")
 	return true
 
-# QUIRK, preserved: no clamping, so a fast enemy overshoots and steers back.
-func test_fast_enemy_overshoots_rather_than_clamping() -> bool:
+# CONTRACT, replacing a removed quirk. This test previously pinned the
+# opposite: that a fast enemy overshot the waypoint and steered back, exactly
+# as movement.ts does. That behaviour was removed because it soft-locked this
+# port, and the reason is the caller, not the rule — Phaser hands the reference
+# a measured frame delta so the step jitters, while Godot's _physics_process
+# delta is fixed at 1/60s so each enemy's step is a constant. A constant step
+# above 2 * WAYPOINT_ARRIVAL_RADIUS can oscillate around a waypoint forever;
+# waves 19 and 20 did, and the game became unwinnable. Full reasoning is at the
+# arrival test in sim/movement.gd. The new contract: a step that would reach or
+# pass the waypoint arrives at it.
+func test_a_step_reaching_the_waypoint_arrives_rather_than_overshooting() -> bool:
+	# 10000px/s for 100ms is a 1000px step against a 100px leg — massively past.
 	var r := Movement.advance(Vector2(0, 0), 1, _straight_path(), 10000.0, 100.0)
-	assert_true(r["position"].x > 100.0, "overshoots the waypoint")
-	assert_false(r["advanced_waypoint"], "did not arrive this tick")
+	assert_true(r["advanced_waypoint"], "a step that would pass the waypoint arrives at it instead")
+	assert_eq(r["path_index"], 2, "index moved on")
+	assert_false(r["position"].x > 100.0, "never lands beyond the waypoint")
+	# The other quirk is untouched: arriving still costs the whole tick.
+	assert_eq(r["position"], Vector2(0, 0), "arrival consumes the tick without moving")
+	return true
+
+# The boundary of the new arrival condition. `<=` means a step of exactly the
+# remaining distance arrives; without both halves of this, a `<` mutation (or a
+# revert to the old `distance < WAYPOINT_ARRIVAL_RADIUS` alone) is invisible
+# whenever the remaining distance happens to be under 2px anyway.
+func test_arrival_boundary_against_the_step_length() -> bool:
+	var path := _straight_path()
+	# 40px remain to (100, 0); 400px/s for 100ms is exactly 40px.
+	var exact := Movement.advance(Vector2(60, 0), 1, path, 400.0, 100.0)
+	assert_true(exact["advanced_waypoint"], "a step of exactly the remaining distance arrives")
+	assert_eq(exact["position"], Vector2(60, 0), "and consumes the tick without moving")
+	# 399px/s covers 39.9px, stopping 0.1px short — still outside the 2px radius.
+	var falls_short := Movement.advance(Vector2(60, 0), 1, path, 399.0, 100.0)
+	assert_false(falls_short["advanced_waypoint"], "a step that falls short does not arrive")
+	assert_almost_eq(falls_short["position"].x, 99.9, 0.0001, "it moves a full step instead")
+	return true
+
+# The property the removed quirk broke, pinned directly at the unit level: on a
+# fixed timestep an enemy must reach its waypoint in finitely many ticks at ANY
+# speed. The old code failed this whenever the approach remainder r and the
+# overshoot (step - r) both landed at or above the 2px radius — e.g. a 4.25
+# px/tick step against the 48px tile spacing (a wave-19 bee), which alternated
+# 2.00/2.25 forever. Swept rather than spot-checked precisely because the old
+# behaviour was fine at almost every step size and catastrophic at a few: wave
+# 18's 4.125 px/tick converges and wave 19's 4.25 does not, so any single value
+# can pass by luck. test_harness.gd's wave sweep is the whole-game twin of this.
+func test_every_step_size_reaches_the_waypoint_in_finite_ticks() -> bool:
+	var leg := PackedVector2Array([Vector2(0, 0), Vector2(48, 0)])
+	var tick_ms := 1000.0 / 60.0
+	for i in range(1, 81):
+		var step: float = i * 0.125  # 0.125 .. 10.0 px/tick
+		var speed: float = step * 1000.0 / tick_ms
+		var position := Vector2(0, 0)
+		var index := 1
+		var ticks := 0
+		while index < leg.size() and ticks < 10000:
+			var r := Movement.advance(position, index, leg, speed, tick_ms)
+			position = r["position"]
+			index = r["path_index"]
+			ticks += 1
+		assert_true(index >= leg.size(),
+			"a %.3f px/tick step reaches the waypoint rather than oscillating" % step)
 	return true
 
 func test_reaching_the_end_reports_goal() -> bool:
