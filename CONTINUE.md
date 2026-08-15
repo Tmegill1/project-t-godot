@@ -3,8 +3,9 @@
 **Point an assistant at this file and say "continue this project."** It contains
 everything needed to resume with no prior conversation.
 
-Last updated: 2026-08-14 · Branch `master` · **core slice complete and merged;
-tower upgrades specced and planned, not started**
+Last updated: 2026-08-15 · Branch `feat/tower-upgrades` · **core slice complete
+and merged; tower upgrades 4 of 11 tasks in — the pure-rules layer only,
+nothing wired to the game yet**
 
 > **Starting the next piece of work?** Go straight to
 > [`docs/superpowers/plans/2026-08-14-tower-upgrades.md`](docs/superpowers/plans/2026-08-14-tower-upgrades.md).
@@ -52,8 +53,8 @@ win or lose → retry or menu, with sound.
 | `audio/` — pooled playback, 17 core-slice events | ✅ complete |
 | Web export | ✅ preset + build; **boots and renders in a browser; not yet played in one** |
 | Deploy | ✅ live at **https://tmegill1.github.io/project-t-godot/** — every push to `master` republishes |
-| Tests | ✅ 4054 checks across 25 files, exit 0 |
-| Tower upgrades | 📋 specced and planned, **not started** — see §4 |
+| Tests | ✅ 4355 checks across 27 files, exit 0 |
+| Tower upgrades | 🔨 **4 of 11 tasks done** — the whole pure-rules layer. Nothing wired to the game yet. See §4 |
 
 **The repo is public** and the game is deployed from it.
 `.github/workflows/deploy-pages.yml` exports the build in CI and publishes it
@@ -154,21 +155,45 @@ the core slice never had — slowing and gold-per-kill. Pierce and detection are
 wired but dormant: their machinery already exists in `Damage.resolve` and
 `Targeting`, and only lacks armoured and phased enemies to bite on.
 
-**Progress: 4 of 11 tasks complete.** Task 1 (the 32-tier data table) landed in
-`40942a9`, Task 2 (tier legality, the cross-path rule, cost and total
-investment in `sim/upgrades.gd`) in `ae3f356`, Task 3 (visual tier and sprite frame) in `6709c62`, Task 4 (stat
-resolution) in `abf49ee` + `c0d4ca6`; suite green at 4355 checks. That
-completes `sim/upgrades.gd` and every pure rule the feature needs. Resume at
-**Task 5** — the slow mechanic, a new `sim/slow.gd`.
+### Progress: 4 of 11 tasks complete
 
-Mutation testing has already earned its place twice here: it caught an
-unreachable clamp in `visual_tier` that guards an array index, and a missing
-composition test that would have let `damage_multiplier` stop composing
-silently. A third gap, `range_multiplier`, was caught by review. Keep insisting
-implementers mutation-test and report survivors honestly. The live ledger, with every ruling
-and deferred minor, is at
+Every pure rule the feature needs now exists. **Nothing is wired to the game
+yet** — no tower holds tiers, no player can buy one, and none of this is
+reachable from the UI. `sim/upgrades.gd` is complete and dead code until
+Task 7.
+
+| # | Task | State |
+|---|---|---|
+| 1 | `data/upgrades.gd` — the 32-tier table | ✅ `40942a9` |
+| 2 | Tier legality, cross-path rule, cost, total invested | ✅ `ae3f356` |
+| 3 | `visual_tier`, `sprite_frame_for` | ✅ `6709c62` |
+| 4 | `resolve_tower_stats` | ✅ `abf49ee` + `c0d4ca6` |
+| 5 | **Slow — a new `sim/slow.gd`** | ⬜ **next** |
+| 6 | Kill rewards — `EconomySim.kill_reward` | ⬜ |
+| 7 | Tower view holds tiers, reads resolved stats, accumulates `price_paid` | ⬜ |
+| 8 | Buying an upgrade — `GameBoard.upgrade_selected_tower` | ⬜ |
+| 9 | Slow and gold reach the running game — `enemy.gd`, `harness.gd` | ⬜ |
+| 10 | `ui/tower_inspector.tscn`, and Sell moves out of the HUD | ⬜ |
+| 11 | Visual and browser verification | ⬜ |
+| — | Documentation pass (README + this file) | ⬜ |
+
+Tasks 5 and 6 are independent of each other and of 1–4; 7 needs 2–4; 8 needs
+7; 9 needs 5, 6 and 7; 10 needs 8.
+
+**Mutation testing has already paid for itself three times on this feature**,
+which is the same pattern the core slice saw. It caught an unreachable clamp in
+`visual_tier` that guards an array index, and a missing composition test that
+would have let `damage_multiplier` stop composing silently; review caught the
+identical gap for `range_multiplier`. In every case the code was correct and
+the *test* was the defect. Keep insisting implementers mutation-test their own
+work and report survivors honestly — two of those three surfaced only because
+an implementer said "this one survived" instead of claiming a clean pass.
+
+The live ledger, with every ruling and every deferred minor finding, is at
 `.superpowers/sdd/2026-08-14-tower-upgrades/progress.md` (git-ignored) — trust
-it and `git log` over any summary, including this line.
+it and `git log` over any summary, including this table. Seven minor findings
+are parked there for the final whole-branch review; two of them are tests that
+do not pin what their names claim.
 
 Each task leads with a failing test and ends with a mutation-test step;
 dispatch a fresh subagent per task, as §8 explains.
@@ -403,9 +428,9 @@ the player runs, not only in the thing the tests run.
 
 ```bash
 cd ~/Projects/project-t-godot
-git checkout master
+git checkout feat/tower-upgrades                     # master has only the core slice
 godot --headless --import                            # once, after a fresh clone
-godot --headless --quit --script test/run_tests.gd   # expect 4054 checks, exit 0
+godot --headless --quit --script test/run_tests.gd   # expect 4355 checks, exit 0
 godot --path .                                       # and actually play a run
 ```
 
