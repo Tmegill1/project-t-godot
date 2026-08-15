@@ -19,6 +19,22 @@ static func sell_refund(paid: int) -> int:
 static func can_afford(gold: int, price: int) -> bool:
 	return gold >= price
 
+## Gold paid for a kill, after the killing tower's gold effects.
+##
+## The multiplier applies first and the flat bonus is added after, so a flat
+## bonus is never itself multiplied - which is what the tier descriptions say.
+## Rounds to nearest rather than flooring, matching the reference's kill payout
+## (`Math.round(reward * goldMultiplier) + bonusGold`); gold is an integer, and
+## a half-gold difference the HUD cannot show would drift from the banked
+## total. `source` is the dictionary a tower emits with its shot, so a kill is
+## credited to the tower that fired - including a splash kill, which reuses it.
+## Reading with defaults keeps this correct for a source carrying no gold keys
+## at all.
+static func kill_reward(base_reward: int, source: Dictionary) -> int:
+	var multiplier := float(source.get(&"gold_multiplier", 1.0))
+	var flat := int(source.get(&"bonus_gold_per_kill", 0))
+	return maxi(0, roundi(float(maxi(0, base_reward)) * multiplier) + flat)
+
 ## How many of a kind this map allows.
 static func tower_limit(kind: StringName, map_name: StringName) -> int:
 	var def: Dictionary = Towers.DEFS[kind]
