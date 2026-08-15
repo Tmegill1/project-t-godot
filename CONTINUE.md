@@ -49,7 +49,7 @@ win or lose → retry or menu, with sound.
 | `audio/` — pooled playback, 17 core-slice events | ✅ complete |
 | Web export | ✅ preset + build; **boots and renders in a browser; not yet played in one** |
 | Deploy | ✅ live at **https://tmegill1.github.io/project-t-godot/** — every push to `master` republishes |
-| Tests | ✅ 4589 checks across 29 files, exit 0 |
+| Tests | ✅ 4724 checks across 29 files, exit 0 |
 | Tower upgrades | ✅ **all 11 tasks done** — rules, tower, board, harness, inspector, verified in the running game. See §4 |
 
 **The repo is public** and the game is deployed from it.
@@ -125,16 +125,17 @@ and in nothing else: it failed no test and looked correct in every screenshot.
 
 Both feature branches are finished. What remains is not implementation:
 
-**1. The whole-branch review that never happened.** `feat/tower-upgrades` went
-into `master` (`b969a1f`) at the owner's direction without one. Each of its 11
-tasks was mutation-tested as it landed and the result was verified in the
-running game, but nobody has read the branch end to end — and on the core slice
-it was exactly that pass which caught the waves 19/20 soft-lock, after a task
-review had seen the same defect and dismissed it. The live ledger is
-`.superpowers/sdd/2026-08-14-tower-upgrades/progress.md` (git-ignored) — trust
-it and `git log` over any summary, including this file. It carries every ruling
-and the deferred minors such a review should start from; `git diff
-fdd6e62..b969a1f` is the whole change.
+**1. ~~The whole-branch review~~ — done, post-merge.** 48 fresh mutations over
+`sim/upgrades.gd` and the table's effect values, plus two checks in the running
+game. It found no production bug and three test-only gaps, all now closed
+(`96055f6`): the table's effect values were unpinned, the rounding test
+compared each stat to `round()` of itself, and `with_upgrade`'s refusal path
+could alias the caller's dictionary. What it could NOT close is written up in
+the ledger, `.superpowers/sdd/2026-08-14-tower-upgrades/progress.md`
+(git-ignored) — three latent minors that need a data shape this game does not
+have yet, and a class of defensive guard this harness cannot pin at all,
+because Godot's error recovery makes a crash look exactly like the no-op the
+guard produces. It was a single-reviewer pass, not two.
 
 **2. Play the web build in a browser.** Still the one thing nobody has done. It
 has been *opened* in one — it boots, the menu draws and the play field renders
@@ -426,8 +427,10 @@ the player runs, not only in the thing the tests run.
   no-selection guards (`sell_selected_tower`, `upgrade_selected_tower`) cannot be
   pinned by this harness — without them the method dereferences null, which
   aborts its own frame and looks to the caller exactly like the no-op the guard
-  produces — and the effect VALUES in `data/upgrades.gd` are unpinned beyond
-  Tungsten Core, so a magnitude slip using a legal key (1.4 -> 1.5) would pass.
+  produces. `can_upgrade`'s unknown-branch guard is the same shape. Keep them
+  and stop expecting a test to hold them. (The effect-values gap listed here
+  before is closed: `EXPECTED_EFFECTS` in `test_upgrade_tables.gd` now states
+  all thirty-two tiers.)
 
 ---
 
@@ -436,16 +439,16 @@ the player runs, not only in the thing the tests run.
 ```bash
 cd ~/Projects/project-t-godot
 godot --headless --import                            # once, after a fresh clone
-godot --headless --quit --script test/run_tests.gd   # expect 4589 checks, exit 0
+godot --headless --quit --script test/run_tests.gd   # expect 4724 checks, exit 0
 godot --path .                                       # and actually play a run
 ```
 
 Then pick one of two things.
 
-**To close the review gap**, read `feat/tower-upgrades` end to end — it went
-into `master` without a whole-branch review. The ledger at
-`.superpowers/sdd/2026-08-14-tower-upgrades/progress.md` lists what to look at
-first, and `git diff fdd6e62..b969a1f` is the whole change.
+**To take the next feature**, the obvious one is the five composable enemy
+properties — armoured, phased, swift, shielded, splitter. Pierce and detection
+are already wired and waiting for them, and the upgrade tiers that carry those
+effects are inert until they land. It needs its own spec and plan.
 
 **To close the last verification gap**, play the deployed build at
 https://tmegill1.github.io/project-t-godot/ — place a tower, buy a tier, run a

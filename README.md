@@ -71,7 +71,7 @@ godot --headless --quit --script test/run_tests.gd
 A hand-rolled runner, not an addon — Godot 4.7 was new enough at the time this
 was built that betting the whole suite on third-party addon compatibility was
 a risk worth avoiding. Exit code 0 means pass, 1 means fail. As of this
-writing the suite is green at **4589 checks across 29 files**.
+writing the suite is green at **4724 checks across 29 files**.
 
 A passing run is noisy: it prints around 118 `SCRIPT ERROR` lines to stderr.
 That is expected and documented at the top of `test/test_game_board.gd` and in
