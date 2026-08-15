@@ -247,9 +247,15 @@ read in a doc.
   Read the comment at the arrival test in `sim/movement.gd` before touching it.
   `test_harness.gd::test_every_wave_undefended_terminates_at_the_default_tick_size`
   is the guard.
-- **The signals are `Enemy.died(reward)` and `Enemy.leaked(life_loss)`.** The plan
-  document says `died(reward, kind)`; the shipped signal takes reward only. Trust
-  the code.
+- **The signals are `Enemy.died(reward: int, kind: StringName)` and
+  `Enemy.leaked(life_loss: int)`.** This entry previously claimed `died` took
+  reward only and told you to trust the code over the plan; the code has
+  carried both arguments all along (`game/enemy.gd`, the `signal died` line and
+  its `died.emit` in `_die`), so the entry itself was the wrong half. Connect
+  with two parameters — a one-argument `Callable` fails to connect, which in a
+  test aborts the method and trips the crash sentinel rather than failing
+  cleanly. Trusting the code remains the right instinct; that is how this was
+  caught.
 - **`test/case.gd`'s `_values_equal` cannot distinguish `20` from `20.0`**, so no
   data-table test detects a *type* change. Known limitation.
 
