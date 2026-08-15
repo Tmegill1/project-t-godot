@@ -41,12 +41,14 @@ win or lose → retry or menu, with sound.
 | `game/` — board, enemy, tower, projectile, map renderer | ✅ complete |
 | `ui/` — menu, HUD, build panel, game-over, victory | ✅ complete |
 | `audio/` — pooled playback, 17 core-slice events | ✅ complete |
-| Web export | ✅ preset + build; **never opened in a browser** |
-| Tests | ✅ 4039 checks across 25 files, exit 0 |
+| Web export | ✅ preset + build; **boots and renders in a browser; not yet played in one** |
+| Tests | ✅ 4054 checks across 25 files, exit 0 |
 
-The one thing nobody has done: **open the web build in an actual browser.** The
-export produces the right artefacts and serves them, but whether it boots and
-plays is unverified — see §10.
+The web build was opened in Firefox for the first time on 2026-08-14: the wasm
+compiles, the `.pck` loads, the main menu draws, and past it the play field
+renders — map, HUD and build panel. **What nobody has done is *play* it in a
+browser**: placing a tower and running a wave have been exercised headlessly
+and in the desktop build, never through the browser. See §4.
 
 The rules layer also runs headlessly on its own: `sim/harness.gd` simulates a real
 wave — pathing, targeting, damage, splash, leaks — with no window open. That is the
@@ -97,18 +99,26 @@ defect; this noise is not.
 
 The 23-task plan is finished. What remains is not implementation:
 
-**1. Open the web build in a browser.** Nobody has. The export produces the right
-artefacts and a local server returns 200 for each, but no agent on this project
-could execute WebAssembly, so whether it boots and plays is genuinely unknown.
+**1. Play the web build in a browser.** It has been *opened* in one now — it
+boots, the menu draws and the play field renders — but no click has ever been
+put through it. Placing a tower, starting a wave and hearing it fire are all
+still unverified in the browser specifically.
 
 ```bash
 godot --headless --export-release "Web" export/web/index.html
-cd export/web && python3 -m http.server 8000   # then open http://localhost:8000
+python3 -m http.server 8000 --directory export/web   # then open http://localhost:8000
 ```
 
 Expect the menu, then a run: place a tower, start wave 1, hear it fire. Audio needs
 a user gesture in browsers — the menu's Play button supplies it, so no explicit
 unlock call exists or is needed.
+
+Worth knowing if you are driving this from an agent: the boot sequence is legible
+in the server's own access log. `index.html` → `index.js` → `index.wasm` →
+`index.pck` is just the download, but the two `index.audio*.worklet.js` requests
+that follow are made by the engine *at runtime*, after the wasm has instantiated
+and the pack has been read — so seeing them is decent evidence the engine started,
+short of seeing a pixel.
 
 **2. Merge the branch.** The final whole-branch review and its fix wave are both
 complete and verified.
@@ -161,6 +171,30 @@ read in a doc.
 - **Any test reading tile coordinates calls `Grid.set_active()` first.** `Grid`
   holds active dimensions in static state, so forgetting it makes the result depend
   on test execution order.
+- **`aspect="expand"` hands the surplus to the viewport, and something must claim
+  it.** The design viewport is 1244×672 under `stretch/mode="canvas_items"`. Under
+  `expand` the scale is `min(window.x / 1244, window.y / 672)` and the viewport
+  absorbs whatever is spare on the other axis: a window wider in aspect than
+  1244:672 grows viewport **width** (height stays exactly 672), a narrower one
+  grows **height** (width stays exactly 1244). Anything anchored to a fixed pixel
+  size does not grow with it, so surplus nobody claims renders as bare engine
+  background — which is exactly how a grey band opened between the 1104px-wide map
+  and a build panel pinned to the right at a fixed 140px. `TowerPanel` now anchors
+  its left edge to the map's right edge and its other three sides to the viewport,
+  so it absorbs the surplus at any window size. **Note the corollary: the map
+  cannot be scaled up to fill space instead** — it already fills the viewport
+  height exactly, so a uniform upscale crops the bottom rows and a width-only
+  stretch distorts the tiles. README §"How the layout responds to window size"
+  has the full model.
+- **A screenshot is the only way to catch a layout regression here.** The test
+  harness never puts nodes in a live tree, so containers never lay out and every
+  child's computed rect stays at its unlaid-out default. Layout tests therefore
+  assert *anchors and offsets*, not positions (`test_hud.gd`,
+  `test_tower_panel.gd`). One trap that follows: a property set as an **instance
+  override** in a composing scene is invisible to a test that instantiates the
+  sub-scene alone — `TowerPanel`'s vertical placement lived in `game.tscn`, so the
+  standalone test read the panel's own value and passed regardless. Assert on the
+  composed scene when the value being pinned lives on the instance.
 - **Running the game through the Godot MCP rewrites `project.godot`.** It injects an
   `[autoload] McpInteractionServer` entry, and leaves an empty `[autoload]` section
   behind on stop. That is local debug tooling — committing it breaks the project for
@@ -272,7 +306,7 @@ the player runs, not only in the thing the tests run.
    the harness, which is exactly what it is for.
 4. **Web export is 40.6 MB** — measured, not predicted; the design anticipated
    25–40 MB. 39.5 MB of that is `index.wasm`, the Godot engine binary. The
-   game's own `index.pck` is 785 KB raw / 658 KB gzipped, against the Phaser
+   game's own `index.pck` is 790 KB raw / 666 KB gzipped, against the Phaser
    build's 368 KB gzipped — so the game data itself is roughly 1.8× larger, but
    that difference is noise beside the engine. Trimming art or audio cannot
    meaningfully move the total; only a different engine would.
@@ -289,7 +323,10 @@ the player runs, not only in the thing the tests run.
   `PlacementPreview` node, the unread `_range_visible` field, the uncalled
   `Enemy.get_sim_state()`, the map-dimension triplication, the always-enabled Sell
   button, the tap-selects-tower asymmetry, and the `instance_id` targeting
-  tie-break.
+  tie-break. The map-dimension one got one copy *smaller*, not larger, when the
+  build panel was re-anchored: its old fixed `-140` offset silently encoded
+  "1244 − 1104", and it now derives the number from
+  `Maps.pixel_size(board.get_map_name())` instead.
 - `game/game_board.gd` is ~250 lines and owns state, spawn scheduling, tower
   ticking, hit resolution, input and placement. Not urgent; worth splitting if it
   grows again.
@@ -302,12 +339,13 @@ the player runs, not only in the thing the tests run.
 cd ~/Projects/project-t-godot
 git checkout feat/core-slice
 godot --headless --import                            # once, after a fresh clone
-godot --headless --quit --script test/run_tests.gd   # expect 4039 checks, exit 0
+godot --headless --quit --script test/run_tests.gd   # expect 4054 checks, exit 0
 godot --path .                                       # and actually play a run
 ```
 
-Then do the browser check in §4 — it is the only unverified thing left, and it
-takes two minutes. After that the branch is ready to merge.
+Then do the browser check in §4 — the build is confirmed to boot and render, so
+what is left is playing a run through it, and that takes two minutes. After that
+the branch is ready to merge.
 
 Play a full run before changing any number. The balance has never been playtested
 and every value came across from a prototype whose own notes call them

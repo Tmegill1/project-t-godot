@@ -22,15 +22,11 @@ why this one was chosen — lives in:
 For narrative history of how the port was built task by task, see
 [`PROGRESS.md`](PROGRESS.md) (task log and decision log) and
 [`CONTINUE.md`](CONTINUE.md) (single-file resume/orientation doc, written for
-an assistant picking the project back up). Both agree with this README that all
-23 tasks are complete, and `CONTINUE.md` additionally carries the engine and
-harness facts that are expensive to rediscover — read it before changing
-anything, not after.
-
-Both do, however, predate the browser run and the layout fixes below, so
-where they disagree with this README on those points, this README is right:
-`CONTINUE.md` still records the web export as never opened in a browser (§4,
-§10), the suite at 4039 checks rather than 4054, and the older `.pck` size.
+an assistant picking the project back up). Both are current and agree with this
+README: all 23 tasks are complete. `CONTINUE.md` additionally carries the engine
+and harness facts that are expensive to rediscover — including the stretch/aspect
+model behind the layout section below — so read it before changing anything, not
+after.
 
 ---
 
