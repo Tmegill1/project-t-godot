@@ -154,11 +154,11 @@ the core slice never had — slowing and gold-per-kill. Pierce and detection are
 wired but dormant: their machinery already exists in `Damage.resolve` and
 `Targeting`, and only lacks armoured and phased enemies to bite on.
 
-**Progress: 2 of 11 tasks complete.** Task 1 (the 32-tier data table) landed in
+**Progress: 3 of 11 tasks complete.** Task 1 (the 32-tier data table) landed in
 `40942a9`, Task 2 (tier legality, the cross-path rule, cost and total
-investment in `sim/upgrades.gd`) in `ae3f356`; suite green at 4313 checks.
-Resume at **Task 3** — visual tier and sprite frame, appended to the same
-module. The live ledger, with every ruling
+investment in `sim/upgrades.gd`) in `ae3f356`, Task 3 (visual tier and sprite frame) in `6709c62`; suite green
+at 4331 checks. Resume at **Task 4** — stat resolution, the last piece of
+`sim/upgrades.gd`. The live ledger, with every ruling
 and deferred minor, is at
 `.superpowers/sdd/2026-08-14-tower-upgrades/progress.md` (git-ignored) — trust
 it and `git log` over any summary, including this line.
