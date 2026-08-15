@@ -281,3 +281,104 @@ func test_sprite_frame_for_clamps_to_the_available_frames() -> bool:
 	assert_eq(UpgradesSim.sprite_frame_for(&"basic", _tiers(4, 2)), int(frames[frames.size() - 1]),
 		"never indexes past the last frame")
 	return true
+
+# --------------------------------------------------------------------------
+# resolve_tower_stats
+# --------------------------------------------------------------------------
+
+# Multipliers compose, flat bonuses add, and radii/slows/gold take the
+# STRONGEST value rather than stacking. The last part is what keeps the number
+# a tier's text promises and the number the simulation applies identical:
+# stacking would add tier 4's big splash to tier 2's small one and the tower
+# would quietly outperform its own description.
+
+func test_resolve_returns_base_stats_for_an_unupgraded_tower() -> bool:
+	var base: Dictionary = Towers.DEFS[&"basic"]
+	var s := UpgradesSim.resolve_tower_stats(&"basic", UpgradesSim.empty_tiers())
+	assert_almost_eq(s["damage"], float(base["damage"]), 0.0001, "base damage")
+	assert_almost_eq(s["fire_rate"], float(base["fire_rate"]), 0.0001, "base fire rate")
+	assert_almost_eq(s["range"], float(base["range"]), 0.0001, "base range")
+	assert_eq(s["pierce"], int(base["pierce"]), "base pierce")
+	assert_almost_eq(s["splash_radius"], float(base["base_splash_radius"]), 0.0001, "base splash")
+	assert_eq(s["detection"], bool(base["detection"]), "base detection")
+	assert_almost_eq(s["slow_factor"], 1.0, 0.0001, "no slow by default")
+	assert_almost_eq(s["gold_multiplier"], 1.0, 0.0001, "no gold bonus by default")
+	assert_eq(s["bonus_gold_per_kill"], 0, "no flat gold by default")
+	return true
+
+# basic/sustained tiers 1 and 2 are 0.8 fire-rate multipliers each: they must
+# compose to 0.64, not overwrite to 0.8 or add to 1.6.
+func test_resolve_composes_multipliers_across_tiers() -> bool:
+	var base := float(Towers.DEFS[&"basic"]["fire_rate"])
+	var s := UpgradesSim.resolve_tower_stats(&"basic", _tiers(2, 0))
+	assert_almost_eq(s["fire_rate"], round(base * 0.8 * 0.8), 0.5,
+		"two 20% cuts compose to 0.64 of the base gap")
+	return true
+
+# mortar/burst tiers 1 and 2 (Packed Charge, Heavy Shell) are 1.6 damage
+# multipliers each with no other effects: they must compose to 2.56x, not
+# overwrite to 1.6x. Distinct from the fire-rate composition test above -
+# damage_multiplier is accumulated with its own `*=` in resolve_tower_stats,
+# so a mutation there would not be caught by the fire-rate test alone.
+func test_resolve_composes_damage_multipliers_across_tiers() -> bool:
+	var base := float(Towers.DEFS[&"mortar"]["damage"])
+	var s := UpgradesSim.resolve_tower_stats(&"mortar", _tiers(0, 2))
+	assert_almost_eq(s["damage"], round(base * 1.6 * 1.6), 0.5,
+		"two 60% damage boosts compose to 2.56x base, not overwrite to 1.6x")
+	return true
+
+# mortar/sustained tier 1 sets splash 70, tier 3 sets 95. The larger wins; they
+# must not sum to 165.
+func test_resolve_takes_the_strongest_splash_rather_than_stacking() -> bool:
+	var s := UpgradesSim.resolve_tower_stats(&"mortar", _tiers(3, 0))
+	assert_almost_eq(s["splash_radius"], 95.0, 0.0001, "the largest radius wins")
+	return true
+
+# The tower's own base splash must not be lost when a tier sets a smaller one.
+func test_resolve_never_lowers_splash_below_the_towers_base() -> bool:
+	var base := float(Towers.DEFS[&"mortar"]["base_splash_radius"])
+	var s := UpgradesSim.resolve_tower_stats(&"mortar", _tiers(1, 0))
+	assert_true(s["splash_radius"] >= base, "a tier can raise splash, never lower it")
+	return true
+
+func test_resolve_adds_pierce_bonuses() -> bool:
+	# long/burst tier 3 grants 5, tier 4 grants 10 more.
+	var s := UpgradesSim.resolve_tower_stats(&"long", _tiers(0, 4))
+	assert_eq(s["pierce"], int(Towers.DEFS[&"long"]["pierce"]) + 15, "pierce bonuses add")
+	return true
+
+func test_resolve_turns_detection_on_and_never_off() -> bool:
+	var s := UpgradesSim.resolve_tower_stats(&"basic", _tiers(0, 3))
+	assert_true(s["detection"], "basic/burst tier 3 grants detection")
+	return true
+
+# fast/sustained tier 3 slows to 0.7, tier 4 to 0.45. Lower is stronger, and
+# the duration must travel with the factor that won.
+func test_resolve_takes_the_strongest_slow_with_its_own_duration() -> bool:
+	var s := UpgradesSim.resolve_tower_stats(&"fast", _tiers(4, 0))
+	assert_almost_eq(s["slow_factor"], 0.45, 0.0001, "the stronger slow wins")
+	assert_almost_eq(s["slow_duration_ms"], 2500.0, 0.0001, "and brings its own duration")
+	return true
+
+func test_resolve_takes_the_strongest_gold_multiplier_and_flat_bonus() -> bool:
+	# fast/burst: tier 2 grants +1 flat, tier 3 grants x1.6, tier 4 x2 and +2.
+	var s := UpgradesSim.resolve_tower_stats(&"fast", _tiers(0, 4))
+	assert_almost_eq(s["gold_multiplier"], 2.0, 0.0001, "the largest multiplier wins")
+	assert_eq(s["bonus_gold_per_kill"], 2, "the largest flat bonus wins, rather than summing")
+	return true
+
+# Damage is applied per hit and compared against integer health, so the number
+# the player is shown and the number the sim applies have to be the same one.
+func test_resolve_rounds_damage_fire_rate_and_range() -> bool:
+	var s := UpgradesSim.resolve_tower_stats(&"basic", _tiers(0, 1))
+	assert_almost_eq(s["damage"], round(s["damage"]), 0.0001, "damage is whole")
+	assert_almost_eq(s["fire_rate"], round(s["fire_rate"]), 0.0001, "fire rate is whole")
+	assert_almost_eq(s["range"], round(s["range"]), 0.0001, "range is whole")
+	return true
+
+func test_resolve_does_not_mutate_the_tower_def() -> bool:
+	var before := float(Towers.DEFS[&"basic"]["damage"])
+	UpgradesSim.resolve_tower_stats(&"basic", _tiers(0, 4))
+	assert_almost_eq(float(Towers.DEFS[&"basic"]["damage"]), before, 0.0001,
+		"the shared tower table is untouched")
+	return true

@@ -82,3 +82,56 @@ static func sprite_frame_for(kind: StringName, tiers: Dictionary) -> int:
 	var frames: Array = Towers.DEFS[kind]["upgrade_frames"]
 	var tier := mini(visual_tier(tiers), frames.size() - 1)
 	return int(frames[tier])
+
+## A tower's live combat stats after upgrades.
+##
+## Multipliers compose, flat bonuses add, and radii, slows and gold take the
+## strongest value rather than stacking - otherwise tier 4's big splash would
+## be added to tier 2's small one and the numbers would drift from what the
+## tier text says.
+static func resolve_tower_stats(kind: StringName, tiers: Dictionary) -> Dictionary:
+	var base: Dictionary = Towers.DEFS[kind]
+	var stats := {
+		"damage": float(base["damage"]),
+		"fire_rate": float(base["fire_rate"]),
+		"range": float(base["range"]),
+		"pierce": int(base["pierce"]),
+		"splash_radius": float(base["base_splash_radius"]),
+		"detection": bool(base["detection"]),
+		"slow_factor": 1.0,
+		"slow_duration_ms": 0.0,
+		"gold_multiplier": 1.0,
+		"bonus_gold_per_kill": 0,
+	}
+
+	for branch in Upgrades.BRANCHES:
+		var definition: Dictionary = Upgrades.DEFS[kind][branch]
+		for tier in range(int(tiers.get(branch, 0))):
+			var effects: Dictionary = definition["tiers"][tier]["effects"]
+
+			if effects.has(&"damage_multiplier"):
+				stats["damage"] *= float(effects[&"damage_multiplier"])
+			if effects.has(&"fire_rate_multiplier"):
+				stats["fire_rate"] *= float(effects[&"fire_rate_multiplier"])
+			if effects.has(&"range_multiplier"):
+				stats["range"] *= float(effects[&"range_multiplier"])
+			if effects.has(&"pierce_bonus"):
+				stats["pierce"] += int(effects[&"pierce_bonus"])
+			if effects.has(&"splash_radius"):
+				stats["splash_radius"] = maxf(stats["splash_radius"], float(effects[&"splash_radius"]))
+			if effects.has(&"detection") and bool(effects[&"detection"]):
+				stats["detection"] = true
+			if effects.has(&"gold_multiplier"):
+				stats["gold_multiplier"] = maxf(stats["gold_multiplier"], float(effects[&"gold_multiplier"]))
+			if effects.has(&"bonus_gold_per_kill"):
+				stats["bonus_gold_per_kill"] = maxi(
+					int(stats["bonus_gold_per_kill"]), int(effects[&"bonus_gold_per_kill"]))
+			# Lower is stronger, and the duration travels with the factor that won.
+			if effects.has(&"slow_factor") and float(effects[&"slow_factor"]) < stats["slow_factor"]:
+				stats["slow_factor"] = float(effects[&"slow_factor"])
+				stats["slow_duration_ms"] = float(effects.get(&"slow_duration_ms", stats["slow_duration_ms"]))
+
+	stats["damage"] = round(stats["damage"])
+	stats["fire_rate"] = round(stats["fire_rate"])
+	stats["range"] = round(stats["range"])
+	return stats
