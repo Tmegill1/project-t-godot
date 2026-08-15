@@ -22,10 +22,15 @@ why this one was chosen — lives in:
 For narrative history of how the port was built task by task, see
 [`PROGRESS.md`](PROGRESS.md) (task log and decision log) and
 [`CONTINUE.md`](CONTINUE.md) (single-file resume/orientation doc, written for
-an assistant picking the project back up). Both are current as of the final
-commit and agree with this README: all 23 tasks are complete. `CONTINUE.md`
-additionally carries the engine and harness facts that are expensive to
-rediscover — read it before changing anything, not after.
+an assistant picking the project back up). Both agree with this README that all
+23 tasks are complete, and `CONTINUE.md` additionally carries the engine and
+harness facts that are expensive to rediscover — read it before changing
+anything, not after.
+
+Both do, however, predate the browser run and the layout fixes below, so
+where they disagree with this README on those points, this README is right:
+`CONTINUE.md` still records the web export as never opened in a browser (§4,
+§10), the suite at 4039 checks rather than 4054, and the older `.pck` size.
 
 ---
 
@@ -70,7 +75,7 @@ godot --headless --quit --script test/run_tests.gd
 A hand-rolled runner, not an addon — Godot 4.7 was new enough at the time this
 was built that betting the whole suite on third-party addon compatibility was
 a risk worth avoiding. Exit code 0 means pass, 1 means fail. As of this
-writing the suite is green at **4039 checks across 25 files**.
+writing the suite is green at **4054 checks across 25 files**.
 
 A passing run is noisy: it prints roughly fifty `SCRIPT ERROR` lines to
 stderr. That is expected and documented at the top of
@@ -101,22 +106,56 @@ in a browser bundle.
 `export/` is gitignored; export output is never committed.
 
 The build is about **40 MB**, of which `index.wasm` — the Godot engine itself —
-is 39.5 MB. The game's own data (`index.pck`) is 785 KB raw, 658 KB gzipped;
+is 39.5 MB. The game's own data (`index.pck`) is 790 KB raw, 666 KB gzipped;
 the Phaser original shipped 368 KB gzipped in total. So the game data is
 roughly 1.8× larger, and the engine is ~107× the entire Phaser build. Nothing
 you do to the art or audio will move that total meaningfully — it is the price
 of shipping an engine to the browser, and it was accepted during design.
 
-> **The web build has never been opened in a browser.** Every check done on it
-> so far was mechanical: the expected artefacts exist, the magic bytes are
-> right, a local server returns 200 for each, and threads are confirmably off
-> in the shipped `index.html`. Whether it *boots and plays* is unverified —
-> the port was built by tooling with no browser available. Do this first:
+> **The web build boots and renders** — first confirmed in Firefox on
+> 2026-08-14, which until then had never been done. The wasm compiles, the
+> `.pck` loads, the main menu draws, and past it the play field renders: map,
+> HUD and build panel. **What is still unverified is that it *plays*.**
+> Placing a tower and running a wave have been exercised headlessly and in the
+> desktop build, but never through the browser. Do that next:
 
 ```bash
-cd export/web && python3 -m http.server 8000
-# open http://localhost:8000 — expect the menu, then place a tower and run wave 1
+python3 -m http.server 8000 --directory export/web
+# open http://localhost:8000 — menu, then place a tower and run wave 1
 ```
+
+---
+
+## How the layout responds to window size
+
+`project.godot` declares a **1244×672** design viewport with
+`window/stretch/mode="canvas_items"` and `window/stretch/aspect="expand"`.
+Under `expand` the scale factor is `min(window.x / 1244, window.y / 672)` and
+the viewport absorbs whatever the window has spare on the other axis. So a
+window *wider* in aspect than 1244:672 grows the viewport's **width** while its
+height stays exactly 672; a *narrower* one grows its **height** while width
+stays exactly 1244. Viewport width therefore never drops below 1244.
+
+The map is a fixed **1104×672** (23×14 tiles at 48px) anchored at the origin,
+leaving exactly 140px for the build panel at the design ratio — the two tile
+edge to edge with nothing between them. Every pixel `expand` adds beyond that
+has to be claimed by something, or it shows through as bare engine background:
+
+- **The build panel claims the surplus.** `TowerPanel` anchors its left edge to
+  the map's right edge — `Maps.pixel_size(board.get_map_name()).x`, set in
+  `bind()` rather than hardcoded, so a later map of different dimensions still
+  lines up — and its other three sides to the viewport. It is 140px wide at the
+  design ratio, wider on a wider screen, and never narrower. It spans the full
+  viewport height so no bare strip is left beside the map's top rows; the 52px
+  clearance for the HUD bar lives on its `Buttons` container instead.
+- **The HUD bar is inset** 12px from both viewport edges (`Hud.EDGE_INSET`), so
+  its first and last children do not sit flush against the screen border with
+  the tilemap showing through behind them.
+
+**Scaling the map up to fill the space instead does not work.** It already
+fills the viewport height exactly, and on a wide window `expand` adds width
+only — so there is zero vertical headroom. Any uniform upscale crops the bottom
+rows, and a width-only stretch distorts the tiles.
 
 ---
 
