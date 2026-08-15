@@ -88,6 +88,13 @@ mkdir -p export/web
 godot --headless --export-release "Web" export/web/index.html
 ```
 
+The `mkdir` is not optional — Godot fails the export outright if the output
+directory does not exist. `export/*` is in the preset's exclude filter for a
+subtler reason: Godot writes favicon PNGs beside the build, imports them as
+project resources on the next scan, and then packs them into the *next*
+export. That silently made local builds 24KB larger than CI's until it was
+measured; with the filter, the two agree byte for byte.
+
 The `Web` preset in `export_presets.cfg` sets `variant/thread_support=false`.
 Godot's web export needs `SharedArrayBuffer`, which browsers only expose to a
 cross-origin-isolated page — that requires the host to send `COOP`/`COEP`

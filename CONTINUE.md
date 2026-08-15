@@ -141,8 +141,8 @@ guard produces. It was a single-reviewer pass, not two.
 has been *opened* in one — it boots, the menu draws and the play field renders
 — but no click has ever been put through it. Placing a tower, buying a tier and
 running a wave are all still unverified in a browser specifically. The build
-re-exports cleanly with the upgrades in it (`index.pck` 826KB, `index.wasm`
-39.5MB).
+re-exports cleanly with the upgrades in it (`index.pck` 802,084 bytes,
+`index.wasm` 39.5MB — a local export now matches CI's byte for byte).
 
 ```bash
 godot --headless --export-release "Web" export/web/index.html
