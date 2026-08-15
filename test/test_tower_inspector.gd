@@ -155,6 +155,9 @@ func test_a_row_is_disabled_when_the_cross_path_rule_locks_the_branch() -> bool:
 
 	assert_true(i.branch_rows()[&"sustained"].disabled,
 		"locked by commitment, not by price")
+	assert_true(i.branch_rows()[&"sustained"].text.contains("locked"),
+		"and it says so - a player who reads 'maxed' would stop trying to reach it: %s"
+			% i.branch_rows()[&"sustained"].text)
 	assert_false(i.branch_rows()[&"burst"].disabled,
 		"while the committed branch is still open")
 	i.free(); b.free()
@@ -171,6 +174,9 @@ func test_a_maxed_branch_is_disabled_too() -> bool:
 	i.show_tower(t)
 
 	assert_true(i.branch_rows()[&"burst"].disabled, "there is nothing left to buy")
+	assert_true(i.branch_rows()[&"burst"].text.contains("maxed"),
+		"a finished branch reads as maxed, not as locked by the other one: %s"
+			% i.branch_rows()[&"burst"].text)
 	i.free(); b.free()
 	return true
 
@@ -309,4 +315,63 @@ func test_the_header_names_the_tower_and_its_tiers() -> bool:
 	assert_true(header.text.contains("0/%d" % UpgradesSim.MAX_TIER),
 		"and the one that has not: %s" % header.text)
 	i.free(); b.free()
+	return true
+
+# --------------------------------------------------------------------------
+# staying inside a 140px sidebar
+#
+# The harness never puts nodes in a live tree, so containers never lay out and
+# no test here can measure a rect - CONTINUE.md §5 says so, and Task 11 found
+# this defect by screenshotting rather than by running the suite: the Rows
+# container reported the header Label's 214px minimum width and grew 37px out
+# over the map. What IS pinnable is the set of properties that keep a row's
+# minimum width off its text, so the regression cannot come back silently.
+# --------------------------------------------------------------------------
+
+func test_the_header_wraps_rather_than_demanding_its_own_width() -> bool:
+	var i := _ready_inspector()
+	var b := _ready_board()
+	i.bind(b)
+	i.show_tower(_ready_tower_on(b))
+
+	var header: Label = i._rows_root.get_child(0)
+	assert_eq(header.autowrap_mode, TextServer.AUTOWRAP_WORD_SMART,
+		"a Label without autowrap reports its longest line as a minimum width")
+	assert_eq(header.text.count("\n"), 2, "one line for the tower and one per branch")
+	i.free(); b.free()
+	return true
+
+func test_every_row_clips_its_text_instead_of_widening() -> bool:
+	var i := _ready_inspector()
+	var b := _ready_board()
+	i.bind(b)
+	i.show_tower(_ready_tower_on(b))
+
+	for branch in i.branch_rows():
+		var button: Button = i.branch_rows()[branch]
+		assert_true(button.clip_text, "the %s row clips rather than pushing the column wider" % branch)
+		assert_eq(button.text.count("\n"), 2, "branch, tier and price on three short lines")
+	assert_true(i.sell_row().clip_text, "and so does Sell")
+	i.free(); b.free()
+	return true
+
+# If a row ever does exceed the column, it must spill toward the screen edge
+# rather than back over the play field, where it is both visible and wrong.
+func test_the_rows_container_grows_away_from_the_map() -> bool:
+	var i := _ready_inspector()
+	assert_eq(i._rows_root.grow_horizontal, Control.GROW_DIRECTION_END,
+		"overflow goes right, off the edge, not left over the map")
+	i.free()
+	return true
+
+# The header text is left-aligned and would otherwise sit flush against the
+# sidebar's edge, with the map showing through right beside it. Same 8px
+# breather the build buttons above get from the panel's own layout.
+func test_the_rows_are_inset_from_the_sidebar_edges() -> bool:
+	var i := _ready_inspector()
+	assert_eq(i._rows_root.offset_left, 8.0, "inset from the left edge")
+	assert_eq(i._rows_root.offset_right, -8.0, "and the right")
+	assert_true(140.0 - 16.0 >= TowerInspector.MIN_TAP_SIZE.x,
+		"the inset column is still wide enough for a row at its minimum size")
+	i.free()
 	return true

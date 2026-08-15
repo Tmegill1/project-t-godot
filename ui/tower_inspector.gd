@@ -68,7 +68,13 @@ func _rebuild() -> void:
 		return
 
 	var header := Label.new()
-	header.text = "%s\n%s %d/%d   %s %d/%d" % [
+	# One branch per line, and wrapping on. A Label reports the width of its
+	# longest line as its MINIMUM size, and a VBoxContainer is at least as wide
+	# as its widest child - so a single long header line makes the whole column
+	# overflow the 140px sidebar. It grew 37px out over the map before this was
+	# measured; see the header comment on _refresh_gating.
+	header.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	header.text = "%s\n%s %d/%d\n%s %d/%d" % [
 		Towers.DEFS[_tower.kind]["label"],
 		Upgrades.DEFS[_tower.kind][&"sustained"]["label"],
 		int(_tower.tiers[&"sustained"]), UpgradesSim.MAX_TIER,
@@ -87,7 +93,8 @@ func _rebuild() -> void:
 
 	_sell = Button.new()
 	_sell.custom_minimum_size = MIN_TAP_SIZE
-	_sell.text = "Sell  %dg" % EconomySim.sell_refund(_tower.price_paid)
+	_sell.clip_text = true
+	_sell.text = "Sell  %d gold" % EconomySim.sell_refund(_tower.price_paid)
 	_sell.pressed.connect(_board.sell_selected_tower)
 	_rows_root.add_child(_sell)
 
@@ -101,16 +108,21 @@ func _refresh_gating() -> void:
 		var button: Button = _rows[branch]
 		var definition: Dictionary = Upgrades.DEFS[_tower.kind][branch]
 		if not UpgradesSim.can_upgrade(_tower.tiers, branch):
-			button.text = "%s\nmaxed or locked" % definition["label"]
+			# Which of the two, not "maxed or locked": they mean opposite
+			# things to a player deciding what to do next, and the combined
+			# phrase was measured being clipped to "maxed or lock" anyway.
+			var reason := "maxed" if tier >= UpgradesSim.MAX_TIER else "locked"
+			button.text = "%s\n%s" % [definition["label"], reason]
 			button.tooltip_text = definition["summary"]
 			button.disabled = true
 			continue
 		var next: Dictionary = definition["tiers"][tier]
 		var price := UpgradesSim.upgrade_cost(_tower.kind, branch, tier)
-		# The description is the tooltip, not a third line: the sidebar is
-		# 140px wide at the design ratio and a Button does not wrap its text,
-		# so a sentence on the face of it would simply be cut off.
-		button.text = "%s\n%s — %dg" % [definition["label"], next["label"], price]
+		# Three short lines, not one long one. The sidebar is 140px wide at the
+		# design ratio and a Button does not wrap its text: "Quick Loader —
+		# 30g" on one line was measured overflowing it. The tier's description
+		# is the tooltip for the same reason.
+		button.text = "%s\n%s\n%d gold" % [definition["label"], next["label"], price]
 		button.tooltip_text = String(next["description"])
 		button.disabled = not EconomySim.can_afford(_board.get_gold(), price)
 
