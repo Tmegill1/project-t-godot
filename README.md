@@ -71,7 +71,7 @@ godot --headless --quit --script test/run_tests.gd
 A hand-rolled runner, not an addon — Godot 4.7 was new enough at the time this
 was built that betting the whole suite on third-party addon compatibility was
 a risk worth avoiding. Exit code 0 means pass, 1 means fail. As of this
-writing the suite is green at **4054 checks across 25 files**.
+writing the suite is green at **4577 checks across 29 files**.
 
 A passing run is noisy: it prints roughly fifty `SCRIPT ERROR` lines to
 stderr. That is expected and documented at the top of
@@ -195,12 +195,44 @@ projectiles and Mortar splash, a capped leak penalty, tap-to-place input with
 affordability/occupancy checks and range preview, the win/lose flow, and
 pooled audio for the events the slice can fire.
 
+## Tower upgrades
+
+Every tower carries two branches of four tiers each, ported from the
+reference's table verbatim: Basic (Barrage / Marksman), Fast (Suppression /
+Bounty Hunter), Mortar (Saturation / Demolition) and Long Range (Bombardment /
+Siege). Tiers cost from 30–60 gold up to 260–500, and a tower's sell refund is
+half of everything sunk into it, placement included.
+
+**The cross-path rule is the point.** A branch may pass tier 2 only while the
+other sits at tier 2 or below, so a tower is a commitment rather than a
+checklist — the second branch reads `locked` in the inspector once the first
+commits. A tower's sprite advances through the four frames its table already
+carried, driven by *total* investment across both branches (`ceil(total / 2)`,
+capped): the look changes at 1, 3 and 5 tiers, not at every purchase.
+
+Two mechanics were built for the tiers that need them. **Slowing** (`sim/slow.gd`)
+is Fast's branch identity: strongest factor wins, the longer timer wins, and
+expiry restores full speed. **Gold per kill** (`EconomySim.kill_reward`) pays a
+kill through the gold effects of the tower that actually made it, splash kills
+included. **Pierce and detection are wired but dormant** — `Damage.resolve` and
+`Targeting` already implement them, and they start biting the day armoured and
+phased enemies land, with no further work.
+
+Stats are resolved in one place, `UpgradesSim.resolve_tower_stats`, which both
+the live game and `sim/harness.gd` call. A build tested headlessly is therefore
+the build the player gets:
+
+```gdscript
+Harness.run_wave({"wave": 20, "path": path, "towers": [
+    {"kind": &"fast", "position": pos, "tiers": {&"sustained": 4, &"burst": 0}},
+]})
+```
+
 ## What is deliberately deferred — not a bug, not forgotten
 
 Dropped permanently from this slice, matching the design spec's "Out" list
 (§3):
 
-- Upgrade branches and the escalation frames beyond `upgradeFrames[0]`
 - The five composable enemy properties (`Waves.propertiesFor` is not ported)
 - Boss archetypes and lieutenants
 - Tactical powers and command upgrades

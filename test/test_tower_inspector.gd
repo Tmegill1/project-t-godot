@@ -38,6 +38,17 @@ func _ready_tower_on(b: GameBoard) -> Tower:
 	b._try_place(tile.x, tile.y)
 	return b._towers_root.get_child(0)
 
+func _place_tower(b: GameBoard, kind: StringName) -> Tower:
+	var placed := b._towers_root.get_child_count()
+	b.select_tower_kind(kind)
+	for r in b._tiles.size():
+		for c in b._tiles[r].size():
+			if b._tiles[r][c] == Tiles.BUILDABLE and not b._occupied.has(Vector2i(c, r)):
+				b._try_place(c, r)
+				if b._towers_root.get_child_count() > placed:
+					return b._towers_root.get_child(placed)
+	return null
+
 func test_starts_empty_with_no_tower_shown() -> bool:
 	var i := _ready_inspector()
 	assert_false(i.has_tower(), "nothing selected at start")
@@ -226,6 +237,8 @@ func test_pressing_sell_sells_the_selected_tower() -> bool:
 	i.sell_row().pressed.emit()
 
 	assert_eq(b.get_tower_count(&"basic"), 0, "the board sold it")
+	assert_false(i.has_tower(), "and the panel emptied instead of describing a tower that is gone")
+	assert_false(i._rows_root.visible, "with its column hidden")
 	i.free(); b.free()
 	return true
 
@@ -238,8 +251,8 @@ func test_clear_empties_the_inspector() -> bool:
 	i.clear()
 
 	assert_false(i.has_tower(), "nothing shown after deselection")
-	assert_eq(i.branch_rows().size(), 0, "and no stale rows left behind")
-	assert_eq(i._rows_root.get_child_count(), 0, "nor any stale nodes under Rows")
+	assert_eq(i.branch_rows().size(), 0, "and no stale rows on display")
+	assert_false(i._rows_root.visible, "the whole column is hidden, not left showing a dead tower's tiers")
 	i.free(); b.free()
 	return true
 
@@ -262,20 +275,60 @@ func test_selecting_a_tower_on_the_board_shows_it() -> bool:
 	i.free(); b.free()
 	return true
 
-# Rebuilding must not leave the previous tower's rows behind - the harness
-# never processes a frame, so queue_free() would not remove them.
-func test_showing_a_second_tower_replaces_the_first_towers_rows() -> bool:
+# Showing a second tower must rewrite the rows rather than add another set.
+# The nodes are built once and never freed, so the count is the guard against
+# a reintroduced rebuild as much as against duplicates.
+func test_showing_a_second_tower_rewrites_the_rows_in_place() -> bool:
 	var i := _ready_inspector()
 	var b := _ready_board()
+	b._gold = 5000
+	i.bind(b)
+	var first := _ready_tower_on(b)
+	i.show_tower(first)
+	var count := i._rows_root.get_child_count()
+	var header: Label = i._rows_root.get_child(0)
+
+	var second := _place_tower(b, &"mortar")
+	i.show_tower(second)
+
+	assert_eq(i._rows_root.get_child_count(), count, "no second set of rows was added")
+	assert_true(i._rows_root.get_child(0) == header, "and the header is the same node, rewritten")
+	assert_true(header.text.contains(String(Towers.DEFS[&"mortar"]["label"])),
+		"now describing the second tower: %s" % header.text)
+	assert_true(i.branch_rows()[&"sustained"].text.contains(
+		String(Upgrades.DEFS[&"mortar"][&"sustained"]["label"])),
+		"and so do its rows: %s" % i.branch_rows()[&"sustained"].text)
+	i.free(); b.free()
+	return true
+
+# The bug this design exists to prevent, exercised through the button itself
+# rather than through the board. Godot locks an object while it is emitting
+# and refuses to free it, so a rebuild triggered BY a row's own press aborted
+# partway: the tier was bought and the panel went on advertising it.
+func test_pressing_a_row_refreshes_the_panel_it_was_pressed_from() -> bool:
+	var i := _ready_inspector()
+	var b := _ready_board()
+	b._gold = 5000
 	i.bind(b)
 	var t := _ready_tower_on(b)
-
+	b._selected_tower = t
 	i.show_tower(t)
-	var first_count := i._rows_root.get_child_count()
-	i.show_tower(t)
+	assert_true(i.branch_rows()[&"sustained"].text.contains("Quick Loader"),
+		"precondition: the row offers tier 1")
+	var gold_before := b.get_gold()
 
-	assert_eq(i._rows_root.get_child_count(), first_count,
-		"the rows were replaced, not appended to")
+	i.branch_rows()[&"sustained"].pressed.emit()
+
+	assert_eq(t.tiers[&"sustained"], 1, "the tier was bought")
+	assert_true(i.branch_rows()[&"sustained"].text.contains("Drum Feed"),
+		"and the row moved on to the next one: %s" % i.branch_rows()[&"sustained"].text)
+	assert_true(i.branch_rows()[&"sustained"].text.contains("60"),
+		"at its price: %s" % i.branch_rows()[&"sustained"].text)
+	assert_true(i._rows_root.get_child(0).text.contains("1/%d" % UpgradesSim.MAX_TIER),
+		"and the header counted it: %s" % i._rows_root.get_child(0).text)
+	assert_true(i.sell_row().text.contains(str(EconomySim.sell_refund(t.price_paid))),
+		"and the refund grew with it: %s" % i.sell_row().text)
+	assert_eq(b.get_gold(), gold_before - 30, "one tier, one charge")
 	i.free(); b.free()
 	return true
 

@@ -1,22 +1,36 @@
 class_name TowerInspector
 extends Control
 
-## Selected-tower view: what each branch has bought, what the next tier on it
+## Selected-tower view: what each branch has bought, what the next tier on each
 ## costs, and Sell. Decides nothing - legality comes from UpgradesSim,
 ## affordability and the purchase itself from the board.
 ##
-## Sell lives here rather than in the HUD strip because the refund it quotes
-## is half of everything sunk into THIS tower, upgrades included, which only
-## means anything beside the tiers that produced it.
+## Sell lives here rather than in the HUD strip because the refund it quotes is
+## half of everything sunk into THIS tower, upgrades included, which only means
+## anything beside the tiers that produced it.
+##
+## The rows are built ONCE and rewritten in place; nothing here frees a node
+## after _ready(). An earlier version rebuilt them on every change, which broke
+## the moment a row was actually pressed: Godot locks an object while it is
+## emitting, refuses to free it ("Object is locked and can't be freed"), and
+## aborts the enclosing call - so pressing an upgrade bought the tier and then
+## left the panel showing the tier it had just bought. The node set never
+## varies (one header, one row per branch, Sell), so there is nothing a rebuild
+## could do that rewriting cannot.
 
 const MIN_TAP_SIZE := Vector2(120, 56)
 
 var _board: GameBoard
 var _tower: Tower = null
 var _rows := {}
+var _header: Label = null
 var _sell: Button = null
 
 @onready var _rows_root: VBoxContainer = $Rows
+
+func _ready() -> void:
+	_build_rows()
+	_refresh()
 
 func bind(board: GameBoard) -> void:
 	_board = board
@@ -28,22 +42,23 @@ func bind(board: GameBoard) -> void:
 func has_tower() -> bool:
 	return _tower != null and is_instance_valid(_tower)
 
-## The per-branch buttons, keyed by branch. Empty when nothing is shown.
+## The rows currently on display, keyed by branch. Empty when no tower is
+## shown - the nodes persist, but they are not a view of anything.
 func branch_rows() -> Dictionary:
-	return _rows
+	return _rows if has_tower() else {}
 
 func sell_row() -> Button:
-	return _sell
+	return _sell if has_tower() else null
 
 func show_tower(tower: Tower) -> void:
 	_tower = tower
-	_rebuild()
+	_refresh()
 
 func clear() -> void:
 	_tower = null
-	_rebuild()
+	_refresh()
 
-## Affordability moved, but nothing else did - re-gate rather than redraw.
+## Affordability moved, but nothing else did - re-gate rather than rewrite.
 ##
 ## The reference records this exact bug in a comment: its panel was drawn once
 ## on selection, so a tower selected while broke stayed greyed out after a wave
@@ -52,36 +67,17 @@ func _on_gold_changed(_gold: int) -> void:
 	_refresh_gating()
 
 func _on_tower_upgraded(_branch: StringName) -> void:
-	_rebuild()
+	_refresh()
 
-func _rebuild() -> void:
-	# free(), not queue_free() - same reasoning as ui/tower_panel.gd's bind():
-	# queue_free() only unparents once a frame processes, which never happens
-	# inside a synchronous test method, so the old rows would still be present
-	# alongside the new ones. These rows are owned exclusively by this
-	# container, so an immediate free() is safe.
-	for child in _rows_root.get_children():
-		child.free()
-	_rows.clear()
-	_sell = null
-	if not has_tower():
-		return
-
-	var header := Label.new()
+func _build_rows() -> void:
+	_header = Label.new()
 	# One branch per line, and wrapping on. A Label reports the width of its
 	# longest line as its MINIMUM size, and a VBoxContainer is at least as wide
 	# as its widest child - so a single long header line makes the whole column
 	# overflow the 140px sidebar. It grew 37px out over the map before this was
-	# measured; see the header comment on _refresh_gating.
-	header.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	header.text = "%s\n%s %d/%d\n%s %d/%d" % [
-		Towers.DEFS[_tower.kind]["label"],
-		Upgrades.DEFS[_tower.kind][&"sustained"]["label"],
-		int(_tower.tiers[&"sustained"]), UpgradesSim.MAX_TIER,
-		Upgrades.DEFS[_tower.kind][&"burst"]["label"],
-		int(_tower.tiers[&"burst"]), UpgradesSim.MAX_TIER,
-	]
-	_rows_root.add_child(header)
+	# measured.
+	_header.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_rows_root.add_child(_header)
 
 	for branch in Upgrades.BRANCHES:
 		var button := Button.new()
@@ -94,10 +90,22 @@ func _rebuild() -> void:
 	_sell = Button.new()
 	_sell.custom_minimum_size = MIN_TAP_SIZE
 	_sell.clip_text = true
-	_sell.text = "Sell  %d gold" % EconomySim.sell_refund(_tower.price_paid)
-	_sell.pressed.connect(_board.sell_selected_tower)
+	_sell.pressed.connect(_on_sell_pressed)
 	_rows_root.add_child(_sell)
 
+func _refresh() -> void:
+	_rows_root.visible = has_tower()
+	if not has_tower():
+		return
+
+	_header.text = "%s\n%s %d/%d\n%s %d/%d" % [
+		Towers.DEFS[_tower.kind]["label"],
+		Upgrades.DEFS[_tower.kind][&"sustained"]["label"],
+		int(_tower.tiers[&"sustained"]), UpgradesSim.MAX_TIER,
+		Upgrades.DEFS[_tower.kind][&"burst"]["label"],
+		int(_tower.tiers[&"burst"]), UpgradesSim.MAX_TIER,
+	]
+	_sell.text = "Sell  %d gold" % EconomySim.sell_refund(_tower.price_paid)
 	_refresh_gating()
 
 func _refresh_gating() -> void:
@@ -128,3 +136,6 @@ func _refresh_gating() -> void:
 
 func _on_branch_pressed(branch: StringName) -> void:
 	_board.upgrade_selected_tower(branch)
+
+func _on_sell_pressed() -> void:
+	_board.sell_selected_tower()
