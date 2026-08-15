@@ -31,6 +31,11 @@ custom_minimum_size = Vector2(44, 44)
 layout_mode = 2
 text = "Start wave"
 
+[node name="SpeedButton" type="Button" parent="Top"]
+custom_minimum_size = Vector2(44, 44)
+layout_mode = 2
+text = "Speed 1x"
+
 [node name="Message" type="Label" parent="Top"]
 layout_mode = 2
 size_flags_horizontal = 3

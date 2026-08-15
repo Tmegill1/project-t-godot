@@ -20,10 +20,28 @@ extends Control
 
 const MIN_TAP_SIZE := Vector2(120, 56)
 
+## Three type sizes, largest for the tower's own name. Godot's built-in font
+## has no bold face, so the hierarchy has to come from size, colour and case -
+## a kicker that labels the panel, the tower name as the thing you selected,
+## and the branch counters as detail under it.
+const KICKER_FONT_SIZE := 11
+const NAME_FONT_SIZE := 20
+const COUNTER_FONT_SIZE := 14
+const KICKER_COLOR := Color(0.62, 0.66, 0.62)
+const NAME_COLOR := Color(0.94, 0.96, 0.94)
+
+## Green means one thing only: you can press this row right now - the tier is
+## legal AND you can afford it. A row you cannot afford keeps the default look
+## rather than a second colour, so the player learns one rule instead of two.
+const BUYABLE_COLOR := Color(0.13, 0.42, 0.18)
+const BUYABLE_CORNER_RADIUS := 4
+
 var _board: GameBoard
 var _tower: Tower = null
 var _rows := {}
-var _header: Label = null
+var _counters := {}
+var _kicker: Label = null
+var _name: Label = null
 var _sell: Button = null
 
 @onready var _rows_root: VBoxContainer = $Rows
@@ -70,14 +88,17 @@ func _on_tower_upgraded(_branch: StringName) -> void:
 	_refresh()
 
 func _build_rows() -> void:
-	_header = Label.new()
-	# One branch per line, and wrapping on. A Label reports the width of its
-	# longest line as its MINIMUM size, and a VBoxContainer is at least as wide
-	# as its widest child - so a single long header line makes the whole column
+	# Every header line is its own Label so each can carry its own size and
+	# colour. Wrapping stays on for all of them: a Label reports the width of
+	# its longest line as its MINIMUM size, and a VBoxContainer is at least as
+	# wide as its widest child, so one long line makes the whole column
 	# overflow the 140px sidebar. It grew 37px out over the map before this was
 	# measured.
-	_header.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_rows_root.add_child(_header)
+	_kicker = _header_label(KICKER_FONT_SIZE, KICKER_COLOR)
+	_kicker.text = "UPGRADES:"
+	_name = _header_label(NAME_FONT_SIZE, NAME_COLOR)
+	for branch in Upgrades.BRANCHES:
+		_counters[branch] = _header_label(COUNTER_FONT_SIZE, NAME_COLOR)
 
 	for branch in Upgrades.BRANCHES:
 		var button := Button.new()
@@ -93,18 +114,25 @@ func _build_rows() -> void:
 	_sell.pressed.connect(_on_sell_pressed)
 	_rows_root.add_child(_sell)
 
+func _header_label(font_size: int, color: Color) -> Label:
+	var label := Label.new()
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.add_theme_font_size_override(&"font_size", font_size)
+	label.add_theme_color_override(&"font_color", color)
+	_rows_root.add_child(label)
+	return label
+
 func _refresh() -> void:
 	_rows_root.visible = has_tower()
 	if not has_tower():
 		return
 
-	_header.text = "%s\n%s %d/%d\n%s %d/%d" % [
-		Towers.DEFS[_tower.kind]["label"],
-		Upgrades.DEFS[_tower.kind][&"sustained"]["label"],
-		int(_tower.tiers[&"sustained"]), UpgradesSim.MAX_TIER,
-		Upgrades.DEFS[_tower.kind][&"burst"]["label"],
-		int(_tower.tiers[&"burst"]), UpgradesSim.MAX_TIER,
-	]
+	_name.text = String(Towers.DEFS[_tower.kind]["label"])
+	for branch in Upgrades.BRANCHES:
+		_counters[branch].text = "%s %d/%d" % [
+			Upgrades.DEFS[_tower.kind][branch]["label"],
+			int(_tower.tiers[branch]), UpgradesSim.MAX_TIER,
+		]
 	_sell.text = "Sell  %d gold" % EconomySim.sell_refund(_tower.price_paid)
 	_refresh_gating()
 
@@ -123,6 +151,7 @@ func _refresh_gating() -> void:
 			button.text = "%s\n%s" % [definition["label"], reason]
 			button.tooltip_text = definition["summary"]
 			button.disabled = true
+			_set_buyable(button, false)
 			continue
 		var next: Dictionary = definition["tiers"][tier]
 		var price := UpgradesSim.upgrade_cost(_tower.kind, branch, tier)
@@ -132,7 +161,25 @@ func _refresh_gating() -> void:
 		# is the tooltip for the same reason.
 		button.text = "%s\n%s\n%d gold" % [definition["label"], next["label"], price]
 		button.tooltip_text = String(next["description"])
-		button.disabled = not EconomySim.can_afford(_board.get_gold(), price)
+		var affordable := EconomySim.can_afford(_board.get_gold(), price)
+		button.disabled = not affordable
+		_set_buyable(button, affordable)
+
+## Picks a row out in green, or puts it back to the theme's own look. Applied
+## to `hover` as well as `normal` so the highlight does not vanish under the
+## cursor, which would read as the row going dead the moment you reach for it.
+func _set_buyable(button: Button, buyable: bool) -> void:
+	if not buyable:
+		button.remove_theme_stylebox_override(&"normal")
+		button.remove_theme_stylebox_override(&"hover")
+		return
+	var box := StyleBoxFlat.new()
+	box.bg_color = BUYABLE_COLOR
+	box.set_corner_radius_all(BUYABLE_CORNER_RADIUS)
+	button.add_theme_stylebox_override(&"normal", box)
+	var hovered := box.duplicate()
+	hovered.bg_color = BUYABLE_COLOR.lightened(0.12)
+	button.add_theme_stylebox_override(&"hover", hovered)
 
 func _on_branch_pressed(branch: StringName) -> void:
 	_board.upgrade_selected_tower(branch)

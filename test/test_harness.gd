@@ -411,6 +411,25 @@ func test_every_wave_undefended_terminates_at_the_default_tick_size() -> bool:
 			"wave %d: every enemy reached an ending" % wave)
 	return true
 
+# The 2x button drives Engine.time_scale, and on 4.7.1 that DOUBLES the delta
+# handed to _physics_process rather than raising the tick rate - verified
+# directly, 0.01667s becomes 0.03333s while 120 ticks still take ~2 seconds of
+# wall clock. So every enemy's step doubles at 2x, which is precisely the shape
+# that soft-locked waves 19 and 20: a constant step big enough to oscillate
+# around a waypoint forever. The clamp added when that bug was fixed is what
+# makes this safe now, and this is the test that says so - the same sweep as
+# the one above, at twice the step size, so the class of bug cannot come back
+# through the speed button either.
+func test_every_wave_undefended_terminates_at_the_doubled_tick_size() -> bool:
+	var path := _path()
+	for wave in range(1, Waves.MAX_WAVES + 1):
+		var r := Harness.run_wave({"wave": wave, "towers": [], "path": path,
+			"tick_ms": Harness.DEFAULT_TICK_MS * 2.0})
+		assert_false(r["timed_out"], "wave %d terminates at 2x speed" % wave)
+		assert_eq(r["kills"] + r["leaks"], _total_spawn_count(wave),
+			"wave %d at 2x: every enemy still reached an ending" % wave)
+	return true
+
 # --------------------------------------------------------------------------
 # Deliberately not ported, and why:
 #

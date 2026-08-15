@@ -285,3 +285,57 @@ func test_top_bar_is_inset_from_both_viewport_edges() -> bool:
 func test_edge_inset_constant_is_twelve_pixels() -> bool:
 	assert_eq(Hud.EDGE_INSET, 12.0, "EDGE_INSET matches the 12px separation already used between HUD items")
 	return true
+
+# --------------------------------------------------------------------------
+# speed toggle
+#
+# Engine.time_scale is global and survives reload_current_scene(), so a run
+# that ended at 2x would otherwise hand the next run double speed with a
+# button reading 1x. Every test below restores it, for the same reason: the
+# whole suite shares one process.
+# --------------------------------------------------------------------------
+
+func test_bind_starts_a_run_at_normal_speed_even_if_the_last_one_ended_fast() -> bool:
+	Engine.time_scale = Hud.FAST_TIME_SCALE
+	var h := _ready_hud()
+	var b := _ready_board()
+
+	h.bind(b)
+
+	assert_almost_eq(Engine.time_scale, 1.0, 0.0001, "a fresh run starts at normal speed")
+	assert_true(h._speed.text.contains("1x"), "and the button says so: %s" % h._speed.text)
+	Engine.time_scale = 1.0
+	h.free(); b.free()
+	return true
+
+func test_pressing_speed_toggles_between_normal_and_double() -> bool:
+	var h := _ready_hud()
+	var b := _ready_board()
+	h.bind(b)
+
+	h._speed.pressed.emit()
+	assert_almost_eq(Engine.time_scale, Hud.FAST_TIME_SCALE, 0.0001, "the game runs at double speed")
+	assert_true(h._speed.text.contains("2x"), "and the button says so: %s" % h._speed.text)
+
+	h._speed.pressed.emit()
+	assert_almost_eq(Engine.time_scale, 1.0, 0.0001, "and back to normal")
+	assert_true(h._speed.text.contains("1x"), "and says that too: %s" % h._speed.text)
+
+	Engine.time_scale = 1.0
+	h.free(); b.free()
+	return true
+
+# Doubling has to be exactly doubling: the harness's termination sweep at twice
+# the tick size (test_harness.gd) is what says 2x is safe, and it only covers
+# this game if this is the number the button applies.
+func test_the_fast_speed_is_exactly_two() -> bool:
+	assert_almost_eq(Hud.FAST_TIME_SCALE, 2.0, 0.0001,
+		"2x, matching the tick size the harness sweep proves terminates")
+	return true
+
+func test_the_speed_button_meets_the_44x44_minimum_tap_target() -> bool:
+	var h := _ready_hud()
+	assert_true(h._speed.custom_minimum_size.x >= 44.0 and h._speed.custom_minimum_size.y >= 44.0,
+		"SpeedButton has at least a 44x44 tap target")
+	h.free()
+	return true

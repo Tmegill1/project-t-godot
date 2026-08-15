@@ -286,13 +286,13 @@ func test_showing_a_second_tower_rewrites_the_rows_in_place() -> bool:
 	var first := _ready_tower_on(b)
 	i.show_tower(first)
 	var count := i._rows_root.get_child_count()
-	var header: Label = i._rows_root.get_child(0)
+	var header := i._name
 
 	var second := _place_tower(b, &"mortar")
 	i.show_tower(second)
 
 	assert_eq(i._rows_root.get_child_count(), count, "no second set of rows was added")
-	assert_true(i._rows_root.get_child(0) == header, "and the header is the same node, rewritten")
+	assert_true(i._name == header, "and the header is the same node, rewritten")
 	assert_true(header.text.contains(String(Towers.DEFS[&"mortar"]["label"])),
 		"now describing the second tower: %s" % header.text)
 	assert_true(i.branch_rows()[&"sustained"].text.contains(
@@ -324,8 +324,8 @@ func test_pressing_a_row_refreshes_the_panel_it_was_pressed_from() -> bool:
 		"and the row moved on to the next one: %s" % i.branch_rows()[&"sustained"].text)
 	assert_true(i.branch_rows()[&"sustained"].text.contains("60"),
 		"at its price: %s" % i.branch_rows()[&"sustained"].text)
-	assert_true(i._rows_root.get_child(0).text.contains("1/%d" % UpgradesSim.MAX_TIER),
-		"and the header counted it: %s" % i._rows_root.get_child(0).text)
+	assert_true(i._counters[&"sustained"].text.contains("1/%d" % UpgradesSim.MAX_TIER),
+		"and the header counted it: %s" % i._counters[&"sustained"].text)
 	assert_true(i.sell_row().text.contains(str(EconomySim.sell_refund(t.price_paid))),
 		"and the refund grew with it: %s" % i.sell_row().text)
 	assert_eq(b.get_gold(), gold_before - 30, "one tier, one charge")
@@ -348,9 +348,10 @@ func test_rows_meet_the_minimum_tap_target() -> bool:
 	i.free(); b.free()
 	return true
 
-# The header is the only place the tower says what it is and how far down each
-# branch it has gone.
-func test_the_header_names_the_tower_and_its_tiers() -> bool:
+# The header says what this panel IS, what tower it describes, and how far
+# down each branch that tower has gone - on three lines that read as three
+# different kinds of thing.
+func test_the_header_names_the_panel_the_tower_and_its_tiers() -> bool:
 	var i := _ready_inspector()
 	var b := _ready_board()
 	b._gold = 5000
@@ -360,13 +361,122 @@ func test_the_header_names_the_tower_and_its_tiers() -> bool:
 	i.show_tower(t)
 	b.upgrade_selected_tower(&"sustained")
 
-	var header: Label = i._rows_root.get_child(0)
-	assert_true(header.text.contains(String(Towers.DEFS[&"basic"]["label"])),
-		"names the tower: %s" % header.text)
-	assert_true(header.text.contains("1/%d" % UpgradesSim.MAX_TIER),
-		"and shows the branch that has been bought into: %s" % header.text)
-	assert_true(header.text.contains("0/%d" % UpgradesSim.MAX_TIER),
-		"and the one that has not: %s" % header.text)
+	assert_eq(i._kicker.text, "UPGRADES:", "the panel says what it is")
+	assert_eq(i._name.text, String(Towers.DEFS[&"basic"]["label"]), "and which tower")
+	assert_eq(i._counters[&"sustained"].text, "Barrage 1/%d" % UpgradesSim.MAX_TIER,
+		"the branch bought into counts up")
+	assert_eq(i._counters[&"burst"].text, "Marksman 0/%d" % UpgradesSim.MAX_TIER,
+		"and the untouched one still reads zero")
+	i.free(); b.free()
+	return true
+
+# Three sizes, largest for the tower's own name: the hierarchy is what makes
+# the panel legible at a glance, and it is the only thing here a test can hold
+# (a screenshot judges whether it LOOKS right; this holds that it was asked
+# for at all).
+func test_the_header_lines_carry_three_distinct_type_treatments() -> bool:
+	var i := _ready_inspector()
+	var b := _ready_board()
+	i.bind(b)
+	i.show_tower(_ready_tower_on(b))
+
+	var kicker: int = i._kicker.get_theme_font_size(&"font_size")
+	var name_size: int = i._name.get_theme_font_size(&"font_size")
+	var counter_label: Label = i._counters[&"sustained"]
+	var counter: int = counter_label.get_theme_font_size(&"font_size")
+	assert_eq(kicker, TowerInspector.KICKER_FONT_SIZE, "the kicker is set to its own size")
+	assert_eq(name_size, TowerInspector.NAME_FONT_SIZE, "the tower name to its own")
+	assert_eq(counter, TowerInspector.COUNTER_FONT_SIZE, "the counters to theirs")
+	assert_true(name_size > counter and counter > kicker,
+		"and they descend: name %d > counter %d > kicker %d" % [name_size, counter, kicker])
+	assert_true(i._kicker.get_theme_color(&"font_color") != i._name.get_theme_color(&"font_color"),
+		"the kicker is not the same colour as the name it introduces")
+	i.free(); b.free()
+	return true
+
+# --------------------------------------------------------------------------
+# the green highlight
+#
+# Green means "you can press this right now" - legal AND affordable. Anything
+# else keeps the default look, so the colour carries one meaning only.
+# --------------------------------------------------------------------------
+
+func test_an_affordable_row_is_highlighted() -> bool:
+	var i := _ready_inspector()
+	var b := _ready_board()
+	b._gold = 5000
+	i.bind(b)
+	i.show_tower(_ready_tower_on(b))
+
+	assert_true(i.branch_rows()[&"sustained"].has_theme_stylebox_override(&"normal"),
+		"a row you can buy is picked out")
+	i.free(); b.free()
+	return true
+
+func test_an_unaffordable_row_is_not_highlighted() -> bool:
+	var i := _ready_inspector()
+	var b := _ready_board()
+	i.bind(b)
+	var t := _ready_tower_on(b)
+	b._gold = 0
+	i.show_tower(t)
+
+	assert_false(i.branch_rows()[&"sustained"].has_theme_stylebox_override(&"normal"),
+		"green would promise a purchase the player cannot make")
+	i.free(); b.free()
+	return true
+
+func test_a_locked_row_is_not_highlighted() -> bool:
+	var i := _ready_inspector()
+	var b := _ready_board()
+	b._gold = 5000
+	i.bind(b)
+	var t := _ready_tower_on(b)
+	t.tiers = {&"sustained": 2, &"burst": 3}
+	i.show_tower(t)
+
+	assert_false(i.branch_rows()[&"sustained"].has_theme_stylebox_override(&"normal"),
+		"gold in the bank does not unlock a branch the cross-path rule closed")
+	assert_true(i.branch_rows()[&"burst"].has_theme_stylebox_override(&"normal"),
+		"while the branch that IS open stays picked out")
+	i.free(); b.free()
+	return true
+
+# The highlight has to follow the gold, like the disabled state does - the same
+# bug the reference recorded, one layer up.
+func test_the_highlight_appears_when_gold_arrives_and_goes_when_it_is_spent() -> bool:
+	var i := _ready_inspector()
+	var b := _ready_board()
+	i.bind(b)
+	var t := _ready_tower_on(b)
+	b._gold = 0
+	i.show_tower(t)
+	assert_false(i.branch_rows()[&"sustained"].has_theme_stylebox_override(&"normal"),
+		"precondition: broke, so not highlighted")
+
+	b._gold = 500
+	b.gold_changed.emit(500)
+	assert_true(i.branch_rows()[&"sustained"].has_theme_stylebox_override(&"normal"),
+		"the row lit up on the gold signal alone")
+
+	b._gold = 0
+	b.gold_changed.emit(0)
+	assert_false(i.branch_rows()[&"sustained"].has_theme_stylebox_override(&"normal"),
+		"and went out again when it was spent")
+	i.free(); b.free()
+	return true
+
+func test_the_highlight_is_the_documented_green() -> bool:
+	var i := _ready_inspector()
+	var b := _ready_board()
+	b._gold = 5000
+	i.bind(b)
+	i.show_tower(_ready_tower_on(b))
+
+	var box: StyleBoxFlat = i.branch_rows()[&"sustained"].get_theme_stylebox(&"normal")
+	assert_eq(box.bg_color, TowerInspector.BUYABLE_COLOR, "the green is the one constant, not a literal")
+	assert_true(box.bg_color.g > box.bg_color.r and box.bg_color.g > box.bg_color.b,
+		"and it is actually green")
 	i.free(); b.free()
 	return true
 
@@ -387,10 +497,10 @@ func test_the_header_wraps_rather_than_demanding_its_own_width() -> bool:
 	i.bind(b)
 	i.show_tower(_ready_tower_on(b))
 
-	var header: Label = i._rows_root.get_child(0)
-	assert_eq(header.autowrap_mode, TextServer.AUTOWRAP_WORD_SMART,
-		"a Label without autowrap reports its longest line as a minimum width")
-	assert_eq(header.text.count("\n"), 2, "one line for the tower and one per branch")
+	for label in [i._kicker, i._name, i._counters[&"sustained"], i._counters[&"burst"]]:
+		assert_eq(label.autowrap_mode, TextServer.AUTOWRAP_WORD_SMART,
+			"a Label without autowrap reports its longest line as a minimum width")
+		assert_eq(label.text.count("\n"), 0, "each header line is its own Label now")
 	i.free(); b.free()
 	return true
 
