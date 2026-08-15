@@ -15,6 +15,7 @@ signal wave_state_changed(active: bool)
 signal game_over()
 signal victory()
 signal tower_placed(kind: StringName)
+signal tower_upgraded(branch: StringName)
 signal placement_rejected(reason: String)
 
 const ENEMY_SCENE := preload("res://game/enemy.tscn")
@@ -255,6 +256,31 @@ func _deselect_tower() -> void:
 	if _selected_tower != null and is_instance_valid(_selected_tower):
 		_selected_tower.set_range_visible(false)
 	_selected_tower = null
+
+## Buys the next tier on a branch of the selected tower.
+##
+## Gating lives here rather than only in the UI: the cross-path rule is a game
+## rule, and a board method that trusted its caller would be one bug away from
+## a tower with both branches maxed.
+func upgrade_selected_tower(branch: StringName) -> void:
+	if _selected_tower == null or not is_instance_valid(_selected_tower):
+		return
+	var tower := _selected_tower
+	if not UpgradesSim.can_upgrade(tower.tiers, branch):
+		placement_rejected.emit("That branch is locked - the other path is already committed.")
+		_play_sound(&"denied")
+		return
+	var price := UpgradesSim.upgrade_cost(tower.kind, branch, int(tower.tiers[branch]))
+	if not EconomySim.can_afford(_gold, price):
+		placement_rejected.emit("Not enough gold — that costs %d." % price)
+		_play_sound(&"denied")
+		return
+
+	_gold -= price
+	gold_changed.emit(_gold)
+	tower.apply_upgrade(branch)
+	tower_upgraded.emit(branch)
+	_play_sound(&"place")
 
 func sell_selected_tower() -> void:
 	if _selected_tower == null or not is_instance_valid(_selected_tower):
