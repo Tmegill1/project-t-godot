@@ -174,7 +174,7 @@ func test_distance_to_paths_with_no_paths_is_infinitely_far() -> bool:
 
 Run: `~/.local/bin/godot --headless --quit --script test/run_tests.gd 2>&1 | grep -E "^FAIL|checks across"`
 
-Expected: `FAIL test_placement.gd::...` for all six tests. The failures will be aborts (the functions do not exist yet), reported as aborted tests. That is the correct RED.
+Expected: `FAIL test_placement.gd::...` for all seven tests. The failures will be aborts (the functions do not exist yet), reported as aborted tests. That is the correct RED.
 
 - [ ] **Step 5: Implement the two functions**
 
