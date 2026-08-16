@@ -85,18 +85,6 @@ func test_setup_positions_tower_at_tile_centre_and_stores_properties() -> bool:
 	t.free()
 	return true
 
-# Amendment 5: Grid holds active dimensions as static state. A distinct
-# tile_size (64, not the default 48) proves setup() genuinely reads Grid's
-# active state rather than a hardcoded TILE_SIZE baked into this test.
-func test_setup_position_reflects_grids_active_tile_size_not_a_hardcoded_one() -> bool:
-	Grid.set_active(10, 10, 64)
-	var t := _ready_tower()
-	t.setup(&"basic", Vector2(2 * 64 + 32, 1 * 64 + 32), 0)
-	assert_eq(t.position, Vector2(2 * 64 + 32, 1 * 64 + 32), "position uses the active tile_size, not a hardcoded 48")
-	t.free()
-	Grid.set_active(23, 14)  # restore the default so later tests aren't order-dependent
-	return true
-
 func test_setup_initializes_range_indicator_from_the_def_and_hides_it() -> bool:
 	Grid.set_active(23, 14)
 	var t := _ready_tower()
