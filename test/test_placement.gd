@@ -118,6 +118,15 @@ func test_can_place_rejects_a_spot_overlapping_a_prop() -> bool:
 	var v := Placement.can_place(Vector2(320.0, 100.0), 20.0, props, [], _far_path(), _BOUNDS)
 	assert_false(v["ok"], "20px from a 24px prop with a 20px tower overlaps")
 	assert_eq(v["reason"], Placement.REASON_BLOCKED_BY_PROP, "and says so")
+
+	# Further out than the prop's own radius, but still inside the sum of the
+	# two: this is the case that proves the TOWER's radius participates. At
+	# 20px above, a mutation dropping `radius` from the sum still rejects,
+	# because 20 < 24 holds on the prop's radius alone - so that case on its
+	# own cannot tell a correct implementation from a broken one.
+	var farther := Placement.can_place(Vector2(330.0, 100.0), 20.0, props, [], _far_path(), _BOUNDS)
+	assert_false(farther["ok"], "30px out - past the prop's own 24px radius but inside 24 + 20 - still overlaps")
+	assert_eq(farther["reason"], Placement.REASON_BLOCKED_BY_PROP, "and is refused for the prop, not for spacing")
 	return true
 
 func test_can_place_rejects_a_spot_too_close_to_another_tower() -> bool:
