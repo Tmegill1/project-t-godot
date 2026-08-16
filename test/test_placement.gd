@@ -63,3 +63,117 @@ func test_distance_to_paths_handles_a_single_point_path() -> bool:
 func test_distance_to_paths_with_no_paths_is_infinitely_far() -> bool:
 	assert_true(is_inf(Placement.distance_to_paths(Vector2.ZERO, [])), "no paths means no path proximity constraint")
 	return true
+
+# --------------------------------------------------------------------------
+# tower_radius
+# --------------------------------------------------------------------------
+
+# Derived from the `size` multiplier data/towers.gd already carries rather than
+# introduced as a new constant, so a tower that is re-sized for art reasons
+# cannot end up with a collision radius that disagrees with how it looks.
+func test_tower_radius_derives_from_the_size_the_tower_already_declares() -> bool:
+	for kind in Towers.KINDS:
+		var expected := Tiles.TILE_SIZE * float(Towers.DEFS[kind]["size"]) / 2.0
+		assert_almost_eq(Placement.tower_radius(kind), expected, 0.0001,
+			"%s's radius is half its displayed width" % kind)
+	assert_almost_eq(Placement.tower_radius(&"basic"), 19.2, 0.0001,
+		"basic is size 0.8 of a 48px tile, so 19.2px radius")
+	return true
+
+# --------------------------------------------------------------------------
+# can_place
+# --------------------------------------------------------------------------
+
+const _BOUNDS := Rect2(Vector2.ZERO, Vector2(1104.0, 672.0))
+
+# A path far from anything the tests below place, so it never accidentally
+# becomes the reason a case is rejected.
+func _far_path() -> Array:
+	return [PackedVector2Array([Vector2(0.0, 600.0), Vector2(1000.0, 600.0)])]
+
+func test_can_place_accepts_open_ground() -> bool:
+	var v := Placement.can_place(Vector2(300.0, 100.0), 20.0, [], [], _far_path(), _BOUNDS)
+	assert_true(v["ok"], "open ground well clear of everything is placeable")
+	assert_eq(v["reason"], Placement.REASON_OK, "an accepted spot reports the ok reason")
+	return true
+
+func test_can_place_rejects_a_tower_whose_circle_leaves_the_map() -> bool:
+	var v := Placement.can_place(Vector2(10.0, 100.0), 20.0, [], [], _far_path(), _BOUNDS)
+	assert_false(v["ok"], "a tower at x=10 with radius 20 hangs off the left edge")
+	assert_eq(v["reason"], Placement.REASON_OUT_OF_BOUNDS, "and says so")
+
+	var inside := Placement.can_place(Vector2(21.0, 100.0), 20.0, [], [], _far_path(), _BOUNDS)
+	assert_true(inside["ok"], "one pixel further in, the whole circle fits and it is accepted")
+	return true
+
+func test_can_place_rejects_a_spot_on_the_road() -> bool:
+	var path := [PackedVector2Array([Vector2(0.0, 100.0), Vector2(500.0, 100.0)])]
+	var v := Placement.can_place(Vector2(250.0, 110.0), 20.0, [], [], path, _BOUNDS)
+	assert_false(v["ok"], "10px from the road centre is inside the corridor")
+	assert_eq(v["reason"], Placement.REASON_ON_PATH, "and says so")
+	return true
+
+func test_can_place_rejects_a_spot_overlapping_a_prop() -> bool:
+	var props := [{"pos": Vector2(300.0, 100.0), "radius": 24.0}]
+	var v := Placement.can_place(Vector2(320.0, 100.0), 20.0, props, [], _far_path(), _BOUNDS)
+	assert_false(v["ok"], "20px from a 24px prop with a 20px tower overlaps")
+	assert_eq(v["reason"], Placement.REASON_BLOCKED_BY_PROP, "and says so")
+	return true
+
+func test_can_place_rejects_a_spot_too_close_to_another_tower() -> bool:
+	var towers := [Vector2(300.0, 100.0)]
+	var v := Placement.can_place(Vector2(330.0, 100.0), 20.0, [], towers, _far_path(), _BOUNDS)
+	assert_false(v["ok"], "30px apart is inside the 44px minimum spacing")
+	assert_eq(v["reason"], Placement.REASON_TOO_CLOSE, "and says so")
+	return true
+
+# Each threshold is checked from both sides. `<` vs `<=` is the classic
+# surviving mutant, and a range-only check would not catch it.
+func test_can_place_thresholds_are_exact_on_both_sides() -> bool:
+	var towers := [Vector2(300.0, 100.0)]
+	var just_inside := Placement.can_place(Vector2(300.0 + 43.9, 100.0), 20.0, [], towers, _far_path(), _BOUNDS)
+	assert_false(just_inside["ok"], "43.9px apart is closer than MIN_TOWER_SPACING and is refused")
+	var just_outside := Placement.can_place(Vector2(300.0 + 44.1, 100.0), 20.0, [], towers, _far_path(), _BOUNDS)
+	assert_true(just_outside["ok"], "44.1px apart clears MIN_TOWER_SPACING and is allowed")
+
+	# radius 20 + PATH_HALF_WIDTH 26 = 46
+	var path := [PackedVector2Array([Vector2(0.0, 100.0), Vector2(500.0, 100.0)])]
+	var near := Placement.can_place(Vector2(250.0, 100.0 + 45.9), 20.0, [], [], path, _BOUNDS)
+	assert_false(near["ok"], "45.9px from the road centre is inside radius + PATH_HALF_WIDTH")
+	var clear := Placement.can_place(Vector2(250.0, 100.0 + 46.1), 20.0, [], [], path, _BOUNDS)
+	assert_true(clear["ok"], "46.1px from the road centre clears the corridor")
+	return true
+
+# With several rules failing at once the reported reason must be stable and
+# most-explanatory, or the message shown to the player depends on argument
+# order. Reordering the checks in can_place is invisible without this.
+func test_can_place_reports_the_first_failing_rule_in_a_fixed_precedence() -> bool:
+	var path := [PackedVector2Array([Vector2(0.0, 100.0), Vector2(500.0, 100.0)])]
+	var props := [{"pos": Vector2(250.0, 105.0), "radius": 24.0}]
+	var towers := [Vector2(250.0, 108.0)]
+
+	# On the road AND overlapping a prop AND too close to a tower.
+	var v := Placement.can_place(Vector2(250.0, 105.0), 20.0, props, towers, path, _BOUNDS)
+	assert_false(v["ok"], "a spot failing every rule is refused")
+	assert_eq(v["reason"], Placement.REASON_ON_PATH, "path proximity outranks prop and spacing")
+
+	# Off the road, but overlapping a prop AND too close to a tower.
+	var off_road_props := [{"pos": Vector2(250.0, 300.0), "radius": 24.0}]
+	var off_road_towers := [Vector2(250.0, 300.0)]
+	var v2 := Placement.can_place(Vector2(250.0, 300.0), 20.0, off_road_props, off_road_towers, path, _BOUNDS)
+	assert_eq(v2["reason"], Placement.REASON_BLOCKED_BY_PROP, "prop outranks spacing")
+	return true
+
+func test_can_place_handles_empty_prop_and_tower_lists() -> bool:
+	var v := Placement.can_place(Vector2(300.0, 300.0), 20.0, [], [], [], _BOUNDS)
+	assert_true(v["ok"], "an empty board with no paths places anywhere in bounds")
+	return true
+
+# min_spacing is a defaulted parameter rather than read from the constant
+# inside the function, so balance tuning is a caller-side change and tests can
+# pin behaviour at values other than the shipped default.
+func test_can_place_accepts_an_overridden_minimum_spacing() -> bool:
+	var towers := [Vector2(300.0, 100.0)]
+	var v := Placement.can_place(Vector2(330.0, 100.0), 20.0, [], towers, _far_path(), _BOUNDS, 20.0)
+	assert_true(v["ok"], "30px apart is fine when min_spacing is lowered to 20")
+	return true

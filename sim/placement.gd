@@ -58,3 +58,47 @@ static func distance_to_paths(point: Vector2, paths: Array) -> float:
 		for i in range(pts.size() - 1):
 			best = minf(best, distance_to_segment(point, pts[i], pts[i + 1]))
 	return best
+
+## A tower's collision radius, from the `size` multiplier it already declares
+## in data/towers.gd. Derived rather than tabulated so that re-sizing a tower
+## for art reasons cannot leave its collision disagreeing with its sprite.
+static func tower_radius(kind: StringName) -> float:
+	return Tiles.TILE_SIZE * float(Towers.DEFS[kind]["size"]) / 2.0
+
+## May a tower of `radius` stand centred on `pos`?
+##
+## Returns a reason as well as a verdict so the board can keep showing the
+## player a specific message instead of one generic refusal. Checks run
+## cheapest-and-most-explanatory first, and the order is load-bearing: it is
+## what makes the reported reason stable when several rules fail at once.
+##
+## `props` is [{ "pos": Vector2, "radius": float }], `towers` is [Vector2],
+## `paths` is [PackedVector2Array].
+static func can_place(
+		pos: Vector2,
+		radius: float,
+		props: Array,
+		towers: Array,
+		paths: Array,
+		bounds: Rect2,
+		min_spacing: float = MIN_TOWER_SPACING) -> Dictionary:
+	if pos.x - radius < bounds.position.x \
+			or pos.y - radius < bounds.position.y \
+			or pos.x + radius > bounds.end.x \
+			or pos.y + radius > bounds.end.y:
+		return {"ok": false, "reason": REASON_OUT_OF_BOUNDS}
+
+	if distance_to_paths(pos, paths) < radius + PATH_HALF_WIDTH:
+		return {"ok": false, "reason": REASON_ON_PATH}
+
+	for prop in props:
+		var p: Dictionary = prop
+		if pos.distance_to(p["pos"]) < radius + float(p["radius"]):
+			return {"ok": false, "reason": REASON_BLOCKED_BY_PROP}
+
+	for other in towers:
+		var t: Vector2 = other
+		if pos.distance_to(t) < min_spacing:
+			return {"ok": false, "reason": REASON_TOO_CLOSE}
+
+	return {"ok": true, "reason": REASON_OK}
