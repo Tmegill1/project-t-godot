@@ -128,8 +128,15 @@ func test_try_place_rejects_a_spot_on_the_road() -> bool:
 	var b := _ready_board()
 	b.select_tower_kind(&"basic")
 	var gold_before := b._gold
+	var rejected := {"count": 0, "reason": ""}
+	b.placement_rejected.connect(func(r): rejected["count"] += 1; rejected["reason"] = r)
+
 	# The first point of the first spawn path is the road itself.
 	b._try_place(b._paths[0][0])
+
+	assert_eq(rejected["count"], 1, "rejected exactly once")
+	assert_eq(rejected["reason"], "You cannot build on the road.",
+		"the road rule is what fired, not some other check that happens to also reject this point")
 	assert_eq(b._towers_root.get_child_count(), 0, "no tower was built on the road")
 	assert_eq(b._gold, gold_before, "and no gold was spent")
 	b.free()
