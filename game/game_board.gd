@@ -43,6 +43,8 @@ var _spawned := 0
 @onready var _towers_root: Node2D = $Towers
 @onready var _enemies_root: Node2D = $Enemies
 @onready var _projectiles_root: Node2D = $Projectiles
+@onready var _ghost: Sprite2D = $PlacementPreview
+@onready var _ghost_range: RangeIndicator = $PlacementPreview/PreviewRange
 
 func _ready() -> void:
 	var def := Maps.get_def(_map_name)
@@ -76,6 +78,10 @@ func get_tower_count(kind: StringName) -> int:
 
 func select_tower_kind(kind: StringName) -> void:
 	_selected_kind = kind
+	# The ghost otherwise keeps showing the previous kind's sprite/colour at
+	# the last mouse position until the next InputEventMouseMotion arrives -
+	# hiding it here means a kind change never briefly shows a stale preview.
+	_ghost.visible = false
 	_deselect_tower()
 
 func start_next_wave() -> void:
@@ -155,10 +161,56 @@ func _on_wave_cleared() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if _run_finished:
 		return
+	if event is InputEventMouseMotion:
+		_update_ghost(get_global_mouse_position())
+		return
 	if event is InputEventMouseButton and event.pressed \
 			and event.button_index == MOUSE_BUTTON_LEFT:
 		_handle_tap(get_global_mouse_position())
 		get_viewport().set_input_as_handled()
+
+## Ghost preview: green where the tower would land, red where it would not,
+## with the range ring shown only when the spot is legal so its absence is a
+## second, redundant signal. Pure view - it asks Placement the same question
+## _try_place will ask and stores nothing of its own, so the preview cannot
+## drift from the rule it previews.
+func _update_ghost(world: Vector2) -> void:
+	if _selected_kind == &"":
+		_ghost.visible = false
+		return
+
+	var def: Dictionary = Towers.DEFS[_selected_kind]
+	var radius := Placement.tower_radius(_selected_kind)
+	var verdict := Placement.can_place(
+		world,
+		radius,
+		_map_renderer.prop_footprints(),
+		_tower_positions(),
+		_paths,
+		Rect2(Vector2.ZERO, Vector2(Maps.pixel_size(_map_name))))
+
+	_ghost.visible = true
+	_ghost.position = world
+
+	var atlas := AtlasTexture.new()
+	atlas.atlas = Tower.TOWER_SHEET
+	atlas.region = Tower.frame_region(int(def["sprite_frame"]))
+	_ghost.texture = atlas
+	_ghost.centered = true
+	_ghost.scale = Vector2.ONE * (Tiles.TILE_SIZE * float(def["size"]) / Tower.FRAME_SIZE)
+	_ghost.modulate = Color(0.4, 1.0, 0.4, 0.5) if verdict["ok"] else Color(1.0, 0.3, 0.3, 0.5)
+
+	# PreviewRange is a child of PlacementPreview (a Sprite2D) rather than a
+	# sibling of it - unlike Tower, where RangeIndicator sits beside _sprite
+	# and so never inherits its scale. Left uncorrected, the ring would
+	# inherit _ghost.scale above and draw at that fraction of `radius`,
+	# understating the tower's real range. Countering it here keeps the
+	# ring's global scale at 1 regardless of what the sprite's scale is.
+	_ghost_range.scale = Vector2.ONE / _ghost.scale
+	_ghost_range.visible = verdict["ok"]
+	_ghost_range.radius = float(def["range"])
+	_ghost_range.tint = def["color"]
+	_ghost_range.queue_redraw()
 
 func _handle_tap(world: Vector2) -> void:
 	var hit := _tower_at(world)
@@ -241,6 +293,7 @@ func _try_place(world: Vector2) -> void:
 	# the next tap on open ground builds another one, which is the opposite
 	# of what a tap on empty ground means once you have finished building.
 	_selected_kind = &""
+	_ghost.visible = false
 
 	tower_placed.emit(placed_kind)
 	_play_sound(&"place")

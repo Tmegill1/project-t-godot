@@ -27,12 +27,6 @@ func _overlay_signature(mr: MapRenderer) -> Dictionary:
 			sig[child.position] = child.texture.resource_path
 	return sig
 
-func _grid_overlay(mr: MapRenderer) -> Node2D:
-	for child in mr.get_children():
-		if child is MapRenderer._GridOverlay:
-			return child
-	return null
-
 func test_render_is_deterministic_for_the_same_seed() -> bool:
 	Grid.set_active(DemoMap.GRID_COLS, DemoMap.GRID_ROWS)
 	var tiles := _demo_tiles()
@@ -607,44 +601,6 @@ func test_square_ground_tiles_still_land_exactly_on_their_tile_origin() -> bool:
 	mr.free()
 	return true
 
-func test_clear_decoration_at_removes_a_decorated_tile_and_is_idempotent() -> bool:
-	Grid.set_active(DemoMap.GRID_COLS, DemoMap.GRID_ROWS)
-	var tiles := _demo_tiles()
-	var mr := MapRenderer.new()
-	mr.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED))
-
-	var decorated_positions := {}
-	for child in mr.get_children():
-		if child is Sprite2D and (child.texture.resource_path == _SPIKE_PATH or child.texture.resource_path == _FIRE_PATH):
-			var t := Vector2i(int(child.position.x / Tiles.TILE_SIZE), int(child.position.y / Tiles.TILE_SIZE))
-			decorated_positions[t] = true
-	assert_true(decorated_positions.size() > 0, "the demo map has at least one decorated tile")
-	var decorated_tile: Vector2i = decorated_positions.keys()[0]
-
-	var undecorated_tile := Vector2i(-1, -1)
-	for r in tiles.size():
-		for c in tiles[r].size():
-			if tiles[r][c] == Tiles.BUILDABLE and not decorated_positions.has(Vector2i(c, r)):
-				undecorated_tile = Vector2i(c, r)
-	assert_true(undecorated_tile.x >= 0, "found a buildable tile with no decoration on it")
-
-	assert_false(mr.clear_decoration_at(undecorated_tile.x, undecorated_tile.y), "clearing an undecorated tile returns false")
-
-	assert_true(mr.clear_decoration_at(decorated_tile.x, decorated_tile.y), "clearing a decorated tile returns true")
-
-	var still_present := false
-	for child in mr.get_children():
-		if child is Sprite2D and (child.texture.resource_path == _SPIKE_PATH or child.texture.resource_path == _FIRE_PATH):
-			var t := Vector2i(int(child.position.x / Tiles.TILE_SIZE), int(child.position.y / Tiles.TILE_SIZE))
-			if t == decorated_tile:
-				still_present = true
-	assert_false(still_present, "the sprite for the cleared tile is actually gone from the scene tree")
-
-	assert_false(mr.clear_decoration_at(decorated_tile.x, decorated_tile.y), "clearing an already-cleared tile is idempotent (returns false)")
-
-	mr.free()
-	return true
-
 func test_render_called_twice_does_not_double_up_sprites() -> bool:
 	Grid.set_active(DemoMap.GRID_COLS, DemoMap.GRID_ROWS)
 	var tiles := _demo_tiles()
@@ -657,105 +613,7 @@ func test_render_called_twice_does_not_double_up_sprites() -> bool:
 	var second_count := mr.get_children().size()
 	assert_eq(second_count, first_count, "re-rendering the same map twice does not accumulate sprites")
 
-	var grid_overlays := 0
-	for child in mr.get_children():
-		if child is MapRenderer._GridOverlay:
-			grid_overlays += 1
-	assert_eq(grid_overlays, 1, "exactly one grid overlay survives after two renders, not two")
-
 	mr.free()
-	return true
-
-func test_grid_overlay_line_count_and_bounds() -> bool:
-	Grid.set_active(DemoMap.GRID_COLS, DemoMap.GRID_ROWS)
-	var tiles := _demo_tiles()
-	var mr := MapRenderer.new()
-	mr.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED))
-
-	var grid := _grid_overlay(mr)
-	assert_true(grid != null, "render() adds a grid overlay node")
-
-	var lines: Array = grid.grid_lines()
-	var expected_line_count := (DemoMap.GRID_COLS + 1) + (DemoMap.GRID_ROWS + 1)
-	assert_eq(lines.size(), expected_line_count, "cols + 1 verticals plus rows + 1 horizontals")
-
-	var full_height := DemoMap.GRID_ROWS * Tiles.TILE_SIZE
-	var full_width := DemoMap.GRID_COLS * Tiles.TILE_SIZE
-	assert_eq(lines[0], [Vector2(0, 0), Vector2(0, full_height)], "first vertical line is the left edge, x = 0")
-	assert_eq(lines[DemoMap.GRID_COLS], [Vector2(full_width, 0), Vector2(full_width, full_height)],
-		"last vertical line is the right edge, x = cols * TILE_SIZE (inclusive outer edge)")
-	assert_eq(lines[DemoMap.GRID_COLS + 1], [Vector2(0, 0), Vector2(full_width, 0)], "first horizontal line is the top edge, y = 0")
-	assert_eq(lines[lines.size() - 1], [Vector2(0, full_height), Vector2(full_width, full_height)],
-		"last horizontal line is the bottom edge, y = rows * TILE_SIZE (inclusive outer edge)")
-
-	mr.free()
-	return true
-
-func test_grid_overlay_sizes_itself_from_the_tiles_argument_not_demo_map_constants() -> bool:
-	# A synthetic 5x3 grid, deliberately not 23x14, proving the grid (and
-	# the rest of the renderer) sizes itself from whatever is passed to
-	# render(), not from DemoMap's or Maps' constants.
-	Grid.set_active(5, 3)
-	var synthetic: Array = []
-	for r in 3:
-		var row: Array = []
-		for c in 5:
-			row.append(Tiles.BUILDABLE)
-		synthetic.append(row)
-
-	var mr := MapRenderer.new()
-	mr.render(synthetic, Rng.new(Seeds.DEFAULT_DECORATION_SEED))
-
-	var grid := _grid_overlay(mr)
-	assert_true(grid != null, "a grid overlay node was added for the synthetic map")
-	assert_eq(grid.grid_lines().size(), (5 + 1) + (3 + 1), "grid line count derives from the 5x3 tiles argument, not 23x14")
-
-	var ground_count := 0
-	for child in mr.get_children():
-		if child is Sprite2D and child.z_index == -1:
-			ground_count += 1
-	assert_eq(ground_count, 5 * 3, "ground layer also derives from the tiles argument")
-
-	mr.free()
-	return true
-
-func test_grid_overlay_sits_above_ground_and_below_decoration() -> bool:
-	Grid.set_active(DemoMap.GRID_COLS, DemoMap.GRID_ROWS)
-	var tiles := _demo_tiles()
-	var mr := MapRenderer.new()
-	mr.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED))
-
-	var grid := _grid_overlay(mr)
-	assert_true(grid != null, "render() adds a grid overlay node")
-	assert_eq(grid.z_index, 0, "the grid overlay sits at z_index 0")
-
-	var ground_z := -999
-	var overlay_z := -999
-	for child in mr.get_children():
-		if child is Sprite2D and child.texture.resource_path == _GRASS_PATH:
-			ground_z = child.z_index
-		elif child is Sprite2D and child.texture.resource_path == _SPIKE_PATH:
-			overlay_z = child.z_index
-	assert_eq(ground_z, -1, "the ground layer sits at z_index -1, below the grid")
-	assert_eq(overlay_z, 1, "the decoration layer sits at z_index 1, above the grid")
-	assert_true(ground_z < grid.z_index, "ground draws below the grid")
-	assert_true(grid.z_index < overlay_z, "the grid draws below decoration/endpoints/blocked overlays")
-
-	mr.free()
-	return true
-
-# _GRID_LINE_COLOR is a plain script-level const on a class_name script, so
-# it is readable directly via MapRenderer._GRID_LINE_COLOR - no scene tree,
-# node instantiation, or draw pass required. (An earlier version of this
-# suite treated the grid's draw color as untestable in headless mode,
-# reasoning that _draw()'s draw_line calls only execute during a live
-# render pass; that reasoning is correct for verifying what actually gets
-# painted to a canvas, but wrong for reading the constant the drawing code
-# would use - the two are different questions, and this test answers the
-# one that is actually checkable here.)
-func test_grid_line_color_matches_the_reference() -> bool:
-	assert_eq(MapRenderer._GRID_LINE_COLOR, Color8(0x2a, 0x2a, 0x2a),
-		"grid overlay strokes match the reference MapRenderer.ts drawGrid()'s 0x2a2a2a")
 	return true
 
 # The mipmap chain that test_map_assets.gd gates is inert unless the sprite

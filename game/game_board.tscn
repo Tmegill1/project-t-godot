@@ -1,7 +1,8 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://game/game_board.gd" id="1_board"]
 [ext_resource type="Script" path="res://game/map_renderer.gd" id="2_map"]
+[ext_resource type="Script" path="res://game/range_indicator.gd" id="3_range"]
 
 [node name="GameBoard" type="Node2D"]
 script = ExtResource("1_board")
@@ -15,4 +16,9 @@ script = ExtResource("2_map")
 
 [node name="Projectiles" type="Node2D" parent="."]
 
-[node name="PlacementPreview" type="Node2D" parent="."]
+[node name="PlacementPreview" type="Sprite2D" parent="."]
+visible = false
+z_index = 2
+
+[node name="PreviewRange" type="Node2D" parent="PlacementPreview"]
+script = ExtResource("3_range")

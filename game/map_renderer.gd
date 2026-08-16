@@ -19,16 +19,12 @@ const _PROP_TEXTURES := [_TREE, _STONE, _SPIKE, _FIRE]
 
 const _MAX_FIRE_TILES := 7
 
-## z-index ordering. Godot z_index is an int, so the grid overlay cannot sit
-## at a value strictly between two adjacent integers: ground is shifted down
-## to -1 so the grid (0) lands strictly between the ground layer and the
-## decoration/endpoint/blocked-tile overlays (1), instead of tying with the
-## ground at 0.
+## z-index ordering. Ground draws below decoration, endpoints and blocked-tile
+## overlays. Ground sits at -1 rather than 0 for no reason beyond history: a
+## grid overlay used to occupy 0 between them, and the values were left alone
+## when it was removed rather than renumbering every layer.
 const _Z_GROUND := -1
-const _Z_GRID := 0
 const _Z_OVERLAY := 1
-
-const _GRID_LINE_COLOR := Color8(0x2a, 0x2a, 0x2a)
 
 var _tiles: Array = []
 var _rows := 0
@@ -58,16 +54,6 @@ func render(tiles: Array, rng: Rng = null) -> void:
 	_draw_endpoints()
 	_scatter_decoration(rng)
 	_draw_blocked(rng)
-	_draw_grid_overlay()
-
-## Removes a decoration sprite when a tower is built on its tile.
-func clear_decoration_at(col: int, row: int) -> bool:
-	var key := Vector2i(col, row)
-	if not _decorations.has(key):
-		return false
-	_decorations[key].free()
-	_decorations.erase(key)
-	return true
 
 ## Every prop as a world-space blocking circle, for sim/placement.gd.
 ##
@@ -222,43 +208,3 @@ func _is_adjacent_to_walkable(row: int, col: int) -> bool:
 		if _tiles[nr][nc] in Tiles.WALKABLE:
 			return true
 	return false
-
-## 1px grid overlay for tower-placement legibility (reference: MapRenderer.ts
-## drawGrid()). Rebuilt by render() along with everything else, and sized
-## from the tiles actually passed to render() - never from a map's static
-## constants, so a differently-sized map still gets a correctly-bounded grid.
-func _draw_grid_overlay() -> void:
-	var grid := _GridOverlay.new()
-	grid.cols = _cols
-	grid.rows = _rows
-	grid.z_index = _Z_GRID
-	add_child(grid)
-	grid.queue_redraw()
-
-## The grid's line geometry is exposed as a plain data method (grid_lines)
-## rather than only being computable inside _draw(), because CanvasItem only
-## permits draw_* calls during an actual engine-driven redraw pass - which a
-## synchronous, frameless headless test can never trigger. _draw() itself
-## just replays whatever grid_lines() computes.
-class _GridOverlay extends Node2D:
-	var cols := 0
-	var rows := 0
-
-	## Vertical lines (x = c * TILE_SIZE for c in 0..cols inclusive, full
-	## height) followed by horizontal lines (y = r * TILE_SIZE for r in
-	## 0..rows inclusive, full width). cols + 1 and rows + 1 lines respectively,
-	## including the outer edges.
-	func grid_lines() -> Array:
-		var lines: Array = []
-		var ts := Tiles.TILE_SIZE
-		for c in range(cols + 1):
-			var x := c * ts
-			lines.append([Vector2(x, 0), Vector2(x, rows * ts)])
-		for r in range(rows + 1):
-			var y := r * ts
-			lines.append([Vector2(0, y), Vector2(cols * ts, y)])
-		return lines
-
-	func _draw() -> void:
-		for line in grid_lines():
-			draw_line(line[0], line[1], _GRID_LINE_COLOR, 1.0)
