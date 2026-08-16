@@ -478,9 +478,9 @@ func test_build_frames_skips_a_missing_sheet_without_crashing() -> bool:
 
 # A script-level const on a class_name script is directly readable as
 # ClassName.CONST_NAME with no tree, no node, and no draw pass involved -
-# the same technique test_map_renderer.gd uses for _GRID_LINE_COLOR. This
-# pins the literal values even though every one of them is also exercised
-# indirectly above (frame math, animation speeds).
+# the same technique test_tower.gd/test_projectile.gd use for their own
+# constants. This pins the literal values even though every one of them is
+# also exercised indirectly above (frame math, animation speeds).
 func test_frame_size_frames_per_sheet_and_fps_constants_match_the_brief() -> bool:
 	assert_eq(Enemy.FRAME_SIZE, 48, "FRAME_SIZE")
 	assert_eq(Enemy.FRAMES_PER_SHEET, 6, "FRAMES_PER_SHEET")

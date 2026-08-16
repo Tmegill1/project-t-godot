@@ -104,6 +104,33 @@ func test_can_place_rejects_a_tower_whose_circle_leaves_the_map() -> bool:
 
 	var inside := Placement.can_place(Vector2(21.0, 100.0), 20.0, [], [], _far_path(), _BOUNDS)
 	assert_true(inside["ok"], "one pixel further in, the whole circle fits and it is accepted")
+
+	# Right edge: bounds.end.x is 1104.0, so a radius-20 circle's boundary
+	# sits at x=1084.
+	var right_outside := Placement.can_place(Vector2(1094.0, 100.0), 20.0, [], [], _far_path(), _BOUNDS)
+	assert_false(right_outside["ok"], "a tower at x=1094 with radius 20 hangs off the right edge")
+	assert_eq(right_outside["reason"], Placement.REASON_OUT_OF_BOUNDS, "and says so")
+
+	var right_inside := Placement.can_place(Vector2(1083.0, 100.0), 20.0, [], [], _far_path(), _BOUNDS)
+	assert_true(right_inside["ok"], "one pixel further in from the right edge, the whole circle fits and it is accepted")
+
+	# Top edge: bounds.position.y is 0.0, so a radius-20 circle's boundary
+	# sits at y=20.
+	var top_outside := Placement.can_place(Vector2(300.0, 10.0), 20.0, [], [], _far_path(), _BOUNDS)
+	assert_false(top_outside["ok"], "a tower at y=10 with radius 20 hangs off the top edge")
+	assert_eq(top_outside["reason"], Placement.REASON_OUT_OF_BOUNDS, "and says so")
+
+	var top_inside := Placement.can_place(Vector2(300.0, 21.0), 20.0, [], [], _far_path(), _BOUNDS)
+	assert_true(top_inside["ok"], "one pixel further in from the top edge, the whole circle fits and it is accepted")
+
+	# Bottom edge: bounds.end.y is 672.0, so a radius-20 circle's boundary
+	# sits at y=652.
+	var bottom_outside := Placement.can_place(Vector2(300.0, 662.0), 20.0, [], [], _far_path(), _BOUNDS)
+	assert_false(bottom_outside["ok"], "a tower at y=662 with radius 20 hangs off the bottom edge")
+	assert_eq(bottom_outside["reason"], Placement.REASON_OUT_OF_BOUNDS, "and says so")
+
+	var bottom_inside := Placement.can_place(Vector2(300.0, 651.0), 20.0, [], [], _far_path(), _BOUNDS)
+	assert_true(bottom_inside["ok"], "one pixel further in from the bottom edge, the whole circle fits and it is accepted")
 	return true
 
 func test_can_place_rejects_a_spot_on_the_road() -> bool:

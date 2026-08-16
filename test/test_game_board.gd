@@ -142,6 +142,54 @@ func test_try_place_rejects_a_spot_on_the_road() -> bool:
 	b.free()
 	return true
 
+# Pins that _try_place actually wires _map_renderer.prop_footprints() into
+# Placement.can_place, rather than passing it an empty list. A mutation that
+# did the latter would leave this suite green with no other test noticing:
+# _find_placeable_positions steers away from props on purpose (see this
+# file's own helper), so nothing else in this suite ever lands a tap on one.
+func test_try_place_rejects_a_spot_on_a_prop() -> bool:
+	var b := _ready_board()
+	b.select_tower_kind(&"basic")
+	var gold_before := b._gold
+	var rejected := {"count": 0, "reason": ""}
+	b.placement_rejected.connect(func(r): rejected["count"] += 1; rejected["reason"] = r)
+
+	var footprint: Dictionary = b._map_renderer.prop_footprints()[0]
+	b._try_place(footprint["pos"])
+
+	assert_eq(rejected["count"], 1, "rejected exactly once")
+	assert_eq(rejected["reason"], "Something is already in the way there.",
+		"the prop rule is what fired, not some other check that happens to also reject this point")
+	assert_eq(b._towers_root.get_child_count(), 0, "no tower was built on top of the prop")
+	assert_eq(b._gold, gold_before, "and no gold was spent")
+	b.free()
+	return true
+
+# Pins that _try_place actually wires _tower_positions() into
+# Placement.can_place, rather than passing it an empty list. A mutation that
+# did the latter would leave this suite green with no other test noticing:
+# every other placement test either places just one tower or places several
+# tests apart with plenty of spacing.
+func test_try_place_rejects_a_spot_too_close_to_another_tower() -> bool:
+	var b := _ready_board()
+	b._gold = 1000
+	var pos := _find_placeable_positions(b, 1)[0]
+	b.select_tower_kind(&"basic")
+	b._try_place(pos)
+	assert_eq(b._towers_root.get_child_count(), 1, "precondition: the first tower was placed")
+
+	var rejected := {"count": 0, "reason": ""}
+	b.placement_rejected.connect(func(r): rejected["count"] += 1; rejected["reason"] = r)
+	b.select_tower_kind(&"basic")
+	b._try_place(pos + Vector2(30.0, 0.0))  # 30px away, inside the 44px MIN_TOWER_SPACING
+
+	assert_eq(rejected["count"], 1, "rejected exactly once")
+	assert_eq(rejected["reason"], "That is too close to another tower.",
+		"the spacing rule is what fired, not some other check that happens to also reject this point")
+	assert_eq(b._towers_root.get_child_count(), 1, "the child count stayed at 1 - no second tower snuck in")
+	b.free()
+	return true
+
 # Isolates `>=` from `>`: exactly at budget, the next placement must be
 # rejected; a mutation to `>` would let it through.
 func test_try_place_enforces_the_tower_budget_at_the_boundary() -> bool:
@@ -213,6 +261,51 @@ func test_try_place_rejects_when_gold_is_insufficient() -> bool:
 		"reason includes the exact price the tower would have cost")
 	assert_eq(b._towers_root.get_child_count(), 0, "no tower placed")
 	assert_eq(b.get_gold(), 5, "gold untouched")
+	b.free()
+	return true
+
+# --------------------------------------------------------------------------
+# Ghost preview
+#
+# _update_ghost is reachable synchronously without any input dispatch - it is
+# called directly here, the same way _handle_tap()/_try_place() are called
+# directly elsewhere in this file. The invariant under test is that the
+# ghost asks Placement.can_place the same question _try_place asks, so the
+# preview can never tell the player a spot is legal when it is not.
+# --------------------------------------------------------------------------
+
+func test_update_ghost_at_a_legal_spot_shows_the_green_tint_and_the_range_ring() -> bool:
+	var b := _ready_board()
+	b.select_tower_kind(&"basic")
+	var pos := _find_placeable_positions(b, 1)[0]
+
+	b._update_ghost(pos)
+
+	assert_true(b._ghost.visible, "the ghost sprite is shown at a legal spot")
+	assert_eq(b._ghost.modulate, Color(0.4, 1.0, 0.4, 0.5), "a legal spot tints the ghost green")
+	assert_true(b._ghost_range.visible, "the range ring is shown at a legal spot")
+	b.free()
+	return true
+
+func test_update_ghost_on_the_road_shows_the_red_tint_and_hides_the_range_ring() -> bool:
+	var b := _ready_board()
+	b.select_tower_kind(&"basic")
+
+	b._update_ghost(b._paths[0][0])
+
+	assert_eq(b._ghost.modulate, Color(1.0, 0.3, 0.3, 0.5), "an illegal spot tints the ghost red")
+	assert_false(b._ghost_range.visible, "the range ring is hidden at an illegal spot - its absence is a second signal")
+	b.free()
+	return true
+
+func test_update_ghost_with_no_kind_armed_hides_both_the_sprite_and_the_range_ring() -> bool:
+	var b := _ready_board()
+	assert_eq(b._selected_kind, &"", "precondition: nothing is armed")
+
+	b._update_ghost(_find_placeable_positions(b, 1)[0])
+
+	assert_false(b._ghost.visible, "no kind armed means no ghost to show")
+	assert_false(b._ghost_range.visible, "and no range ring either")
 	b.free()
 	return true
 

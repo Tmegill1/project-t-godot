@@ -339,8 +339,9 @@ func test_the_build_panel_icon_and_the_placed_tower_share_one_region() -> bool:
 
 # _ready_tower() deliberately stops short of setup() - its callers pick their
 # own kind and tile. Everything below needs a tower that has been through
-# setup(), and Grid must be active first because setup() positions through
-# Grid.tile_to_world_center.
+# setup(), which takes a world-space Vector2 directly and never touches
+# Grid - the Grid.set_active call below is inherited boilerplate from this
+# file's other helpers, not a dependency of setup() itself.
 func _setup_tower(kind: StringName) -> Tower:
 	Grid.set_active(23, 14)
 	var t := _ready_tower()

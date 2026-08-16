@@ -1,12 +1,12 @@
 class_name GameBoard
 extends Node2D
 
-## The hub that wires sim to views: owns gold, lives, the wave number, the
-## occupied-tile map and per-kind tower counts; runs spawns from the
-## schedule; ticks towers; resolves projectile hits including splash; and
-## handles taps for placement. The sim modules decide, the board wires - it
-## contains no targeting, damage, leak-cost, pricing or scheduling rules of
-## its own; every one of those questions is delegated to sim/ or data/.
+## The hub that wires sim to views: owns gold, lives, the wave number, and
+## per-kind tower counts; runs spawns from the schedule; ticks towers;
+## resolves projectile hits including splash; and handles taps for
+## placement. The sim modules decide, the board wires - it contains no
+## targeting, damage, leak-cost, pricing or scheduling rules of its own;
+## every one of those questions is delegated to sim/ or data/.
 
 signal gold_changed(gold: int)
 signal lives_changed(lives: int)
@@ -78,6 +78,14 @@ func get_tower_count(kind: StringName) -> int:
 
 func select_tower_kind(kind: StringName) -> void:
 	_selected_kind = kind
+	# Rules state before anything visual - same reasoning as Tower.setup
+	# (game/tower.gd). A GDScript runtime error aborts only the enclosing
+	# function frame, so under a harness where @onready fields (_ghost,
+	# _ghost_range) are unresolved, everything after the first @onready
+	# access below would be silently skipped. _deselect_tower() is this
+	# function's actual contract, so it must run before either onready
+	# access can abort the frame.
+	_deselect_tower()
 	# The ghost otherwise keeps showing the previous kind's sprite/colour at
 	# the last mouse position until the next InputEventMouseMotion arrives -
 	# hiding it here means a kind change never briefly shows a stale preview.
@@ -85,7 +93,6 @@ func select_tower_kind(kind: StringName) -> void:
 	# _ghost alone would no longer carry the ring's visibility down with it.
 	_ghost.visible = false
 	_ghost_range.visible = false
-	_deselect_tower()
 
 func start_next_wave() -> void:
 	if _wave_active or _run_finished:
