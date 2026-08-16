@@ -44,7 +44,7 @@ func test_setup_atlas_region_for_each_tower_kind() -> bool:
 		assert_eq(frame / Tower.SHEET_COLUMNS, entry["row"], "%s upgrade_frames[0]=%d row precondition" % [kind, frame])
 
 		var t := _ready_tower()
-		t.setup(kind, 0, 0, 0)
+		t.setup(kind, Vector2.ZERO, 0)
 		var region: Rect2 = (t._sprite.texture as AtlasTexture).region
 		var expected := Rect2(entry["col"] * Tower.FRAME_SIZE, entry["row"] * Tower.FRAME_SIZE,
 			Tower.FRAME_SIZE, Tower.FRAME_SIZE)
@@ -61,7 +61,7 @@ func test_setup_sprite_display_size_equals_tile_size_times_def_size() -> bool:
 	Grid.set_active(23, 14)
 	for kind in Towers.KINDS:
 		var t := _ready_tower()
-		t.setup(kind, 0, 0, 0)
+		t.setup(kind, Vector2.ZERO, 0)
 		var region: Rect2 = (t._sprite.texture as AtlasTexture).region
 		var displayed_width: float = t._sprite.scale.x * region.size.x
 		var displayed_height: float = t._sprite.scale.y * region.size.y
@@ -78,10 +78,8 @@ func test_setup_sprite_display_size_equals_tile_size_times_def_size() -> bool:
 func test_setup_positions_tower_at_tile_centre_and_stores_properties() -> bool:
 	Grid.set_active(23, 14)
 	var t := _ready_tower()
-	t.setup(&"long", 5, 7, 100)
-	assert_eq(t.position, Grid.tile_to_world_center(5, 7), "tower sits at the tile centre, not the tile's corner")
-	assert_eq(t.grid_col, 5, "grid_col stored")
-	assert_eq(t.grid_row, 7, "grid_row stored")
+	t.setup(&"long", Vector2(264.0, 360.0), 100)
+	assert_eq(t.position, Vector2(264.0, 360.0), "the tower sits exactly where it was placed")
 	assert_eq(t.price_paid, 100, "price_paid stored")
 	assert_eq(t.kind, &"long", "kind stored")
 	t.free()
@@ -93,7 +91,7 @@ func test_setup_positions_tower_at_tile_centre_and_stores_properties() -> bool:
 func test_setup_position_reflects_grids_active_tile_size_not_a_hardcoded_one() -> bool:
 	Grid.set_active(10, 10, 64)
 	var t := _ready_tower()
-	t.setup(&"basic", 2, 1, 0)
+	t.setup(&"basic", Vector2(2 * 64 + 32, 1 * 64 + 32), 0)
 	assert_eq(t.position, Vector2(2 * 64 + 32, 1 * 64 + 32), "position uses the active tile_size, not a hardcoded 48")
 	t.free()
 	Grid.set_active(23, 14)  # restore the default so later tests aren't order-dependent
@@ -102,7 +100,7 @@ func test_setup_position_reflects_grids_active_tile_size_not_a_hardcoded_one() -
 func test_setup_initializes_range_indicator_from_the_def_and_hides_it() -> bool:
 	Grid.set_active(23, 14)
 	var t := _ready_tower()
-	t.setup(&"mortar", 0, 0, 0)
+	t.setup(&"mortar", Vector2.ZERO, 0)
 	assert_eq(t._range_indicator.radius, Towers.DEFS[&"mortar"]["range"], "range indicator radius comes from the def's range")
 	assert_eq(t._range_indicator.tint, Towers.DEFS[&"mortar"]["color"], "range indicator tint comes from the def's color")
 	assert_false(t._range_indicator.visible, "range indicator starts hidden")
@@ -116,7 +114,7 @@ func test_setup_initializes_range_indicator_from_the_def_and_hides_it() -> bool:
 func test_to_targeting_dict_reports_def_range_default_priority_and_detection() -> bool:
 	Grid.set_active(23, 14)
 	var t := _ready_tower()
-	t.setup(&"mortar", 1, 1, 0)
+	t.setup(&"mortar", Vector2.ZERO, 0)
 	var d := t.to_targeting_dict()
 	assert_eq(d.keys().size(), 4, "exactly the documented keys, no more, no fewer")
 	assert_eq(d["position"], t.position, "position matches the tower's own position")
@@ -137,7 +135,7 @@ func test_to_targeting_dict_reports_def_range_default_priority_and_detection() -
 func test_tick_fires_once_when_a_candidate_is_in_range_and_resets_cooldown() -> bool:
 	Grid.set_active(23, 14)
 	var t := _ready_tower()
-	t.setup(&"mortar", 0, 0, 0)  # damage 5, pierce 0, splash 55.0, fire_rate 2000.0
+	t.setup(&"mortar", Vector2.ZERO, 0)  # damage 5, pierce 0, splash 55.0, fire_rate 2000.0
 
 	var target_node := Node2D.new()
 	var captured := {"count": 0, "target": null, "source": {}, "splash": -1.0}
@@ -172,7 +170,7 @@ func test_tick_fires_once_when_a_candidate_is_in_range_and_resets_cooldown() -> 
 func test_tick_does_not_fire_again_while_cooling_down() -> bool:
 	Grid.set_active(23, 14)
 	var t := _ready_tower()
-	t.setup(&"basic", 0, 0, 0)  # fire_rate 1000.0
+	t.setup(&"basic", Vector2.ZERO, 0)  # fire_rate 1000.0
 	var target_node := Node2D.new()
 	var count := {"n": 0}
 	t.wants_to_fire.connect(func(_a, _b, _c): count["n"] += 1)
@@ -193,7 +191,7 @@ func test_tick_does_not_fire_again_while_cooling_down() -> bool:
 func test_tick_fires_when_cooldown_decrements_to_exactly_zero() -> bool:
 	Grid.set_active(23, 14)
 	var t := _ready_tower()
-	t.setup(&"basic", 0, 0, 0)
+	t.setup(&"basic", Vector2.ZERO, 0)
 	t._cooldown = 16.0  # decrementing by delta_ms=16.0 lands exactly at 0.0
 	var target_node := Node2D.new()
 	var count := {"n": 0}
@@ -210,7 +208,7 @@ func test_tick_fires_when_cooldown_decrements_to_exactly_zero() -> bool:
 func test_tick_with_no_candidates_emits_nothing_and_does_not_reset_cooldown() -> bool:
 	Grid.set_active(23, 14)
 	var t := _ready_tower()
-	t.setup(&"basic", 0, 0, 0)
+	t.setup(&"basic", Vector2.ZERO, 0)
 	var count := {"n": 0}
 	t.wants_to_fire.connect(func(_a, _b, _c): count["n"] += 1)
 
@@ -225,7 +223,7 @@ func test_tick_with_no_candidates_emits_nothing_and_does_not_reset_cooldown() ->
 func test_tick_with_a_candidate_out_of_range_emits_nothing() -> bool:
 	Grid.set_active(23, 14)
 	var t := _ready_tower()
-	t.setup(&"basic", 0, 0, 0)  # range 100.0
+	t.setup(&"basic", Vector2.ZERO, 0)  # range 100.0
 	var target_node := Node2D.new()
 	var count := {"n": 0}
 	t.wants_to_fire.connect(func(_a, _b, _c): count["n"] += 1)
@@ -245,7 +243,7 @@ func test_tick_with_a_candidate_out_of_range_emits_nothing() -> bool:
 func test_set_range_visible_toggles_the_indicator() -> bool:
 	Grid.set_active(23, 14)
 	var t := _ready_tower()
-	t.setup(&"basic", 0, 0, 0)
+	t.setup(&"basic", Vector2.ZERO, 0)
 	assert_false(t._range_indicator.visible, "starts hidden after setup")
 
 	t.set_range_visible(true)
@@ -260,7 +258,7 @@ func test_set_range_visible_toggles_the_indicator() -> bool:
 func test_get_def_returns_the_towers_resolved_def() -> bool:
 	Grid.set_active(23, 14)
 	var t := _ready_tower()
-	t.setup(&"fast", 0, 0, 0)
+	t.setup(&"fast", Vector2.ZERO, 0)
 	assert_eq(t.get_def(), Towers.DEFS[&"fast"], "get_def exposes the def setup() resolved for this kind")
 	t.free()
 	return true
@@ -282,7 +280,7 @@ func test_click_area_matches_the_briefs_scene_tree_and_never_affects_targeting()
 
 	click_area.monitoring = false
 	click_area.monitorable = false
-	t.setup(&"basic", 0, 0, 0)
+	t.setup(&"basic", Vector2.ZERO, 0)
 	var target_node := Node2D.new()
 	var count := {"n": 0}
 	t.wants_to_fire.connect(func(_a, _b, _c): count["n"] += 1)
@@ -358,7 +356,7 @@ func test_the_build_panel_icon_and_the_placed_tower_share_one_region() -> bool:
 func _setup_tower(kind: StringName) -> Tower:
 	Grid.set_active(23, 14)
 	var t := _ready_tower()
-	t.setup(kind, 0, 0, EconomySim.tower_price(kind, 0))
+	t.setup(kind, Vector2.ZERO, EconomySim.tower_price(kind, 0))
 	return t
 
 func test_setup_starts_a_tower_with_no_tiers() -> bool:
@@ -503,12 +501,16 @@ func test_tick_splash_comes_from_the_resolved_stats() -> bool:
 func test_setup_lands_tiers_and_stats_even_when_the_sprite_half_aborts() -> bool:
 	Grid.set_active(23, 14)
 	var t: Tower = load("res://game/tower.tscn").instantiate()
-	t.setup(&"basic", 0, 0, 20)
+	t.setup(&"basic", Vector2(264.0, 360.0), 20)
 
 	assert_true(t._sprite == null, "precondition: this tower's @onready fields really are unresolved")
 	assert_eq(t.tiers[&"sustained"], 0, "tiers landed before the aborting line")
 	assert_eq(t.tiers[&"burst"], 0, "both branches of them")
 	assert_almost_eq(t.get_stats()["range"], 100.0, 0.0001, "and so did the resolved stats")
+	assert_eq(t.position, Vector2(264.0, 360.0),
+		"position is assigned above the first @onready access, so it survives the abort - "
+		+ "a tower whose sprite half aborted must still be somewhere real, or every later "
+		+ "distance test in the board and in Placement reads (0, 0)")
 	t.free()
 	return true
 

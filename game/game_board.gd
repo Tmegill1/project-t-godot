@@ -202,7 +202,7 @@ func _try_place(col: int, row: int) -> void:
 
 	var tower: Tower = TOWER_SCENE.instantiate()
 	_towers_root.add_child(tower)
-	tower.setup(_selected_kind, col, row, price)
+	tower.setup(_selected_kind, Grid.tile_to_world_center(col, row), price)
 	tower.wants_to_fire.connect(_on_tower_fired.bind(tower))
 
 	_occupied[Vector2i(col, row)] = tower
@@ -295,7 +295,10 @@ func sell_selected_tower() -> void:
 	_deselect_tower()
 	_gold += EconomySim.sell_refund(tower.price_paid)
 	_counts[tower.kind] -= 1
-	_occupied.erase(Vector2i(tower.grid_col, tower.grid_row))
+	for key in _occupied.keys():
+		if _occupied[key] == tower:
+			_occupied.erase(key)
+			break
 	tower.queue_free()
 	gold_changed.emit(_gold)
 	_play_sound(&"sell")

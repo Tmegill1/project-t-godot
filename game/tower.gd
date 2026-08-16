@@ -29,8 +29,6 @@ var kind: StringName
 ## Placement price plus every upgrade bought since, so sell_refund keeps its
 ## meaning as "half of everything sunk into this tower".
 var price_paid := 0
-var grid_col := 0
-var grid_row := 0
 ## Purchased tier per branch. Empty until setup() runs.
 var tiers := {}
 
@@ -46,10 +44,8 @@ var _range_visible := false
 @onready var _sprite: Sprite2D = $Sprite
 @onready var _range_indicator: Node2D = $RangeIndicator
 
-func setup(tower_kind: StringName, col: int, row: int, paid: int) -> void:
+func setup(tower_kind: StringName, world_pos: Vector2, paid: int) -> void:
 	kind = tower_kind
-	grid_col = col
-	grid_row = row
 	price_paid = paid
 	_def = Towers.DEFS[kind]
 	# Rules state before anything visual. The board instantiates a tower under
@@ -58,9 +54,15 @@ func setup(tower_kind: StringName, col: int, row: int, paid: int) -> void:
 	# the first line that touches one - everything assigned before that line
 	# still lands (see test_game_board.gd's header), and the upgrade path
 	# needs tiers and the resolved stats to be among them.
+	#
+	# `position` is now among them too, and must stay above the _sprite line:
+	# a tower is located by its position alone since grid_col/grid_row went
+	# away, so a tower that aborted before being positioned would sit at
+	# (0, 0) and every distance test in GameBoard and Placement would read it
+	# as being in the top-left corner of the map.
 	tiers = UpgradesSim.empty_tiers()
 	_stats = UpgradesSim.resolve_tower_stats(kind, tiers)
-	position = Grid.tile_to_world_center(col, row)
+	position = world_pos
 
 	var target_px := Tiles.TILE_SIZE * float(_def["size"])
 	_sprite.scale = Vector2.ONE * (target_px / FRAME_SIZE)

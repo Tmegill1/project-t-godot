@@ -264,7 +264,7 @@ func test_selecting_a_tower_on_the_board_shows_it() -> bool:
 	i.bind(b)
 	var t := _ready_tower_on(b)
 
-	b._handle_tap(Grid.tile_to_world_center(t.grid_col, t.grid_row))
+	b._handle_tap(t.position)
 
 	assert_true(i.has_tower(), "the tap selected it and the inspector followed")
 	assert_eq(i.branch_rows().size(), Upgrades.BRANCHES.size(), "with its rows drawn")
