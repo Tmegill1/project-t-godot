@@ -65,13 +65,40 @@ func clear_decoration_at(col: int, row: int) -> bool:
 	_decorations.erase(key)
 	return true
 
+## Fits a texture inside a size_px square box preserving the source aspect
+## ratio, then centres it in that box.
+##
+## DELIBERATE DIVERGENCE FROM THE REFERENCE. Phaser's MapRenderer.ts uses
+## setDisplaySize(size, size), which stretches each source to a square
+## whatever its true proportions are; most of this art is not square, so the
+## reference visibly distorts it (stone.png is 216x97 - squashed over 2:1 -
+## and cave.png 300x216). Matching that stretch was faithful but wrong-looking,
+## so the port scales uniformly instead. Anything comparing rendered geometry
+## against the Phaser build will differ here, by design.
+##
+## Centring has to be applied to the position because these sprites are
+## top-left anchored (centered = false, matching Phaser's setOrigin(0, 0)):
+## once a sprite no longer fills its box, the leftover slack is split evenly
+## rather than all landing on the right/bottom edge. A square source has zero
+## slack and so still lands exactly on its tile origin, which is what keeps
+## the ground layer flush and seam-free.
 func _place(texture: Texture2D, col: int, row: int, size_px: float,
 		z: int, offset := Vector2.ZERO) -> Sprite2D:
 	var s := Sprite2D.new()
 	s.texture = texture
 	s.centered = false
-	s.position = Vector2(col * Tiles.TILE_SIZE, row * Tiles.TILE_SIZE) + offset
-	s.scale = Vector2(size_px / texture.get_width(), size_px / texture.get_height())
+	var src := Vector2(texture.get_width(), texture.get_height())
+	var factor := size_px / maxf(src.x, src.y)
+	var slack := (Vector2(size_px, size_px) - src * factor) / 2.0
+	s.position = Vector2(col * Tiles.TILE_SIZE, row * Tiles.TILE_SIZE) + offset + slack
+	s.scale = Vector2.ONE * factor
+	# Every tile here is minified, several of them hard (stone.png 216px into
+	# 48px). The project-wide default filter is plain LINEAR, which samples the
+	# base level only and aliases badly at those ratios; this reads the mipmap
+	# chain that the .import files generate instead. LINEAR rather than NEAREST
+	# because this art is painted, not pixel art - the enemy sheets are the
+	# opposite case and take NEAREST (game/enemy.tscn).
+	s.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	s.z_index = z
 	add_child(s)
 	return s

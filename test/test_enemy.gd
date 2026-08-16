@@ -657,3 +657,34 @@ func test_a_plain_hit_leaves_no_residue_for_a_later_slow_to_inherit() -> bool:
 		"the weak slow is exactly as weak as it should be")
 	e.free()
 	return true
+
+# --------------------------------------------------------------------------
+# Sprite filtering
+# --------------------------------------------------------------------------
+
+# The enemy sheets are 48x48 hand-placed pixel art (hard edges, a handful of
+# colours per sprite) drawn at sprite_scale 0.7 or 1.2. Godot's project-wide
+# default canvas filter is LINEAR, which bilinearly blends those hard edges
+# into mush at any scale other than 1.0 - so the enemies rendered blurry
+# while every neighbouring element stayed sharp.
+#
+# This is set on the node in enemy.tscn rather than in setup(), so it holds
+# for an enemy that is instantiated but never set up too, and so it costs
+# nothing at runtime. The assertion reads the node property rather than the
+# scene file's text, so it stays true however the value comes to be set.
+#
+# Deliberately NOT applied project-wide: assets/map/*.png and towers.png are
+# painted, high-resolution art downscaled hard (stone.png 216px -> 48px, a
+# 22% reduction), and NEAREST on that produces dropped-pixel aliasing. Only
+# the genuine pixel art wants a nearest filter. See map_renderer.gd.
+func test_enemy_sprites_use_a_nearest_filter_so_the_pixel_art_stays_sharp() -> bool:
+	var e := _ready_enemy()
+	var sprite: AnimatedSprite2D = e.get_node("Sprite")
+
+	assert_eq(sprite.texture_filter, CanvasItem.TEXTURE_FILTER_NEAREST,
+		"the enemy sprite filters NEAREST, keeping 48px pixel art crisp at sprite_scale 0.7 and 1.2")
+	assert_false(sprite.texture_filter == CanvasItem.TEXTURE_FILTER_PARENT_NODE,
+		"the filter is stated on the sprite itself, not inherited from a parent that may not set one")
+
+	e.free()
+	return true

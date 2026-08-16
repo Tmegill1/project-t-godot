@@ -126,17 +126,45 @@ func test_endpoints_are_placed_and_scaled_correctly() -> bool:
 	assert_true(cave != null, "a cave sprite was drawn on the spawn tile")
 	assert_true(castle != null, "a castle sprite was drawn on the goal tile")
 
+	# These assertions used to require BOTH axes to measure TILE_SIZE * 3,
+	# which is what the Phaser reference's setDisplaySize(s, s) produces - and
+	# which stretched cave.png (300x216) and castle.png (287x305) off their
+	# true proportions. _place now contain-fits and centres instead (see its
+	# doc comment), so the endpoints are checked against that rule: the long
+	# axis fills the 3-tile box, the short axis keeps its ratio, and the
+	# leftover slack is split evenly around the documented base offset.
+	var box := float(Tiles.TILE_SIZE * 3)
 	var offset := Vector2(-Tiles.TILE_SIZE, -Tiles.TILE_SIZE - 20)
-	assert_eq(cave.position, Vector2(spawn_tile.x * Tiles.TILE_SIZE, spawn_tile.y * Tiles.TILE_SIZE) + offset,
-		"cave sits at the spawn tile origin plus the (-TILE_SIZE, -TILE_SIZE - 20) offset")
-	assert_eq(castle.position, Vector2(goal_tile.x * Tiles.TILE_SIZE, goal_tile.y * Tiles.TILE_SIZE) + offset,
-		"castle sits at the goal tile origin plus the (-TILE_SIZE, -TILE_SIZE - 20) offset")
 
-	var target := float(Tiles.TILE_SIZE * 3)
-	assert_almost_eq(cave.scale.x * cave.texture.get_width(), target, 0.01, "cave display width is TILE_SIZE * 3")
-	assert_almost_eq(cave.scale.y * cave.texture.get_height(), target, 0.01, "cave display height is TILE_SIZE * 3")
-	assert_almost_eq(castle.scale.x * castle.texture.get_width(), target, 0.01, "castle display width is TILE_SIZE * 3")
-	assert_almost_eq(castle.scale.y * castle.texture.get_height(), target, 0.01, "castle display height is TILE_SIZE * 3")
+	for entry in [[cave, spawn_tile, "cave", "spawn"], [castle, goal_tile, "castle", "goal"]]:
+		var sprite: Sprite2D = entry[0]
+		var tile: Vector2i = entry[1]
+		var name: String = entry[2]
+		var role: String = entry[3]
+		var tex := sprite.texture
+		var src := Vector2(tex.get_width(), tex.get_height())
+
+		assert_almost_eq(sprite.scale.x, sprite.scale.y, 0.0001,
+			"%s scales uniformly - it is not stretched to a square" % name)
+
+		var factor := box / maxf(src.x, src.y)
+		assert_almost_eq(sprite.scale.x, factor, 0.0001,
+			"%s's longest axis fills the 3-tile box exactly" % name)
+
+		var display := src * sprite.scale
+		assert_almost_eq(maxf(display.x, display.y), box, 0.01,
+			"%s's long axis measures TILE_SIZE * 3" % name)
+		assert_true(minf(display.x, display.y) <= box + 0.01,
+			"%s's short axis stays inside the 3-tile box (got %.2fx%.2f)" % [name, display.x, display.y])
+		assert_almost_eq(display.x / display.y, src.x / src.y, 0.0001,
+			"%s keeps its source aspect ratio (%dx%d)" % [name, tex.get_width(), tex.get_height()])
+
+		var base := Vector2(tile.x * Tiles.TILE_SIZE, tile.y * Tiles.TILE_SIZE) + offset
+		var slack := (Vector2(box, box) - display) / 2.0
+		assert_almost_eq(sprite.position.x, base.x + slack.x, 0.01,
+			"%s sits at the %s tile origin plus the (-TILE_SIZE, -TILE_SIZE - 20) offset, centred horizontally" % [name, role])
+		assert_almost_eq(sprite.position.y, base.y + slack.y, 0.01,
+			"%s sits at the %s tile origin plus the (-TILE_SIZE, -TILE_SIZE - 20) offset, centred vertically" % [name, role])
 
 	mr.free()
 	return true
@@ -493,6 +521,92 @@ func test_blocked_tiles_get_three_to_five_stones_and_nothing_in_the_exclusion_zo
 	mr.free()
 	return true
 
+# _place fits a texture inside a size_px square box *preserving the source
+# aspect ratio*, then centres the result in that box. This is a deliberate
+# divergence from the Phaser reference, which calls
+# setDisplaySize(TILE_SIZE, TILE_SIZE) and therefore stretches every source
+# to a square regardless of its true proportions - stone.png is 216x97, so
+# the reference (and this port before the fix) squashed it more than 2:1.
+#
+# stone.png is the sharpest case in the asset set: nearly 2.23:1, so a
+# regression to non-uniform scaling is impossible to miss here. Expected
+# geometry is derived from the texture's own dimensions rather than
+# hardcoded, so the rule is what is pinned, not one particular PNG's size.
+func test_decorations_preserve_their_aspect_ratio_and_sit_centred_in_the_tile() -> bool:
+	Grid.set_active(DemoMap.GRID_COLS, DemoMap.GRID_ROWS)
+	var tiles := _demo_tiles()
+	var mr := MapRenderer.new()
+	mr.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED))
+
+	var stone: Sprite2D = null
+	for child in mr.get_children():
+		if child is Sprite2D and child.texture.resource_path == _STONE_PATH:
+			stone = child
+			break
+	assert_true(stone != null, "a stone sprite was drawn on the demo map")
+
+	var tex := stone.texture
+	assert_false(tex.get_width() == tex.get_height(),
+		"precondition: stone.png is genuinely non-square (%dx%d), so uniform scaling is observable"
+			% [tex.get_width(), tex.get_height()])
+
+	assert_almost_eq(stone.scale.x, stone.scale.y, 0.0001,
+		"scale is uniform on both axes - the source is not stretched out of proportion")
+
+	var box := float(Tiles.TILE_SIZE)
+	var expected_scale := box / maxf(float(tex.get_width()), float(tex.get_height()))
+	assert_almost_eq(stone.scale.x, expected_scale, 0.0001,
+		"the longest source axis is fitted to exactly one tile (contain-fit, not cover)")
+
+	var display := Vector2(tex.get_width(), tex.get_height()) * stone.scale
+	assert_true(display.x <= box + 0.01 and display.y <= box + 0.01,
+		"the scaled sprite fits inside its %dpx tile box (got %.2fx%.2f)" % [Tiles.TILE_SIZE, display.x, display.y])
+
+	# Top-left anchored (centered = false), so centring has to come from the
+	# position: without it an aspect-corrected short/wide sprite would hug the
+	# top edge of its tile instead of sitting in the middle of it.
+	var tile := Vector2i(int(stone.position.x / box), int(stone.position.y / box))
+	var origin := Vector2(tile.x * box, tile.y * box)
+	assert_almost_eq(stone.position.x - origin.x, (box - display.x) / 2.0, 0.01,
+		"horizontal slack is split evenly, centring the sprite in its tile")
+	assert_almost_eq(stone.position.y - origin.y, (box - display.y) / 2.0, 0.01,
+		"vertical slack is split evenly, centring the sprite in its tile")
+
+	mr.free()
+	return true
+
+# A square source has zero slack to distribute, so it must land exactly on
+# its tile origin with a scale of TILE_SIZE / source size. This pins the
+# centring offset as *derived* rather than a constant: an implementation that
+# always shifted by a fixed amount would pass the stone test above but move
+# ground tiles off the grid, opening seams between them.
+func test_square_ground_tiles_still_land_exactly_on_their_tile_origin() -> bool:
+	Grid.set_active(DemoMap.GRID_COLS, DemoMap.GRID_ROWS)
+	var tiles := _demo_tiles()
+	var mr := MapRenderer.new()
+	mr.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED))
+
+	var grass: Sprite2D = null
+	for child in mr.get_children():
+		if child is Sprite2D and child.texture.resource_path == _GRASS_PATH:
+			grass = child
+			break
+	assert_true(grass != null, "a grass sprite was drawn on the demo map")
+
+	var tex := grass.texture
+	assert_eq(tex.get_width(), tex.get_height(), "precondition: grass.png is square")
+
+	var box := float(Tiles.TILE_SIZE)
+	assert_almost_eq(grass.scale.x, box / float(tex.get_width()), 0.0001, "grass scales to exactly one tile wide")
+	assert_almost_eq(grass.scale.y, box / float(tex.get_height()), 0.0001, "grass scales to exactly one tile tall")
+
+	var tile := Vector2i(int(grass.position.x / box), int(grass.position.y / box))
+	assert_eq(grass.position, Vector2(tile.x * box, tile.y * box),
+		"a square source gets no centring shift - ground tiles stay flush on the grid, leaving no seams")
+
+	mr.free()
+	return true
+
 func test_clear_decoration_at_removes_a_decorated_tile_and_is_idempotent() -> bool:
 	Grid.set_active(DemoMap.GRID_COLS, DemoMap.GRID_ROWS)
 	var tiles := _demo_tiles()
@@ -642,4 +756,30 @@ func test_grid_overlay_sits_above_ground_and_below_decoration() -> bool:
 func test_grid_line_color_matches_the_reference() -> bool:
 	assert_eq(MapRenderer._GRID_LINE_COLOR, Color8(0x2a, 0x2a, 0x2a),
 		"grid overlay strokes match the reference MapRenderer.ts drawGrid()'s 0x2a2a2a")
+	return true
+
+# The mipmap chain that test_map_assets.gd gates is inert unless the sprite
+# selects a filter that reads it: Godot's TEXTURE_FILTER_LINEAR (the project
+# default) samples the base level only, however many mip levels exist. This is
+# LINEAR_WITH_MIPMAPS and not NEAREST_WITH_MIPMAPS because the map art is
+# painted, high-resolution artwork rather than pixel art - the opposite call
+# from the enemy sheets, which are 48px pixel art and take a NEAREST filter
+# (see test_enemy.gd). Two different asset classes, two different right answers,
+# which is why neither is set project-wide as a default.
+func test_map_sprites_select_a_filter_that_actually_samples_the_mipmap_chain() -> bool:
+	Grid.set_active(DemoMap.GRID_COLS, DemoMap.GRID_ROWS)
+	var tiles := _demo_tiles()
+	var mr := MapRenderer.new()
+	mr.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED))
+
+	var checked := 0
+	for child in mr.get_children():
+		if not (child is Sprite2D):
+			continue
+		checked += 1
+		assert_eq(child.texture_filter, CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS,
+			"%s samples the mipmap chain when minified" % child.texture.resource_path.get_file())
+	assert_true(checked > 0, "precondition: the render produced sprites to check")
+
+	mr.free()
 	return true

@@ -6,6 +6,7 @@
 script = ExtResource("1_enemy")
 
 [node name="Sprite" type="AnimatedSprite2D" parent="."]
+texture_filter = 1
 
 [node name="HealthBar" type="ColorRect" parent="."]
 position = Vector2(-16, -22)

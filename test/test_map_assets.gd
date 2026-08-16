@@ -211,3 +211,40 @@ func test_every_tile_is_the_size_of_the_slicer_rect_that_produced_it() -> bool:
 		var name: String = tile
 		assert_true(name in seen, "the slicer still produces %s.png" % name)
 	return true
+
+# GATE 5 - MIPMAPS. Unlike everything above, this one deliberately inspects the
+# *imported* Texture2D rather than the committed PNG bytes: mipmap generation is
+# an import setting (mipmaps/generate in the .import sidecar), so it has no
+# representation in the source file at all and reading the PNG cannot see it.
+#
+# Every one of these tiles is minified on screen, several of them hard:
+# stone.png is 216px wide drawn into 48px (22%), tree.png 165px tall into 48px
+# (29%), castle.png 305px into 144px (47%). Minifying that far with no mipmap
+# chain means each output pixel samples a handful of source texels out of the
+# dozens it covers, so which texels win depends on subpixel position - the
+# classic shimmer/aliasing on detailed downscaled art. The mipmap chain is what
+# gives the sampler a correctly pre-averaged level to read instead.
+#
+# The chain is only half the fix: map_renderer.gd must also select a filter that
+# actually samples it (TEXTURE_FILTER_LINEAR_WITH_MIPMAPS), which
+# test_map_renderer.gd pins. Generating mipmaps nobody reads changes nothing on
+# screen, so neither test is sufficient alone.
+#
+# If this goes red after an asset is re-cut: set mipmaps/generate=true in that
+# tile's .import and re-run `godot --headless --import`. Do not delete the gate.
+func test_every_map_tile_is_imported_with_a_mipmap_chain() -> bool:
+	for tile in _PROP_TILES + _GROUND_TILES:
+		var name: String = tile
+		var tex: Texture2D = load(_MAP_DIR + name + ".png")
+		assert_true(tex != null, "%s.png imports to a Texture2D" % name)
+		if tex == null:
+			continue
+		var img: Image = tex.get_image()
+		assert_true(img != null, "%s.png's imported texture exposes its image" % name)
+		if img == null:
+			continue
+		assert_true(img.has_mipmaps(),
+			("%s.png is minified on the board (%dx%d source) and needs a mipmap chain to " +
+			"downscale without aliasing - set mipmaps/generate=true in its .import and " +
+			"re-run `godot --headless --import`.") % [name, img.get_width(), img.get_height()])
+	return true
