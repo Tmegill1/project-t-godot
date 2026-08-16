@@ -23,13 +23,6 @@ func _ready_board() -> GameBoard:
 	b.notification(Node.NOTIFICATION_READY)
 	return b
 
-func _find_buildable_tile(b: GameBoard) -> Vector2i:
-	for r in b._tiles.size():
-		for c in b._tiles[r].size():
-			if b._tiles[r][c] == Tiles.BUILDABLE:
-				return Vector2i(c, r)
-	return Vector2i(-1, -1)
-
 # --------------------------------------------------------------------------
 # bind()
 # --------------------------------------------------------------------------

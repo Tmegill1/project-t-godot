@@ -34,7 +34,6 @@ var _wave_active := false
 var _run_finished := false
 var _selected_kind: StringName = &""
 var _selected_tower: Tower = null
-var _occupied := {}          # Vector2i -> Tower
 var _counts := {}            # StringName -> int
 var _spawn_queue: Array = []  # {kind, at_ms}
 var _wave_clock := 0.0
@@ -162,24 +161,51 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 func _handle_tap(world: Vector2) -> void:
-	var t := Grid.world_to_tile(world.x, world.y)
-	if not t["in_bounds"]:
-		return
-	var key := Vector2i(t["col"], t["row"])
-
-	if _occupied.has(key):
-		_select_tower(_occupied[key])
+	var hit := _tower_at(world)
+	if hit != null:
+		_select_tower(hit)
 		return
 
 	if _selected_kind == &"":
 		_deselect_tower()
 		return
 
-	_try_place(t["col"], t["row"])
+	_try_place(world)
 
-func _try_place(col: int, row: int) -> void:
-	if _tiles[row][col] != Tiles.BUILDABLE:
-		placement_rejected.emit("You can only build on open ground.")
+## The nearest tower whose own radius contains `world`, or null.
+##
+## Nearest rather than first-match: at the shipped MIN_TOWER_SPACING two hit
+## circles cannot overlap, but they can as soon as that value is tuned down,
+## and a first-match scan would then make selection depend on child order -
+## a bug that would surface during balance tuning, far from its cause.
+func _tower_at(world: Vector2) -> Tower:
+	var best: Tower = null
+	var best_distance := INF
+	for child in _towers_root.get_children():
+		var tower: Tower = child
+		var distance := world.distance_to(tower.position)
+		if distance <= Placement.tower_radius(tower.kind) and distance < best_distance:
+			best = tower
+			best_distance = distance
+	return best
+
+## Every tower's position, for Placement.can_place's spacing check.
+func _tower_positions() -> Array:
+	var out: Array = []
+	for child in _towers_root.get_children():
+		out.append(child.position)
+	return out
+
+func _try_place(world: Vector2) -> void:
+	var verdict := Placement.can_place(
+		world,
+		Placement.tower_radius(_selected_kind),
+		_map_renderer.prop_footprints(),
+		_tower_positions(),
+		_paths,
+		Rect2(Vector2.ZERO, Vector2(Maps.pixel_size(_map_name))))
+	if not verdict["ok"]:
+		placement_rejected.emit(_rejection_message(verdict["reason"]))
 		_play_sound(&"denied")
 		return
 
@@ -202,13 +228,11 @@ func _try_place(col: int, row: int) -> void:
 
 	var tower: Tower = TOWER_SCENE.instantiate()
 	_towers_root.add_child(tower)
-	tower.setup(_selected_kind, Grid.tile_to_world_center(col, row), price)
+	tower.setup(_selected_kind, world, price)
 	tower.wants_to_fire.connect(_on_tower_fired.bind(tower))
 
-	_occupied[Vector2i(col, row)] = tower
 	_counts[_selected_kind] += 1
 	_gold -= price
-	_map_renderer.clear_decoration_at(col, row)
 
 	gold_changed.emit(_gold)
 	var placed_kind := _selected_kind
@@ -220,6 +244,21 @@ func _try_place(col: int, row: int) -> void:
 
 	tower_placed.emit(placed_kind)
 	_play_sound(&"place")
+
+## Player-facing text for a Placement refusal. A match rather than a const
+## dictionary: a const whose keys reference another class's constants is
+## evaluated at parse time and is fragile across script load order.
+func _rejection_message(reason: StringName) -> String:
+	match reason:
+		Placement.REASON_OUT_OF_BOUNDS:
+			return "That is off the edge of the map."
+		Placement.REASON_ON_PATH:
+			return "You cannot build on the road."
+		Placement.REASON_BLOCKED_BY_PROP:
+			return "Something is already in the way there."
+		Placement.REASON_TOO_CLOSE:
+			return "That is too close to another tower."
+	return "You cannot build there."
 
 func _on_tower_fired(target_node: Node2D, source: Dictionary,
 		splash: float, tower: Tower) -> void:
@@ -295,10 +334,6 @@ func sell_selected_tower() -> void:
 	_deselect_tower()
 	_gold += EconomySim.sell_refund(tower.price_paid)
 	_counts[tower.kind] -= 1
-	for key in _occupied.keys():
-		if _occupied[key] == tower:
-			_occupied.erase(key)
-			break
 	tower.queue_free()
 	gold_changed.emit(_gold)
 	_play_sound(&"sell")

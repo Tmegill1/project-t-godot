@@ -24,29 +24,37 @@ func _ready_board() -> GameBoard:
 	b.notification(Node.NOTIFICATION_READY)
 	return b
 
-func _first_buildable_tile(b: GameBoard) -> Vector2i:
+## The first world position the board will actually accept right now, found
+## the same way test_game_board.gd's _find_placeable_positions does: by
+## asking the real rule rather than reimplementing it. Unlike that helper,
+## this consults the board's actual towers (b._tower_positions()) rather than
+## a locally tracked list, because _place_tower below calls this after a
+## first tower already sits on the board.
+func _first_placeable_position(b: GameBoard) -> Vector2:
+	var bounds := Rect2(Vector2.ZERO, Vector2(Maps.pixel_size(b._map_name)))
+	var radius := Placement.tower_radius(&"basic")
 	for r in b._tiles.size():
 		for c in b._tiles[r].size():
-			if b._tiles[r][c] == Tiles.BUILDABLE:
-				return Vector2i(c, r)
-	return Vector2i(-1, -1)
+			var pos := Grid.tile_to_world_center(c, r)
+			var verdict := Placement.can_place(
+				pos, radius, b._map_renderer.prop_footprints(), b._tower_positions(), b._paths, bounds)
+			if verdict["ok"]:
+				return pos
+	return Vector2.ZERO
 
 func _ready_tower_on(b: GameBoard) -> Tower:
 	b._gold = 5000
-	var tile := _first_buildable_tile(b)
+	var pos := _first_placeable_position(b)
 	b.select_tower_kind(&"basic")
-	b._try_place(tile.x, tile.y)
+	b._try_place(pos)
 	return b._towers_root.get_child(0)
 
 func _place_tower(b: GameBoard, kind: StringName) -> Tower:
 	var placed := b._towers_root.get_child_count()
 	b.select_tower_kind(kind)
-	for r in b._tiles.size():
-		for c in b._tiles[r].size():
-			if b._tiles[r][c] == Tiles.BUILDABLE and not b._occupied.has(Vector2i(c, r)):
-				b._try_place(c, r)
-				if b._towers_root.get_child_count() > placed:
-					return b._towers_root.get_child(placed)
+	b._try_place(_first_placeable_position(b))
+	if b._towers_root.get_child_count() > placed:
+		return b._towers_root.get_child(placed)
 	return null
 
 func test_starts_empty_with_no_tower_shown() -> bool:

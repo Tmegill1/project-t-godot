@@ -1,8 +1,8 @@
 extends TestCase
 
 # GameBoard is the hub that wires sim to views, so most of these tests read
-# and mutate its private state directly (Grid tile scans, _occupied,
-# _counts, _selected_tower, ...) the same way test_enemy.gd and
+# and mutate its private state directly (Grid tile scans, _counts,
+# _selected_tower, ...) the same way test_enemy.gd and
 # test_tower.gd reach into Enemy/Tower's own private state.
 #
 # @onready resolution: as in test_enemy.gd/test_tower.gd, add_child() alone
@@ -25,8 +25,8 @@ extends TestCase
 # SCRIPT ERROR and substitutes that call's default, per run_tests.gd's
 # documented crash-recovery semantics - the caller is unaffected). Verified
 # directly with a throwaway probe before writing any test below: every
-# board-owned field setup() assigns BEFORE that line - kind, grid_col/
-# grid_row, price_paid, position, _def for Tower; kind, sim (fully
+# board-owned field setup() assigns BEFORE that line - kind, price_paid,
+# _def, tiers, _stats, position for Tower; kind, sim (fully
 # populated), position for Enemy - lands correctly, and only the purely
 # visual remainder (sprite texture/scale, range indicator, health bar) is
 # skipped. So tests that exercise _try_place()/_spawn() (placement rules,
@@ -53,31 +53,26 @@ func _ready_enemy_under(root: Node2D, kind: StringName, pos: Vector2) -> Enemy:
 	e.setup(kind, PackedVector2Array([pos, pos + Vector2(1.0, 0.0)]), 1)
 	return e
 
-## First `count` BUILDABLE tiles found scanning the board's own tiles in
-## row-major order. The demo map's generation is seeded and deterministic,
-## so this is stable across runs without hardcoding coordinates that would
-## silently go stale if the map or its seed ever changed.
-func _find_buildable_tiles(b: GameBoard, count: int) -> Array[Vector2i]:
-	var found: Array[Vector2i] = []
+## First `count` world positions the board will actually accept, found by
+## asking the real rule rather than by reimplementing it. Scans tile centres
+## in row-major order purely as a convenient sweep of the map; the tiles carry
+## no meaning here beyond being evenly spaced sample points. The demo map is
+## seeded and deterministic, so this is stable across runs without hardcoding
+## coordinates that would silently go stale if the map or its seed changed.
+func _find_placeable_positions(b: GameBoard, count: int) -> Array[Vector2]:
+	var found: Array[Vector2] = []
+	var bounds := Rect2(Vector2.ZERO, Vector2(Maps.pixel_size(b._map_name)))
+	var radius := Placement.tower_radius(&"basic")
 	for r in b._tiles.size():
 		for c in b._tiles[r].size():
-			if b._tiles[r][c] == Tiles.BUILDABLE:
-				found.append(Vector2i(c, r))
+			var pos := Grid.tile_to_world_center(c, r)
+			var verdict := Placement.can_place(
+				pos, radius, b._map_renderer.prop_footprints(), found, b._paths, bounds)
+			if verdict["ok"]:
+				found.append(pos)
 				if found.size() >= count:
 					return found
 	return found
-
-func _find_tile(b: GameBoard, kind: StringName) -> Vector2i:
-	for r in b._tiles.size():
-		for c in b._tiles[r].size():
-			if b._tiles[r][c] == kind:
-				return Vector2i(c, r)
-	return Vector2i(-1, -1)
-
-func _find_decorated_buildable_tile(b: GameBoard) -> Vector2i:
-	for key in b._map_renderer._decorations.keys():
-		return key
-	return Vector2i(-1, -1)
 
 # --------------------------------------------------------------------------
 # _ready()
@@ -109,48 +104,34 @@ func test_ready_emits_initial_gold_lives_and_wave() -> bool:
 # Placement rejection reasons
 # --------------------------------------------------------------------------
 
-func test_handle_tap_off_grid_is_ignored() -> bool:
+func test_handle_tap_off_grid_is_rejected_as_out_of_bounds() -> bool:
 	var b := _ready_board()
 	b.select_tower_kind(&"basic")
-	var rejected := {"count": 0}
-	b.placement_rejected.connect(func(_r): rejected["count"] += 1)
+	var rejected := {"count": 0, "reason": ""}
+	b.placement_rejected.connect(func(r): rejected["count"] += 1; rejected["reason"] = r)
 	var gold_before := b.get_gold()
 
-	# Deliberately one tile short of the grid, not a huge negative offset:
-	# world_to_tile(-24, -24) resolves to col=-1, row=-1, and GDScript Array
-	# indexing treats a small negative index as "from the end" rather than
-	# raising an out-of-bounds error - so a broken `in_bounds` guard would
-	# silently fall through to _try_place() reading a real (wrong) tile
-	# instead of crashing before this test's assertions run. A far-off-grid
-	# coordinate like (-1000, -1000) would instead hit a genuine
-	# out-of-bounds error inside _try_place() and abort that call before any
-	# rejection/placement state changes - which would make this test pass
-	# "by accident" even with the `in_bounds` guard inverted, since the
-	# crash (not the guard) is what stopped the placement. Confirmed by
-	# actually running that mutation against the (-1000, -1000) version
-	# before switching to this one.
+	# _handle_tap no longer special-cases out-of-bounds via a tile lookup - it
+	# routes every tap without a tower hit straight into _try_place(), so an
+	# off-map point is caught by Placement.can_place's own bounds check
+	# instead of being silently swallowed beforehand.
 	b._handle_tap(Vector2(-24, -24))
 
-	assert_eq(rejected["count"], 0, "an off-grid tap is silently ignored, not rejected")
+	assert_eq(rejected["count"], 1, "an off-grid tap is rejected through the same path as any other illegal spot")
+	assert_eq(rejected["reason"], "That is off the edge of the map.", "reason names the bounds violation")
 	assert_eq(b.get_gold(), gold_before, "no gold spent")
 	assert_eq(b._towers_root.get_child_count(), 0, "no tower placed")
 	b.free()
 	return true
 
-func test_try_place_rejects_a_non_buildable_tile() -> bool:
+func test_try_place_rejects_a_spot_on_the_road() -> bool:
 	var b := _ready_board()
 	b.select_tower_kind(&"basic")
-	var blocked := _find_tile(b, Tiles.BLOCKED)
-	assert_true(blocked.x >= 0, "precondition: the demo map has at least one blocked tile")
-
-	var rejected := {"count": 0, "reason": ""}
-	b.placement_rejected.connect(func(r): rejected["count"] += 1; rejected["reason"] = r)
-
-	b._try_place(blocked.x, blocked.y)
-
-	assert_eq(rejected["count"], 1, "rejected exactly once")
-	assert_eq(rejected["reason"], "You can only build on open ground.", "reason names open ground")
-	assert_eq(b._towers_root.get_child_count(), 0, "no tower placed")
+	var gold_before := b._gold
+	# The first point of the first spawn path is the road itself.
+	b._try_place(b._paths[0][0])
+	assert_eq(b._towers_root.get_child_count(), 0, "no tower was built on the road")
+	assert_eq(b._gold, gold_before, "and no gold was spent")
 	b.free()
 	return true
 
@@ -161,20 +142,20 @@ func test_try_place_enforces_the_tower_budget_at_the_boundary() -> bool:
 	b._gold = 1000000
 	var budget := int(Maps.get_def(Maps.FIRST)["tower_budget"])
 	assert_eq(budget, 16, "precondition: demoMap's tower_budget is 16")
-	var tiles := _find_buildable_tiles(b, budget + 1)
-	assert_eq(tiles.size(), budget + 1, "precondition: enough buildable tiles exist for this test")
+	var positions := _find_placeable_positions(b, budget + 1)
+	assert_eq(positions.size(), budget + 1, "precondition: enough placeable positions exist for this test")
 
 	# basic's per-kind limit is 8 and fast's is 8 (8 + 8 = 16), so filling
 	# the budget exactly does not also trip the per-kind limit check first.
 	for i in budget:
 		b.select_tower_kind(&"basic" if i < 8 else &"fast")
-		b._try_place(tiles[i].x, tiles[i].y)
+		b._try_place(positions[i])
 	assert_eq(b._towers_root.get_child_count(), budget, "precondition: exactly `budget` towers placed")
 
 	var rejected := {"count": 0, "reason": ""}
 	b.placement_rejected.connect(func(r): rejected["count"] += 1; rejected["reason"] = r)
 	b.select_tower_kind(&"basic")
-	b._try_place(tiles[budget].x, tiles[budget].y)
+	b._try_place(positions[budget])
 
 	assert_eq(rejected["count"], 1, "the (budget + 1)th placement is rejected")
 	assert_eq(rejected["reason"], "Tower budget reached.", "budget rejection message")
@@ -191,17 +172,17 @@ func test_try_place_enforces_the_per_kind_limit_at_the_boundary() -> bool:
 	var kind := &"mortar"
 	var limit := EconomySim.tower_limit(kind, Maps.FIRST)
 	assert_eq(limit, 5, "precondition: mortar's tower_limit on demoMap is 5")
-	var tiles := _find_buildable_tiles(b, limit + 1)
+	var positions := _find_placeable_positions(b, limit + 1)
 	for i in limit:
 		# Re-arm each time: a successful placement now consumes the selection.
 		b.select_tower_kind(kind)
-		b._try_place(tiles[i].x, tiles[i].y)
+		b._try_place(positions[i])
 	assert_eq(b.get_tower_count(kind), limit, "precondition: exactly the limit placed")
 
 	var rejected := {"count": 0, "reason": ""}
 	b.placement_rejected.connect(func(r): rejected["count"] += 1; rejected["reason"] = r)
 	b.select_tower_kind(kind)
-	b._try_place(tiles[limit].x, tiles[limit].y)
+	b._try_place(positions[limit])
 
 	assert_eq(rejected["count"], 1, "the (limit + 1)th placement of the same kind is rejected")
 	assert_eq(rejected["reason"], "You cannot build any more of that tower.", "per-kind limit message")
@@ -213,12 +194,12 @@ func test_try_place_rejects_when_gold_is_insufficient() -> bool:
 	var b := _ready_board()
 	b._gold = 5  # below basic's base price of 20
 	b.select_tower_kind(&"basic")
-	var tile := _find_buildable_tiles(b, 1)[0]
+	var pos := _find_placeable_positions(b, 1)[0]
 	var expected_price := EconomySim.tower_price(&"basic", 0)
 
 	var rejected := {"count": 0, "reason": ""}
 	b.placement_rejected.connect(func(r): rejected["count"] += 1; rejected["reason"] = r)
-	b._try_place(tile.x, tile.y)
+	b._try_place(pos)
 
 	assert_eq(rejected["count"], 1, "rejected exactly once")
 	assert_eq(rejected["reason"], "Not enough gold — that costs %d." % expected_price,
@@ -232,9 +213,9 @@ func test_try_place_rejects_when_gold_is_insufficient() -> bool:
 # Successful placement
 # --------------------------------------------------------------------------
 
-func test_try_place_success_deducts_gold_marks_occupied_and_emits_signals() -> bool:
+func test_try_place_success_deducts_gold_and_emits_signals() -> bool:
 	var b := _ready_board()
-	var tile := _find_buildable_tiles(b, 1)[0]
+	var pos := _find_placeable_positions(b, 1)[0]
 	b.select_tower_kind(&"fast")
 	var gold_before := b.get_gold()
 	var expected_price := EconomySim.tower_price(&"fast", 0)
@@ -244,46 +225,34 @@ func test_try_place_success_deducts_gold_marks_occupied_and_emits_signals() -> b
 	b.gold_changed.connect(func(g): gold_events.append(g))
 	b.tower_placed.connect(func(k): placed_events.append(k))
 
-	b._try_place(tile.x, tile.y)
+	b._try_place(pos)
 
 	assert_eq(b.get_gold(), gold_before - expected_price, "gold reduced by exactly the price")
 	assert_eq(gold_events, [b.get_gold()], "gold_changed emitted exactly once with the new total")
 	assert_eq(placed_events, [&"fast"], "tower_placed emitted exactly once with the placed kind")
 	assert_eq(b.get_tower_count(&"fast"), 1, "per-kind count incremented")
-	assert_true(b._occupied.has(tile), "tile marked occupied")
-	assert_eq(b._occupied[tile].kind, &"fast", "the occupying tower is the one just placed")
 	assert_eq(b._towers_root.get_child_count(), 1, "one tower node added")
-	b.free()
-	return true
-
-func test_try_place_success_clears_the_tiles_decoration() -> bool:
-	var b := _ready_board()
-	var tile := _find_decorated_buildable_tile(b)
-	assert_true(tile.x >= 0, "precondition: the demo map has at least one decorated buildable tile")
-	assert_true(b._map_renderer._decorations.has(tile), "precondition: a decoration sits on this tile before placement")
-
-	b.select_tower_kind(&"basic")
-	b._try_place(tile.x, tile.y)
-
-	assert_false(b._map_renderer._decorations.has(tile), "the decoration is cleared once a tower occupies its tile")
+	var tower: Tower = b._towers_root.get_child(0)
+	assert_eq(tower.kind, &"fast", "the placed tower is the kind that was selected")
+	assert_eq(tower.position, pos, "the tower sits exactly where it was placed - its position is the only record")
 	b.free()
 	return true
 
 func test_placing_a_second_tower_of_a_kind_charges_the_escalated_price() -> bool:
 	var b := _ready_board()
 	b._gold = 1000
-	var tiles := _find_buildable_tiles(b, 2)
+	var positions := _find_placeable_positions(b, 2)
 	b.select_tower_kind(&"basic")
 
 	var first_price := EconomySim.tower_price(&"basic", 0)
 	var second_price := EconomySim.tower_price(&"basic", 1)
 	assert_true(second_price > first_price, "precondition: the second tower costs strictly more than the first")
 
-	b._try_place(tiles[0].x, tiles[0].y)
+	b._try_place(positions[0])
 	var gold_after_first := b.get_gold()
 	# Re-arm: a successful placement now consumes the selection.
 	b.select_tower_kind(&"basic")
-	b._try_place(tiles[1].x, tiles[1].y)
+	b._try_place(positions[1])
 
 	assert_eq(gold_after_first, 1000 - first_price, "the first tower was charged the base price")
 	assert_eq(b.get_gold(), gold_after_first - second_price, "the second tower was charged the escalated price, not the base again")
@@ -297,25 +266,26 @@ func test_placing_a_second_tower_of_a_kind_charges_the_escalated_price() -> bool
 func test_a_successful_placement_clears_the_selected_kind() -> bool:
 	var b := _ready_board()
 	b._gold = 1000
-	var tile := _find_buildable_tiles(b, 1)[0]
+	var pos := _find_placeable_positions(b, 1)[0]
 	b.select_tower_kind(&"basic")
 	assert_eq(b._selected_kind, &"basic", "precondition: the kind is armed")
 
-	b._try_place(tile.x, tile.y)
+	b._try_place(pos)
 
 	assert_eq(b._selected_kind, &"", "placing a tower disarms the selected kind")
 	b.free()
 	return true
 
-# The selection must survive a rejection, or a mis-tap on a blocked tile would
+# The selection must survive a rejection, or a mis-tap on the road would
 # silently disarm you and the next tap would do nothing.
 func test_a_rejected_placement_leaves_the_selection_armed() -> bool:
 	var b := _ready_board()
 	b._gold = 1000
 	b.select_tower_kind(&"basic")
-	var blocked := _find_tile(b, Tiles.BLOCKED)
 
-	b._try_place(blocked.x, blocked.y)
+	# The first point of the first spawn path is the road itself - guaranteed
+	# to be refused regardless of map layout.
+	b._try_place(b._paths[0][0])
 
 	assert_eq(b._selected_kind, &"basic", "a rejected placement leaves the kind armed to retry")
 	b.free()
@@ -325,9 +295,9 @@ func test_a_rejection_for_insufficient_gold_also_leaves_the_selection_armed() ->
 	var b := _ready_board()
 	b._gold = 5  # below basic's base price of 20
 	b.select_tower_kind(&"basic")
-	var tile := _find_buildable_tiles(b, 1)[0]
+	var pos := _find_placeable_positions(b, 1)[0]
 
-	b._try_place(tile.x, tile.y)
+	b._try_place(pos)
 
 	assert_eq(b._selected_kind, &"basic", "an unaffordable placement leaves the kind armed")
 	assert_eq(b.get_tower_count(&"basic"), 0, "precondition: nothing was placed")
@@ -339,12 +309,12 @@ func test_a_rejection_for_insufficient_gold_also_leaves_the_selection_armed() ->
 func test_tower_placed_still_reports_the_kind_despite_the_selection_clearing() -> bool:
 	var b := _ready_board()
 	b._gold = 1000
-	var tile := _find_buildable_tiles(b, 1)[0]
+	var pos := _find_placeable_positions(b, 1)[0]
 	var seen := {"kind": &"unset", "count": 0}
 	b.tower_placed.connect(func(k): seen["kind"] = k; seen["count"] += 1)
 
 	b.select_tower_kind(&"mortar")
-	b._try_place(tile.x, tile.y)
+	b._try_place(pos)
 
 	assert_eq(seen["count"], 1, "tower_placed fired exactly once")
 	assert_eq(seen["kind"], &"mortar", "tower_placed carries the placed kind, not the cleared empty selection")
@@ -357,10 +327,10 @@ func test_tower_placed_still_reports_the_kind_despite_the_selection_clearing() -
 
 func test_select_tower_kind_deselects_the_currently_selected_tower() -> bool:
 	var b := _ready_board()
-	var tile := _find_buildable_tiles(b, 1)[0]
+	var pos := _find_placeable_positions(b, 1)[0]
 	b.select_tower_kind(&"basic")
-	b._try_place(tile.x, tile.y)
-	b._handle_tap(Grid.tile_to_world_center(tile.x, tile.y))
+	b._try_place(pos)
+	b._handle_tap(pos)
 	assert_true(b._selected_tower != null, "precondition: a tower is selected")
 
 	b.select_tower_kind(&"fast")
@@ -371,31 +341,32 @@ func test_select_tower_kind_deselects_the_currently_selected_tower() -> bool:
 
 func test_handle_tap_with_no_kind_selected_deselects_and_does_not_place() -> bool:
 	var b := _ready_board()
-	var tiles := _find_buildable_tiles(b, 2)
+	var positions := _find_placeable_positions(b, 2)
 	b.select_tower_kind(&"basic")
-	b._try_place(tiles[0].x, tiles[0].y)
-	b._handle_tap(Grid.tile_to_world_center(tiles[0].x, tiles[0].y))  # select it
+	b._try_place(positions[0])
+	b._handle_tap(positions[0])  # select it
 	assert_true(b._selected_tower != null, "precondition: a tower is selected")
 
 	b._selected_kind = &""
-	b._handle_tap(Grid.tile_to_world_center(tiles[1].x, tiles[1].y))  # a different, empty buildable tile
+	b._handle_tap(positions[1])  # a different, empty placeable spot
 
 	assert_eq(b._selected_tower, null, "tapping empty ground with nothing selected clears the tower selection")
 	assert_eq(b._towers_root.get_child_count(), 1, "no new tower was placed")
 	b.free()
 	return true
 
-func test_sell_selected_tower_refunds_decrements_frees_tile_and_deselects() -> bool:
+func test_sell_selected_tower_refunds_decrements_and_deselects() -> bool:
 	var b := _ready_board()
 	b._gold = 1000
-	var tile := _find_buildable_tiles(b, 1)[0]
+	var pos := _find_placeable_positions(b, 1)[0]
 	b.select_tower_kind(&"long")
-	b._try_place(tile.x, tile.y)
+	b._try_place(pos)
+	var tower: Tower = b._towers_root.get_child(0)
 	var price_paid := EconomySim.tower_price(&"long", 0)
 	var gold_after_placement := b.get_gold()
 
-	b._handle_tap(Grid.tile_to_world_center(tile.x, tile.y))  # taps the occupied tile -> selects it
-	assert_eq(b._selected_tower, b._occupied[tile], "precondition: the placed tower is selected")
+	b._handle_tap(pos)  # taps the tower's own position -> selects it
+	assert_eq(b._selected_tower, tower, "precondition: the placed tower is selected")
 
 	var gold_events: Array = []
 	b.gold_changed.connect(func(g): gold_events.append(g))
@@ -406,7 +377,12 @@ func test_sell_selected_tower_refunds_decrements_frees_tile_and_deselects() -> b
 	assert_eq(b.get_gold(), gold_after_placement + expected_refund, "gold increased by exactly the refund")
 	assert_eq(gold_events, [b.get_gold()], "gold_changed emitted exactly once")
 	assert_eq(b.get_tower_count(&"long"), 0, "per-kind count decremented")
-	assert_false(b._occupied.has(tile), "the tile is free again")
+	# queue_free() defers the actual removal to end-of-frame, which this
+	# synchronous harness never reaches (see this file's header note), so
+	# get_child_count() would still read 1 here. is_queued_for_deletion() is
+	# the synchronously observable proof that freeing the node is the whole
+	# removal now - _towers_root is the only registry.
+	assert_true(tower.is_queued_for_deletion(), "the tower node is freed on sell")
 	assert_eq(b._selected_tower, null, "selling deselects")
 	b.free()
 	return true
@@ -417,12 +393,12 @@ func test_get_tower_count_starts_zero_rises_on_placement_falls_on_sell_and_is_ze
 		assert_eq(b.get_tower_count(kind), 0, "%s starts at zero" % kind)
 	assert_eq(b.get_tower_count(&"not_a_real_kind"), 0, "an unknown kind returns 0 rather than erroring")
 
-	var tile := _find_buildable_tiles(b, 1)[0]
+	var pos := _find_placeable_positions(b, 1)[0]
 	b.select_tower_kind(&"mortar")
-	b._try_place(tile.x, tile.y)
+	b._try_place(pos)
 	assert_eq(b.get_tower_count(&"mortar"), 1, "count rises on placement")
 
-	b._handle_tap(Grid.tile_to_world_center(tile.x, tile.y))
+	b._handle_tap(pos)
 	b.sell_selected_tower()
 	assert_eq(b.get_tower_count(&"mortar"), 0, "count falls back to zero on sell")
 	b.free()
@@ -821,11 +797,10 @@ func test_splash_over_an_already_dying_enemy_pays_no_second_reward() -> bool:
 
 func test_physics_process_excludes_dead_or_dying_enemies_but_offers_alive_ones() -> bool:
 	var b := _ready_board()
-	var tile := _find_buildable_tiles(b, 1)[0]
+	var world_pos := _find_placeable_positions(b, 1)[0]
 	b.select_tower_kind(&"long")  # generous range so distance is never the limiting factor
-	b._try_place(tile.x, tile.y)
+	b._try_place(world_pos)
 	var tower: Tower = b._towers_root.get_child(0)
-	var world_pos := Grid.tile_to_world_center(tile.x, tile.y)
 
 	var dead := _ready_enemy_under(b._enemies_root, &"slime", world_pos + Vector2(10, 0))
 	dead.sim["alive"] = false
@@ -849,9 +824,9 @@ func test_physics_process_excludes_dead_or_dying_enemies_but_offers_alive_ones()
 
 func test_tower_fired_spawns_a_projectile_with_the_towers_speed_and_arc_flag() -> bool:
 	var b := _ready_board()
-	var tile := _find_buildable_tiles(b, 1)[0]
+	var pos := _find_placeable_positions(b, 1)[0]
 	b.select_tower_kind(&"mortar")  # arcs=true, a non-default flag a "hardcode false" mutant would miss
-	b._try_place(tile.x, tile.y)
+	b._try_place(pos)
 	var tower: Tower = b._towers_root.get_child(0)
 	var target := _ready_enemy_under(b._enemies_root, &"slime", tower.position + Vector2(10, 0))
 
@@ -878,10 +853,10 @@ func test_tower_fired_spawns_a_projectile_with_the_towers_speed_and_arc_flag() -
 
 func _place_and_select(b: GameBoard, kind: StringName) -> Tower:
 	b._gold = 5000
-	var tile := _find_buildable_tiles(b, 1)[0]
+	var pos := _find_placeable_positions(b, 1)[0]
 	b.select_tower_kind(kind)
-	b._try_place(tile.x, tile.y)
-	b._handle_tap(Grid.tile_to_world_center(tile.x, tile.y))
+	b._try_place(pos)
+	b._handle_tap(pos)
 	return b._selected_tower
 
 func test_upgrade_selected_tower_advances_the_branch_and_charges_for_it() -> bool:

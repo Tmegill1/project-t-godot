@@ -18,12 +18,20 @@ func _ready_board() -> GameBoard:
 	b.notification(Node.NOTIFICATION_READY)
 	return b
 
-func _find_buildable_tile(b: GameBoard) -> Vector2i:
+## The first world position the board will actually accept, found the same
+## way test_game_board.gd's _find_placeable_positions does: by asking the
+## real rule rather than reimplementing it.
+func _find_placeable_position(b: GameBoard) -> Vector2:
+	var bounds := Rect2(Vector2.ZERO, Vector2(Maps.pixel_size(b._map_name)))
+	var radius := Placement.tower_radius(&"basic")
 	for r in b._tiles.size():
 		for c in b._tiles[r].size():
-			if b._tiles[r][c] == Tiles.BUILDABLE:
-				return Vector2i(c, r)
-	return Vector2i(-1, -1)
+			var pos := Grid.tile_to_world_center(c, r)
+			var verdict := Placement.can_place(
+				pos, radius, b._map_renderer.prop_footprints(), b._tower_positions(), b._paths, bounds)
+			if verdict["ok"]:
+				return pos
+	return Vector2.ZERO
 
 # --------------------------------------------------------------------------
 # bind()
@@ -202,8 +210,8 @@ func test_placing_a_tower_untoggles_every_button() -> bool:
 	p._on_selected(&"basic")
 	assert_true(p._buttons[&"basic"].button_pressed, "precondition: the basic button is lit after selecting it")
 
-	var tile := _find_buildable_tile(b)
-	b._try_place(tile.x, tile.y)
+	var pos := _find_placeable_position(b)
+	b._try_place(pos)
 
 	for kind in Towers.KINDS:
 		assert_false(p._buttons[kind].button_pressed,
@@ -236,13 +244,13 @@ func test_refresh_shows_the_current_escalated_price_after_a_placement_of_that_ki
 	var b := _ready_board()
 	b._gold = 1000
 	p.bind(b)
-	var tile := _find_buildable_tile(b)
+	var pos := _find_placeable_position(b)
 	var base_price := EconomySim.tower_price(&"basic", 0)
 	var escalated_price := EconomySim.tower_price(&"basic", 1)
 	assert_true(escalated_price > base_price, "precondition: the second basic costs strictly more than the first")
 
 	b.select_tower_kind(&"basic")
-	b._try_place(tile.x, tile.y)  # emits tower_placed and gold_changed for real
+	b._try_place(pos)  # emits tower_placed and gold_changed for real
 
 	var button: Button = p._buttons[&"basic"]
 	assert_eq(button.text, "%s\n%d gold" % [Towers.DEFS[&"basic"]["label"], escalated_price],
