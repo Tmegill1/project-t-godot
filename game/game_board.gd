@@ -44,7 +44,7 @@ var _spawned := 0
 @onready var _enemies_root: Node2D = $Enemies
 @onready var _projectiles_root: Node2D = $Projectiles
 @onready var _ghost: Sprite2D = $PlacementPreview
-@onready var _ghost_range: RangeIndicator = $PlacementPreview/PreviewRange
+@onready var _ghost_range: RangeIndicator = $PreviewRange
 
 func _ready() -> void:
 	var def := Maps.get_def(_map_name)
@@ -81,7 +81,10 @@ func select_tower_kind(kind: StringName) -> void:
 	# The ghost otherwise keeps showing the previous kind's sprite/colour at
 	# the last mouse position until the next InputEventMouseMotion arrives -
 	# hiding it here means a kind change never briefly shows a stale preview.
+	# _ghost_range is PlacementPreview's sibling, not its child, so hiding
+	# _ghost alone would no longer carry the ring's visibility down with it.
 	_ghost.visible = false
+	_ghost_range.visible = false
 	_deselect_tower()
 
 func start_next_wave() -> void:
@@ -177,6 +180,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func _update_ghost(world: Vector2) -> void:
 	if _selected_kind == &"":
 		_ghost.visible = false
+		_ghost_range.visible = false
 		return
 
 	var def: Dictionary = Towers.DEFS[_selected_kind]
@@ -191,6 +195,7 @@ func _update_ghost(world: Vector2) -> void:
 
 	_ghost.visible = true
 	_ghost.position = world
+	_ghost_range.position = world
 
 	var atlas := AtlasTexture.new()
 	atlas.atlas = Tower.TOWER_SHEET
@@ -200,13 +205,10 @@ func _update_ghost(world: Vector2) -> void:
 	_ghost.scale = Vector2.ONE * (Tiles.TILE_SIZE * float(def["size"]) / Tower.FRAME_SIZE)
 	_ghost.modulate = Color(0.4, 1.0, 0.4, 0.5) if verdict["ok"] else Color(1.0, 0.3, 0.3, 0.5)
 
-	# PreviewRange is a child of PlacementPreview (a Sprite2D) rather than a
-	# sibling of it - unlike Tower, where RangeIndicator sits beside _sprite
-	# and so never inherits its scale. Left uncorrected, the ring would
-	# inherit _ghost.scale above and draw at that fraction of `radius`,
-	# understating the tower's real range. Countering it here keeps the
-	# ring's global scale at 1 regardless of what the sprite's scale is.
-	_ghost_range.scale = Vector2.ONE / _ghost.scale
+	# PreviewRange is a sibling of PlacementPreview, not its child - like
+	# Tower, where RangeIndicator sits beside _sprite rather than under it -
+	# so it never inherits the ghost sprite's scale and always draws `radius`
+	# at true size regardless of how the sprite is scaled.
 	_ghost_range.visible = verdict["ok"]
 	_ghost_range.radius = float(def["range"])
 	_ghost_range.tint = def["color"]
@@ -294,6 +296,7 @@ func _try_place(world: Vector2) -> void:
 	# of what a tap on empty ground means once you have finished building.
 	_selected_kind = &""
 	_ghost.visible = false
+	_ghost_range.visible = false
 
 	tower_placed.emit(placed_kind)
 	_play_sound(&"place")
