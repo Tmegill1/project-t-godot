@@ -783,3 +783,65 @@ func test_map_sprites_select_a_filter_that_actually_samples_the_mipmap_chain() -
 
 	mr.free()
 	return true
+
+# --------------------------------------------------------------------------
+# prop_footprints
+# --------------------------------------------------------------------------
+
+# Blocking circles for free placement. Endpoints are deliberately excluded:
+# cave.png and castle.png are drawn 3 tiles wide, so a footprint derived from
+# them would carry a ~72px radius and sterilise the ground around the spawn
+# and the goal - which is exactly where a player most wants a last line of
+# defence. The road corridor already keeps towers off the endpoints themselves.
+func test_prop_footprints_cover_every_prop_and_no_endpoint() -> bool:
+	Grid.set_active(DemoMap.GRID_COLS, DemoMap.GRID_ROWS)
+	var tiles := _demo_tiles()
+	var mr := MapRenderer.new()
+	mr.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED))
+
+	var prop_paths := [_TREE_PATH, _STONE_PATH, _SPIKE_PATH, _FIRE_PATH]
+	var expected := 0
+	for child in mr.get_children():
+		if child is Sprite2D and child.texture.resource_path in prop_paths:
+			expected += 1
+	assert_true(expected > 0, "precondition: the demo map draws props at all")
+
+	var footprints := mr.prop_footprints()
+	assert_eq(footprints.size(), expected, "one footprint per tree, stone, spike and fire - and nothing else")
+
+	mr.free()
+	return true
+
+# The radius is half the LONGEST displayed axis, so it over-covers rather than
+# under-covers. Blocking slightly too much reads as level design; a tower
+# clipping into a rock reads as a bug. stone.png displays about 48x22, so a
+# radius taken from the short axis would be ~11 and let towers sit inside it.
+func test_prop_footprint_radius_covers_the_sprite_s_longest_axis() -> bool:
+	Grid.set_active(DemoMap.GRID_COLS, DemoMap.GRID_ROWS)
+	var tiles := _demo_tiles()
+	var mr := MapRenderer.new()
+	mr.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED))
+
+	var stone: Sprite2D = null
+	for child in mr.get_children():
+		if child is Sprite2D and child.texture.resource_path == _STONE_PATH:
+			stone = child
+			break
+	assert_true(stone != null, "a stone sprite was drawn")
+
+	var tex := stone.texture
+	var display := Vector2(tex.get_width(), tex.get_height()) * stone.scale
+	var want_radius := maxf(display.x, display.y) / 2.0
+	var want_centre := stone.position + display / 2.0
+
+	var matched := false
+	for entry in mr.prop_footprints():
+		var f: Dictionary = entry
+		if f["pos"].distance_to(want_centre) < 0.01:
+			matched = true
+			assert_almost_eq(f["radius"], want_radius, 0.01,
+				"the stone's radius is half its longest displayed axis")
+	assert_true(matched, "a footprint sits at the stone's displayed centre, not its top-left corner")
+
+	mr.free()
+	return true

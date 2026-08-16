@@ -13,6 +13,10 @@ const _CAVE := preload("res://assets/map/cave.png")
 const _SPIKE := preload("res://assets/map/spike.png")
 const _FIRE := preload("res://assets/map/fire.png")
 
+## Which textures count as solid props for placement. Ground tiles are not
+## props, and endpoints are excluded for the reason prop_footprints explains.
+const _PROP_TEXTURES := [_TREE, _STONE, _SPIKE, _FIRE]
+
 const _MAX_FIRE_TILES := 7
 
 ## z-index ordering. Godot z_index is an int, so the grid overlay cannot sit
@@ -64,6 +68,34 @@ func clear_decoration_at(col: int, row: int) -> bool:
 	_decorations[key].free()
 	_decorations.erase(key)
 	return true
+
+## Every prop as a world-space blocking circle, for sim/placement.gd.
+##
+## Endpoints are excluded on purpose: they are drawn 3 tiles wide, so a
+## footprint from one would carry a ~72px radius and sterilise the ground
+## around the spawn and goal - where a player most wants a last line of
+## defence. The path corridor already keeps towers off the endpoints.
+##
+## Radius is half the sprite's LONGEST displayed axis, so it over-covers
+## rather than under-covers: blocking slightly too much reads as level design,
+## while a tower clipping into a rock reads as a bug. This only measures
+## correctly because _place scales uniformly (see its doc comment); under the
+## stretch-to-square behaviour it replaced, displayed size was a distortion.
+func prop_footprints() -> Array:
+	var out: Array = []
+	for child in get_children():
+		if not (child is Sprite2D):
+			continue
+		var sprite: Sprite2D = child
+		if not (sprite.texture in _PROP_TEXTURES):
+			continue
+		var tex: Texture2D = sprite.texture
+		var display := Vector2(tex.get_width(), tex.get_height()) * sprite.scale
+		out.append({
+			"pos": sprite.position + display / 2.0,
+			"radius": maxf(display.x, display.y) / 2.0,
+		})
+	return out
 
 ## Fits a texture inside a size_px square box preserving the source aspect
 ## ratio, then centres it in that box.
