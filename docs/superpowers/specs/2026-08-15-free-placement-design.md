@@ -261,21 +261,28 @@ Cases that must exist, because each is a rule a mutation could silently break:
 - a zero-length path segment (division-by-zero guard)
 - an empty prop list, an empty tower list, and a single-point path
 
-**Test churn is the real cost of this work, not the production code.** Tile-based
-placement is asserted across ten test files:
+**Test churn is the largest part of this work, but it is far more concentrated
+than a raw grep suggests.** Counting hits for tile-ish identifiers finds ten
+files; auditing what those hits actually *do* shows roughly half are not
+coupling at all. The distinction matters, because it is the difference between
+"ten files to rewrite" and "one file plus three helpers".
 
-| File | References | Disposition |
-|---|---|---|
-| `test_game_board.gd` | 43 | mechanical rewrite: tile coords → world coords |
-| `test_harness.gd` | 22 | mechanical rewrite |
-| `test_map_renderer.gd` | 17 | grid-overlay tests deleted; footprint tests added |
-| `test_grid.gd` | 11 | **unchanged** — `Grid` survives |
-| `test_pathfinder.gd` | 10 | **unchanged** — pathfinding survives |
-| `test_tower_inspector.gd` | 5 | selection-by-position rewrite |
-| `test_tower_panel.gd` | 5 | mechanical rewrite |
-| `test_tower.gd` | 4 | `setup` signature + the abort-safety test |
-| `test_demo_map.gd` | 2 | **unchanged** |
-| `test_hud.gd` | 1 | mechanical rewrite |
+| File | Raw hits | Real work | Why |
+|---|---|---|---|
+| `test_game_board.gd` | 43 | **substantial** | Genuine: `_try_place(col, row)` call sites plus the `_first_buildable_tiles` helper they share. The bulk of the churn, and nearly all of it flows from changing that one helper. |
+| `test_harness.gd` | 22 | **none** | False positive. Every hit is `Grid.tile_to_world_center(col, row)` used as a *convenience* to produce a world position for a tower dict — the harness already takes world positions, and `Grid` survives. These keep passing untouched. |
+| `test_map_renderer.gd` | 17 | **small** | Mostly `Tiles.BUILDABLE` authoring synthetic maps for decoration-scatter tests, which is rendering, not placement. Real work is limited to deleting grid-overlay and `clear_decoration_at` tests and adding footprint tests. |
+| `test_grid.gd` | 11 | **none** | `Grid` survives unchanged. |
+| `test_pathfinder.gd` | 10 | **none** | Pathfinding survives unchanged. |
+| `test_tower_inspector.gd` | 5 | **small** | One buildable-tile helper, plus `_occupied` lookups that become position hit-tests. |
+| `test_tower_panel.gd` | 5 | **small** | One helper plus two `_try_place` call sites. |
+| `test_tower.gd` | 4 | **small but risky** | `grid_col`/`grid_row` assertions are deleted and the position assertion changes; this is where the §4.4 abort hazard must be re-pinned. |
+| `test_demo_map.gd` | 2 | **none** | Map authoring is unchanged. |
+| `test_hud.gd` | 1 | **trivial** | A single buildable-tile scan in a setup helper. |
+
+Net: one file carries most of the work, three carry a shared helper change each,
+and four need nothing. Estimating from the raw hit counts would have overstated
+this by roughly a factor of two.
 
 The suite stands at 5214 checks across 29 files and must not regress in count
 without a stated reason — deleted grid-overlay and `clear_decoration_at` tests
