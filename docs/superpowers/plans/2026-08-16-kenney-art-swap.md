@@ -474,8 +474,18 @@ git commit -m "Bake the Kenney ground blend tiles for three biomes"
   - `Biomes.KINDS: Array[StringName]` — `[&"forest", &"ice", &"desert"]`
   - `Biomes.FIRST: StringName` — `&"forest"`
   - `Biomes.get_def(biome: StringName) -> Dictionary` — keys `label`, `dir`
-  - `Biomes.blend_texture(biome: StringName, mask: int) -> Texture2D`
-  - `Biomes.prop_texture(biome: StringName, slot: StringName) -> Texture2D` — slots `&"tree"`, `&"stone"`, `&"spike"`, `&"fire"`
+  - `Biomes.blend_path(biome: StringName, mask: int) -> String`
+  - `Biomes.prop_path(biome: StringName, slot: StringName) -> String` — slots `&"tree"`, `&"stone"`, `&"spike"`, `&"fire"`
+
+**These return paths, not textures, and that is load-bearing.**
+`test/test_sim_purity.gd` bans resource loading inside `data/` and `sim/`, and
+its docstring says why: loading breaks the *headless* claim, which is this
+project's central architectural guarantee. A `Texture2D`-returning API would
+put `load()` in `data/` and force an exception into that guard. The sibling
+modules already show the intended shape — `data/enemies.gd` stores a
+`texture_key`, `data/towers.gd` stores a `sprite_frame`, both plain
+identifiers the render layer resolves. `MapRenderer` calls `load()`; `Biomes`
+only ever names.
   - `Biomes.DIAGONAL_MASKS: Array[int]` — `[6, 9]`
   - `Biomes.DIAGONAL_FALLBACK: int` — `15`
 
@@ -501,17 +511,18 @@ func test_the_three_biomes_are_exactly_forest_ice_and_desert() -> bool:
 func test_every_biome_resolves_every_blend_mask_the_pack_supplies() -> bool:
 	for biome in Biomes.KINDS:
 		for mask in [0, 1, 2, 3, 4, 5, 7, 8, 10, 11, 12, 13, 14, 15]:
-			var tex := Biomes.blend_texture(biome, mask)
-			assert_true(tex != null, "%s mask %d resolves" % [biome, mask])
+			var path := Biomes.blend_path(biome, mask)
+			assert_true(ResourceLoader.exists(path),
+				"%s mask %d resolves to a real resource (%s)" % [biome, mask, path])
 	return true
 
 func test_the_diagonal_masks_fall_back_to_the_full_road_tile() -> bool:
 	# The pack ships no diagonal-only tile in any pairing. 15 connects both
 	# diagonals rather than neither, which is the safer resolution.
 	for biome in Biomes.KINDS:
-		var full := Biomes.blend_texture(biome, 15)
+		var full := Biomes.blend_path(biome, 15)
 		for mask in Biomes.DIAGONAL_MASKS:
-			assert_eq(Biomes.blend_texture(biome, mask), full,
+			assert_eq(Biomes.blend_path(biome, mask), full,
 				"%s mask %d falls back to 15" % [biome, mask])
 	return true
 
@@ -575,12 +586,17 @@ const DIAGONAL_FALLBACK := 15
 static func get_def(biome: StringName) -> Dictionary:
 	return DEFS[biome]
 
-static func blend_texture(biome: StringName, mask: int) -> Texture2D:
+## Returns a path, never a loaded resource. data/ is held engine-free by
+## test/test_sim_purity.gd, whose docstring explains that resource loading
+## breaks the headless claim the whole harness rests on. The render layer
+## loads; this module only names. Same division as data/enemies.gd's
+## texture_key and data/towers.gd's sprite_frame.
+static func blend_path(biome: StringName, mask: int) -> String:
 	var resolved := DIAGONAL_FALLBACK if mask in DIAGONAL_MASKS else mask
-	return load("%s/blend_%02d.png" % [DEFS[biome]["dir"], resolved])
+	return "%s/blend_%02d.png" % [DEFS[biome]["dir"], resolved]
 
-static func prop_texture(biome: StringName, slot: StringName) -> Texture2D:
-	return load("%s/%s.png" % [DEFS[biome]["dir"], slot])
+static func prop_path(biome: StringName, slot: StringName) -> String:
+	return "%s/%s.png" % [DEFS[biome]["dir"], slot]
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -728,8 +744,9 @@ And add to `test/test_biomes.gd` — this assertion lives here rather than in Ta
 func test_every_biome_resolves_all_four_prop_slots() -> bool:
 	for biome in Biomes.KINDS:
 		for slot in Biomes.PROP_SLOTS:
-			var tex := Biomes.prop_texture(biome, slot)
-			assert_true(tex != null, "%s %s resolves" % [biome, slot])
+			var path := Biomes.prop_path(biome, slot)
+			assert_true(ResourceLoader.exists(path),
+				"%s %s resolves to a real resource (%s)" % [biome, slot, path])
 	return true
 ```
 
@@ -1362,8 +1379,8 @@ func test_every_ground_sprite_uses_the_texture_its_mask_names() -> bool:
 		var sprite: Sprite2D = child
 		var c := int((sprite.position.x + half) / Tiles.TILE_SIZE)
 		var r := int((sprite.position.y + half) / Tiles.TILE_SIZE)
-		var expected := Biomes.blend_texture(&"forest", renderer.corner_mask(c, r))
-		assert_eq(sprite.texture.resource_path, expected.resource_path,
+		assert_eq(sprite.texture.resource_path,
+			Biomes.blend_path(&"forest", renderer.corner_mask(c, r)),
 			"lattice point (%d, %d) uses its mask's texture" % [c, r])
 		checked += 1
 	assert_true(checked > 0, "ground sprites were checked")
@@ -1426,7 +1443,11 @@ func _draw_ground() -> void:
 	var half := Tiles.TILE_SIZE / 2
 	for r in range(_rows + 1):
 		for c in range(_cols + 1):
-			var texture := Biomes.blend_texture(_biome, corner_mask(c, r))
+			# load() rather than a texture from Biomes: data/ is held
+			# engine-free by test_sim_purity.gd, so the render layer is where
+			# a path becomes a resource. Godot's ResourceLoader caches by
+			# path, so the 360 calls per render are dictionary hits.
+			var texture: Texture2D = load(Biomes.blend_path(_biome, corner_mask(c, r)))
 			_place(texture, c, r, Tiles.TILE_SIZE, _Z_GROUND,
 				Vector2(-half, -half))
 
@@ -1607,8 +1628,9 @@ Add a prop-placing wrapper next to `_place`:
 ```gdscript
 ## Places a prop and records it as one, so prop_footprints can find it.
 func _place_prop(slot: StringName, col: int, row: int) -> Sprite2D:
-	var sprite := _place(Biomes.prop_texture(_biome, slot), col, row,
-		Tiles.TILE_SIZE, _Z_OVERLAY)
+	# load() here, not in Biomes: data/ stays engine-free (test_sim_purity.gd).
+	var texture: Texture2D = load(Biomes.prop_path(_biome, slot))
+	var sprite := _place(texture, col, row, Tiles.TILE_SIZE, _Z_OVERLAY)
 	_prop_sprites[sprite] = true
 	return sprite
 ```
