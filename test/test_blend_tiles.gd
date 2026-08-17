@@ -12,7 +12,6 @@ extends TestCase
 
 const _BIOMES := ["forest", "ice", "desert"]
 const _MASKS := [0, 1, 2, 3, 4, 5, 7, 8, 10, 11, 12, 13, 14, 15]
-const _SINGLE_CORNER := [1, 2, 4, 8]
 
 # Ground/road terrain per biome, as the RGB the bake writes. Ice's ground is
 # the recoloured snow, which is why it is not sand.
@@ -24,7 +23,6 @@ const _TERRAIN := {
 
 const _CORNER_TOL_SQ := 3000.0
 const _FRACTION_TOL_SQ := 4000.0
-const _MAX_SINGLE_CORNER_ROAD_FRACTION := 0.25
 
 func _blend_image(biome: String, mask: int) -> Image:
 	var path := "res://assets/kenney/%s/blend_%02d.png" % [biome, mask]
@@ -108,12 +106,23 @@ func test_each_tiles_four_corners_match_the_mask_in_its_filename() -> bool:
 					"%s/blend_%02d corner %d is %s" % [biome, mask, i, expected])
 	return true
 
-func test_single_corner_tiles_draw_the_road_as_a_small_lobe() -> bool:
-	# THE FAMILY GATE. A single-corner tile from the correct family measures
-	# about 0.04; the wrong family measures about 0.46. Anything near a half
-	# means the bake picked the inverted family and the map will not tile.
+func test_every_masks_road_fraction_matches_its_family() -> bool:
+	# THE FAMILY GATE. Both of the pack's two tile families for a given
+	# ground/road pairing classify identically by corner colour - one draws
+	# the road as a small overlay lobe on a ground base, the other draws the
+	# road as the base with a ground lobe - so the corner-colour test above
+	# cannot tell them apart on ANY mask, not just the single-corner ones.
+	# This fraction check is what does. In the correct family a mask's
+	# road-pixel fraction stays below popcount(mask)/4; in the inverted
+	# family it sits above that same boundary. Solid tiles (mask 0, all
+	# ground; mask 15, all road) have no popcount ratio to derive a boundary
+	# from, so they get fixed bounds instead. A future re-bake that silently
+	# picked from the inverted family for even one mask - including the
+	# eight multi-corner masks the old version of this test did not check -
+	# would still pass every other gate here and ship a map that renders
+	# mismatched wave phases at every concave corner.
 	for biome in _BIOMES:
-		for mask in _SINGLE_CORNER:
+		for mask in _MASKS:
 			var img := _blend_image(biome, mask)
 			assert_true(img != null, "%s/blend_%02d.png decodes" % [biome, mask])
 			if img == null:
@@ -126,8 +135,24 @@ func test_single_corner_tiles_draw_the_road_as_a_small_lobe() -> bool:
 					if _nearest(_rgb(img, x, y), biome, _FRACTION_TOL_SQ) == "road":
 						road += 1
 			var fraction := float(road) / float(total)
-			assert_true(fraction < _MAX_SINGLE_CORNER_ROAD_FRACTION,
-				"%s/blend_%02d road fraction %f is a small lobe" % [biome, mask, fraction])
+			var popcount := 0
+			for bit in [1, 2, 4, 8]:
+				if (mask & bit) != 0:
+					popcount += 1
+			if mask == 0:
+				assert_true(fraction < 0.05,
+					("%s/blend_%02d road fraction %f exceeds the 0.05 bound for the " +
+					"all-ground mask; the inverted family was selected") % [biome, mask, fraction])
+			elif mask == 15:
+				assert_true(fraction > 0.95,
+					("%s/blend_%02d road fraction %f is below the 0.95 bound for the " +
+					"all-road mask; the inverted family was selected") % [biome, mask, fraction])
+			else:
+				var boundary := float(popcount) / 4.0
+				assert_true(fraction < boundary,
+					("%s/blend_%02d road fraction %f exceeds the %f boundary for a " +
+					"%d-corner mask; the inverted family was selected") %
+					[biome, mask, fraction, boundary, popcount])
 	return true
 
 func test_ice_ground_was_recoloured_and_is_not_the_packs_sand() -> bool:
