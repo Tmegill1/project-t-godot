@@ -11,6 +11,11 @@ planned, and implementation has not started**
 > on this page is about it.** Read §5 and §6 too, whatever you do: the engine
 > facts and the standing rules apply to everything here.
 
+> This file is the *orientation* document: state, how to run things, and the
+> hard-won facts that are expensive to rediscover. The per-task status table and
+> the decision log live in [`PROGRESS.md`](PROGRESS.md) and are **not** duplicated
+> here — read that too, and trust it over this file for task-by-task status.
+
 ---
 
 ## 0. ACTIVE WORK — the Kenney art swap
@@ -81,11 +86,6 @@ change it. That is precisely why props are trimmed to their alpha bbox at bake
 time: the radius cannot move, so the *art* has to grow to fill it. Untrimmed,
 Kenney's bush draws its subject at ~23px inside that same 24px radius and
 players hit invisible walls in open grass.
-
-> This file is the *orientation* document: state, how to run things, and the
-> hard-won facts that are expensive to rediscover. The per-task status table and
-> the decision log live in [`PROGRESS.md`](PROGRESS.md) and are **not** duplicated
-> here — read that too, and trust it over this file for task-by-task status.
 
 ---
 
