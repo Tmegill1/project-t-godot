@@ -3,13 +3,84 @@
 **Point an assistant at this file and say "continue this project."** It contains
 everything needed to resume with no prior conversation.
 
-Last updated: 2026-08-15 · Branch `master` · **core slice and tower upgrades
-both complete and merged; playable end to end and deployed**
+Last updated: 2026-08-16 · Branch `feat/kenney-art-swap` · **core slice, tower
+upgrades and free placement all merged to `master`; the art swap is specced and
+planned, and implementation has not started**
 
-> **Starting the next piece of work?** Everything planned so far is built and
-> merged; §4 is what is left, and none of it is implementation. Read §5 and §6
-> first whatever you do next — the engine facts and the standing rules apply to
-> everything here.
+> **Continuing the art swap? Read §0 — it is the active work and nothing else
+> on this page is about it.** Read §5 and §6 too, whatever you do: the engine
+> facts and the standing rules apply to everything here.
+
+---
+
+## 0. ACTIVE WORK — the Kenney art swap
+
+**Branch `feat/kenney-art-swap`, pushed, three commits, no implementation yet.**
+Every non-enemy asset is being replaced with Kenney's CC0 *Tower Defense
+(Top-Down)* pack, and the renderer gains a **biome layer** so a map declares
+itself forest, ice or desert.
+
+Read these two, in this order:
+
+- [`docs/superpowers/specs/2026-08-16-kenney-art-swap-design.md`](docs/superpowers/specs/2026-08-16-kenney-art-swap-design.md) — the design, approved
+- [`docs/superpowers/plans/2026-08-16-kenney-art-swap.md`](docs/superpowers/plans/2026-08-16-kenney-art-swap.md) — ten tasks, full code for every step
+
+**Execution method: `superpowers:subagent-driven-development`** — a fresh
+subagent per task, two-stage review between tasks. Start at Task 1; nothing is
+implemented yet.
+
+**Scope boundary.** This branch is the art plus the biome layer. Map 2 and
+map 3 *layouts*, map-to-map progression, and `sim/economy.gd:42`'s dormant
+`limit_bonus_map2` are a **later branch**. Ice and desert are proven this
+branch by rendering the existing layout under them.
+
+**Enemies are not touched.** `assets/enemies/**`, `game/enemy.tscn`,
+`game/enemy.gd` and `data/enemies.gd` all stay exactly as they are. Tyler is
+adding monster variety separately.
+
+### The three traps, all of which cost real time to find
+
+**1. The tilesheet's packing order is NOT the individual-PNG numbering.**
+70 of the 299 tiles differ, starting at index 15 and including the whole
+130–137 prop range. Every index in the spec and plan is a
+`towerDefense_tileNNN.png` index. If you "verify" one against a tilesheet
+contact sheet you will correct it into a bug.
+
+**2. Corner classification alone picks a table that tiles WRONGLY.** Each
+terrain pairing appears twice in the pack — once with the road drawn as a small
+overlay lobe, once with the roles reversed — and both classify identically by
+corner colour. The separator is a measurement: road-pixel fraction ~0.04 in the
+family we want, ~0.46 in the other. Index position is not a usable rule (for
+grass↔dirt the correct family is the higher indices, for sand↔stone the lower).
+If `test_blend_tiles.gd`'s road-fraction gate goes red, the bake picked the
+inverted family — **fix the selection, never the threshold.**
+
+**3. The road draws 23px, and that is a measured consequence, not a bug.**
+Kenney draws roads as ~3-tile corridors; this map's are one tile wide with a
+one-tile grass gap between the row-8 and row-10 legs. Two alternatives were
+built and rejected: sampling at grid intersections draws a 70px road but floods
+that buildable grass strip and paints it as road, and a half-tile lattice
+draws 36px but minifies the blend detail into a straight-edged bar. So
+`PATH_HALF_WIDTH` follows the art **26 → 14** (Task 9), which is a deliberate
+amendment to spec §3. Whether 14 plays well is a **playtest** question — turn
+the constant and re-run, per §7's convention.
+
+### Where the source art lives
+
+`reference/kenney-td/` — extracted, **gitignored**, already in place. The
+Retina 128×128 set at `reference/kenney-td/PNG/Retina/` is what the bake reads;
+the 3.2MB archive is not committed. `tools/bake_kenney.gd` (Task 1) is the tool
+that turns it into committed assets under `assets/kenney/`.
+
+### One more thing that bites
+
+`prop_footprints()` derives a blocking radius from the texture's **full**
+dimensions, and `_place` normalises every prop's longest axis to `TILE_SIZE`.
+So the radius is **always 24 whatever the source size is** — trimming cannot
+change it. That is precisely why props are trimmed to their alpha bbox at bake
+time: the radius cannot move, so the *art* has to grow to fill it. Untrimmed,
+Kenney's bush draws its subject at ~23px inside that same 24px radius and
+players hit invisible walls in open grass.
 
 > This file is the *orientation* document: state, how to run things, and the
 > hard-won facts that are expensive to rediscover. The per-task status table and
@@ -49,7 +120,7 @@ win or lose → retry or menu, with sound.
 | `audio/` — pooled playback, 17 core-slice events | ✅ complete |
 | Web export | ✅ preset + build; **boots and renders in a browser; not yet played in one** |
 | Deploy | ✅ live at **https://tmegill1.github.io/project-t-godot/** — every push to `master` republishes, at the address GitHub assigns (no custom domain) |
-| Tests | ✅ 4798 checks across 29 files, exit 0 |
+| Tests | ✅ 5253 checks across 30 files, exit 0 |
 | Tower upgrades | ✅ **all 11 tasks done** — rules, tower, board, harness, inspector, verified in the running game. See §4 |
 
 **The repo is public** and the game is deployed from it.
@@ -449,17 +520,25 @@ the player runs, not only in the thing the tests run.
 
 ```bash
 cd ~/Projects/project-t-godot
+git checkout feat/kenney-art-swap
 godot --headless --import                            # once, after a fresh clone
-godot --headless --quit --script test/run_tests.gd   # expect 4798 checks, exit 0
+godot --headless --quit --script test/run_tests.gd   # expect 5253 checks, exit 0
 godot --path .                                       # and actually play a run
 ```
 
-Then pick one of two things.
+**The active work is §0 — the Kenney art swap.** Its plan is written with full
+code for all ten tasks and nothing is implemented yet; execute it with
+`superpowers:subagent-driven-development`, starting at Task 1. Read §0's three
+traps first — each one produced a wrong-but-plausible result before it was
+caught, and two of them look correct right up until the map is rendered.
 
-**To take the next feature**, the obvious one is the five composable enemy
-properties — armoured, phased, swift, shielded, splitter. Pierce and detection
-are already wired and waiting for them, and the upgrade tiers that carry those
-effects are inert until they land. It needs its own spec and plan.
+**After that branch merges**, the next piece is the map 2 and map 3 layouts
+plus map-to-map progression, which the art branch deliberately excludes.
+
+**The other standing feature** is the five composable enemy properties —
+armoured, phased, swift, shielded, splitter. Pierce and detection are already
+wired and waiting for them, and the upgrade tiers that carry those effects are
+inert until they land. It needs its own spec and plan.
 
 **To close the last verification gap**, play the deployed build at
 https://tmegill1.github.io/project-t-godot/ — place a tower, buy a tier, run a
