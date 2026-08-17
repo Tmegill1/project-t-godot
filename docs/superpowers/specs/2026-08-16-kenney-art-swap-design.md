@@ -51,8 +51,17 @@ page:
 | Tiles | 299, `towerDefense_tile001…299.png` |
 | Default size | 64×64 |
 | Retina size | 128×128 |
-| Tilesheet | 1472×832 = 23 cols × 13 rows of 64px, row-major, index = tile number |
+| Tilesheet | 1472×832 = 23 cols × 13 rows of 64px, row-major |
 | Licence | CC0 (`License.txt`, vendored) |
+
+**The tilesheet's packing order is NOT the individual-PNG numbering.** Comparing
+every tile pixel-for-pixel, 229 of 299 match and **70 do not** — the divergence
+starts at tile 15 and includes the whole 130–137 prop range. An index read off
+the tilesheet is therefore not usable against `towerDefense_tileNNN.png`.
+
+**Every index in this document is an individual-PNG index**, because that is
+what the bake tool reads. Nothing here may be cross-checked against a tilesheet
+contact sheet without re-deriving it.
 
 **The pack ships exactly four terrains.** Every solid, fully-opaque, near-uniform
 tile was sampled and clustered by mean colour:
@@ -75,7 +84,7 @@ Two measurements that matter later:
   that 249 was the best the *old* source sheet could achieve anywhere. The new
   art clears the gate outright, so the seam class of defect that gate was
   written for cannot recur.
-- **Props are free-standing with large transparent margins.** `tile131` (bush)
+- **Props are free-standing with large transparent margins.** `tile130` (bush)
   is 128×128 with an alpha bbox of 62×62 — it fills 48% of its canvas. §6.
 
 ## 3. What is explicitly not changing
@@ -89,13 +98,23 @@ Two measurements that matter later:
   decided. `sim/placement.gd` in particular is not edited — §6 keeps its
   contract true by changing the *art*, not the rule.
 - **The tower atlas contract.** See §5.
+- **`MIN_TOWER_SPACING = 44`.** Tower art keeps its current footprint, so the
+  spacing that was tuned against it still holds.
 - **`Tiles.TILE_SIZE`, which stays 48.** The pack is 64px and the Retina set is
   128px, but moving to a 64px grid would resize the canvas from 1104×672 to
   1472×896, move the tower panel (`ui/tower_panel.gd:30` offsets by the map's
-  pixel width), and invalidate `MIN_TOWER_SPACING = 44` and
-  `PATH_HALF_WIDTH = 26` — the free-placement tunables that were chosen to
+  pixel width), and invalidate the free-placement tunables that were chosen to
   preserve the old feel. There is no visual gain: we downscale from 128px
   sources either way.
+
+**`PATH_HALF_WIDTH` is the one exception, and it is a deliberate amendment to
+this section.** An earlier draft froze it at 26 alongside `MIN_TOWER_SPACING`.
+§7.3 explains why that is no longer tenable: the new road draws 23px wide, so a
+26px half-width would refuse tower placement across a 14px band of
+open-looking ground on each side of it. It moves to **14**. This is the same
+principle as §6 — art and collision must agree — arriving from the road side
+instead of the prop side. Signed off by Tyler after seeing the three candidate
+renders measured.
 - **`sim/economy.gd:42`'s `limit_bonus_map2`.** It stays dormant until a second
   map exists to trigger it.
 
@@ -107,15 +126,16 @@ A new data table in the same shape as `data/towers.gd` and `data/enemies.gd` —
 a `DEFS` dictionary, a `KINDS` array, a `get_def` accessor. Each biome names
 six textures:
 
-```
-&"forest": ground grass,  road dirt,  props: bush / rock / shrub / flame
-&"ice":    ground snow,   road stone, props: crystal / rock / shard / flame
-&"desert": ground sand,   road dirt,  props: desert-shrub / rock / small-bush / flame
-```
-
 The four prop slots keep their existing names — `tree`, `stone`, `spike`,
 `fire` — because `MapRenderer`'s scatter rules are written in those terms and
-none of those rules change. Only the texture behind each name does.
+none of those rules change. Only the texture behind each name does. Source tiles
+per biome, in individual-PNG indices (see §2):
+
+| biome | ground↔road | tree | stone | spike | fire |
+|---|---|---|---|---|---|
+| forest | grass↔dirt | 130 (bush) | 136 (rock) | 132 (shrub) | 296 |
+| ice | snow↔stone | 181 (crystal) | 135 (rock) | 183 (shard) | 297 |
+| desert | sand↔dirt | 134 (spiked plant) | 137 (rock) | 131 (small bush) | 295 |
 
 Each of the three ground/road pairings — grass↔dirt, sand↔dirt, sand↔stone —
 already exists in the pack as a complete blend set. That is what makes three
@@ -146,7 +166,7 @@ swap.
 Each frame composites a platform tile and a turret sprite. Sixteen of the twenty
 frames are referenced by `data/towers.gd` (3, 4, 14 and 15 are unused today);
 the tier progression reads as larger and more numerous weapons, drawn from
-turrets 204–207 and 246–253.
+turrets **203–206** and **245–252**.
 
 Towers are **not** biome-themed. They are player objects rather than scenery,
 and a tower that changed appearance per map would read as a different tower.
@@ -158,7 +178,7 @@ blocking radius from **the texture's full dimensions** times the sprite scale.
 Its doc comment justifies deliberately over-covering: "blocking slightly too
 much reads as level design, while a tower clipping into a rock reads as a bug."
 
-Kenney art breaks the "slightly". The bush `tile131` occupies 62×62 of a
+Kenney art breaks the "slightly". The bush `tile130` occupies 62×62 of a
 128×128 canvas. Fitted into a 48px tile it draws about 23px wide but would
 claim the full 24px radius — a blocking circle over twice the area of the
 visible art. Players would hit invisible walls in open grass.
@@ -181,16 +201,95 @@ The pack is drawn for organic terrain blending — every terrain pair ships edge
 and corner tiles. `_draw_ground()` currently places one flat texture per tile,
 which would give this art hard square road edges it was never drawn for.
 
-`_draw_ground()` gains a **4-bit corner mask** per tile: for each of the tile's
-four corners, is the terrain there road or ground? The 16 resulting masks map
-onto 16 tiles per biome (mask 0 is pure ground, mask 15 is pure road, the other
-14 are blends).
+### 7.1 The lattice
 
-**The mask→tile table is derived by script, not transcribed by hand.** The bake
-tool samples each candidate tile's four corner regions, classifies each against
-the four measured terrain colours in §2, and emits the table. 299 hand-copied
-indices would be unverifiable and wrong somewhere; a derivation is re-runnable
-per biome pairing and can be re-asserted from the committed PNGs in a test.
+Terrain is sampled at **tile centres**, and each drawn sprite spans the square
+between four adjacent centres. Drawn sprite `(c, r)` therefore takes its four
+corners from tiles `(c-1, r-1)`, `(c, r-1)`, `(c-1, r)`, `(c, r)`, and is
+positioned at `(c * 48 - 24, r * 48 - 24)`. Out-of-bounds corners count as
+ground.
+
+Consequences, all deliberate:
+
+- The grid is `(cols + 1) × (rows + 1)` = **360 sprites**, not 322. The
+  one-sprite-per-tile invariant in `test_map_renderer.gd` becomes
+  one-sprite-per-lattice-point.
+- Sprites overhang the map rect by 24px on every side. Left and top land at
+  negative coordinates and bottom at y > 672, all outside the 1244×672 viewport;
+  the right-hand 24px sits under `TowerPanel`, whose background is 95% opaque.
+  Harmless on all four sides, and the alternative — skipping the outer ring —
+  would leave a 24px unpainted border.
+- The road stays centred on tile centres, which is what keeps it under the
+  world-space path points `PathFinder` emits. A lattice anchored anywhere else
+  draws the road half a tile off the route enemies actually walk.
+
+The two rejected alternatives are recorded because both look reasonable on
+paper. Sampling at grid **intersections** (a corner is road if any adjacent tile
+is road) draws a 70px road and keeps one sprite per tile, but it floods the
+one-tile grass strip between the row-8 and row-10 legs and paints buildable
+ground as road. Sampling on **half-tiles** draws 36px and preserves that strip,
+but at 24px per sprite the blend detail minifies away, the boundary reads as a
+straight bar, and the sprite count quadruples to 1363.
+
+### 7.2 Deriving the mask→tile table
+
+The 16 masks map onto tiles per biome: mask 0 is pure ground, mask 15 pure road,
+the rest blends. **The table is derived by script, not transcribed** — the bake
+tool classifies each tile's four corner regions against the four measured
+terrain colours in §2 and groups by mask.
+
+**Corner classification alone is not sufficient**, and this is the trap. Each
+terrain pairing appears **twice** in the pack: once with the road terrain drawn
+as a small overlay lobe on a ground base, and once with the roles reversed. Both
+families classify identically by corner colour, so a naive derivation picks a
+self-consistent table that tiles *wrongly* — mismatched wave phases at concave
+corners, and road flooding ground it should not touch.
+
+The families are separated by a measurement, not by index position. For a
+single-corner mask, the fraction of road-coloured pixels is **~0.04** in the
+correct family and **~0.46** in the wrong one — a 10× gap, consistent across all
+three pairings. Index position is *not* a usable rule: for grass↔dirt the
+correct family is the higher indices, for sand↔stone the lower.
+
+The derivation is therefore two-stage:
+
+1. For each of the four single-corner masks (1, 2, 4, 8), take the candidate
+   whose road-pixel fraction is below 0.25. These four are the family anchors.
+2. For every other mask, take the candidate whose index is closest to the mean
+   of those anchors. Verified to select correctly for all 14 masks in all three
+   pairings.
+
+Masks 0 and 15 are solid tiles and are chosen as the lowest-variance candidate
+of the correct terrain.
+
+The derived tables, for reference — these are outputs to be regenerated, not
+inputs to be trusted:
+
+| mask | 0 | 1 | 2 | 3 | 4 | 5 | 7 | 8 | 10 | 11 | 12 | 13 | 14 | 15 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| forest (grass↔dirt) | 119 | 117 | 115 | 116 | 71 | 94 | 72 | 69 | 92 | 73 | 70 | 95 | 96 | 50 |
+| desert (sand↔dirt) | 188 | 191 | 189 | 190 | 145 | 168 | 146 | 143 | 166 | 147 | 144 | 169 | 170 | 50 |
+| ice (sand↔stone) | 188 | 196 | 194 | 195 | 150 | 173 | 151 | 148 | 171 | 152 | 149 | 174 | 175 | 257 |
+
+### 7.3 The two missing masks, and road width
+
+**Masks 6 (`0110`) and 9 (`1001`) do not exist in the pack**, in any pairing.
+They are the diagonal-only cases — two opposite corners road — which blob
+tilesets omit because the connection is genuinely ambiguous.
+
+The demo map produces **zero** of them: its path legs are orthogonal runs joined
+at shared corner tiles, so no two road tiles touch only diagonally. It uses
+exactly the 14 masks the pack supplies. A future map could differ, so
+`Biomes.blend_texture(biome, mask)` substitutes mask 15 for 6 and 9 — the
+resolution that connects both diagonals rather than neither — and a test asserts
+the shipped map never reaches that branch.
+
+**The road draws 23px wide**, measured on the rendered output, centred on the
+tile centre line to within half a pixel. Kenney draws roads as ~3-tile
+corridors; this map's are one tile with a one-tile gap between legs, and no
+lattice reconciles that geometry with the pack's intent. 23px is the cost of
+keeping the organic edges and the buildable strip. `PATH_HALF_WIDTH` follows the
+art down to 14 — see §3.
 
 **Blend tiles are baked as individual PNG files**, one per mask per biome, not
 as regions of a runtime atlas. This is forced by
@@ -200,17 +299,17 @@ what keeps those tests dependent only on public state. Individual files preserve
 that, and they also keep `_place`'s `texture.get_width()` arithmetic honest.
 
 That test's assertion has to change in kind: "path tiles use `path.png`" becomes
-"this tile's texture is classified road-side-correct for its mask". The
-one-sprite-per-tile invariant it also guards is unaffected.
+"this lattice point's texture is the one its mask names", and its count
+assertion moves from `cols × rows` to `(cols + 1) × (rows + 1)` per §7.1.
 
 ## 8. Endpoints, and the ice recolour
 
 ### 8.1 Endpoints
 
 The pack has no castle and no cave. Two PNGs are baked from pack pieces: the
-goal as a fortified base built from structure tiles 227–230, 250 and 269; the
-spawn as a dark rock mouth from boulders 136–138. `_draw_endpoints()` changes
-only which texture it loads — the 3-tile width, the `(-TILE_SIZE,
+goal as a fortified base built from structure tiles **226–229, 249 and 268**;
+the spawn as a dark rock mouth from boulders **135–137**. `_draw_endpoints()`
+changes only which texture it loads — the 3-tile width, the `(-TILE_SIZE,
 -TILE_SIZE - 20)` offset and the `_Z_OVERLAY` layer all stay.
 
 They are shared across biomes rather than themed per biome. Per-biome endpoints
@@ -229,10 +328,13 @@ shift to snow white; the stone half is left untouched and serves as the frozen
 road. The four terrain palettes in §2 are far enough apart in RGB that
 targeting exactly one is unambiguous.
 
-Only the ~16 tiles of one pairing need it, because a biome uses only its own
-ground, road and the blends between them.
+Concretely: a pixel within a squared-distance of 2600 of sand `(229, 213, 179)`
+is rewritten as `(236, 242, 248) + (pixel - sand)`, preserving the speckle
+detail as a delta rather than flattening it to a solid fill. Only the 14 tiles
+of the sand↔stone table need it, because a biome uses only its own ground, road
+and the blends between them.
 
-Ice props need no recolouring at all: tiles 181–183 are already pale-blue
+Ice props need no recolouring at all: tiles **180–183** are already pale-blue
 crystal plates.
 
 CC0 permits derivative work without restriction, so this raises no licence
@@ -289,6 +391,22 @@ pack's sand (which is what a silently skipped recolour would produce).
 tile's four corners from the PNG and assert they match the mask the table
 claims. Same self-verifying spirit as the asset gates: nobody has to be believed
 about the table being right.
+
+**New family test** — the corner check above passes for *both* families (§7.2),
+so it cannot catch the wrong one. A second assertion measures the road-pixel
+fraction of each single-corner blend and requires it below 0.25. This is the
+only gate standing between a plausible-looking table and a map that tiles
+wrongly, and it is why the corner test alone is not enough.
+
+**New diagonal-fallback test** — asserts `blend_texture` maps masks 6 and 9 onto
+mask 15's texture, and separately that rendering the shipped map never requests
+either. The second half is what makes the first half a safety net rather than a
+live code path.
+
+**New road-width test** — measures the rendered road's width from the ground
+layer and asserts `PATH_HALF_WIDTH` is within a small margin of half of it.
+This is what keeps §3's amended tunable honest: if a future re-bake changes the
+road's drawn width, the no-build corridor has to follow it or this goes red.
 
 **New atlas test** — `assets/towers.png` is 480×384; every frame referenced by
 `data/towers.gd` is non-empty; every frame has clean transparent margins.
