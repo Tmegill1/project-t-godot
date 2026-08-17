@@ -57,6 +57,17 @@ const BIOMES := {
 const MASKS := [0, 1, 2, 3, 4, 5, 7, 8, 10, 11, 12, 13, 14, 15]
 const SINGLE_CORNER := [1, 2, 4, 8]
 
+# Prop source tiles, in individual-PNG indices. tree/stone/spike/fire are the
+# slot names MapRenderer's scatter rules already use; the biome only changes
+# which tile sits behind each one.
+const PROPS := {
+	&"forest": {&"tree": 130, &"stone": 136, &"spike": 132, &"fire": 296},
+	&"ice": {&"tree": 181, &"stone": 135, &"spike": 183, &"fire": 297},
+	&"desert": {&"tree": 134, &"stone": 137, &"spike": 131, &"fire": 295},
+}
+
+const PROP_ALPHA_FLOOR := 8.0 / 255.0
+
 const CORNER_TOL_SQ := 900.0
 const FRACTION_TOL_SQ := 4000.0
 const SNOW_TOL_SQ := 2600.0
@@ -219,6 +230,35 @@ func _snowify(img: Image) -> Image:
 					clampf(shifted.z / 255.0, 0.0, 1.0), c.a))
 	return out
 
+## Crops to the alpha bounding box, then pads 1px of transparency back.
+##
+## Both halves are load-bearing. The crop is what makes prop_footprints()
+## honest - it derives a blocking radius from the texture's full size, so
+## transparent padding becomes invisible wall (tile130 fills 48% of its canvas,
+## which would block over twice the area it draws). The 1px pad is what keeps
+## test_prop_assets.gd's margin gate satisfiable: a bare bbox crop has opaque
+## edge pixels by construction.
+func _trim_and_pad(img: Image) -> Image:
+	var w := img.get_width()
+	var h := img.get_height()
+	var min_x := w
+	var min_y := h
+	var max_x := -1
+	var max_y := -1
+	for y in h:
+		for x in w:
+			if img.get_pixel(x, y).a > PROP_ALPHA_FLOOR:
+				min_x = mini(min_x, x)
+				min_y = mini(min_y, y)
+				max_x = maxi(max_x, x)
+				max_y = maxi(max_y, y)
+	assert(max_x >= 0, "prop has no visible pixels")
+	var box := Rect2i(min_x, min_y, max_x - min_x + 1, max_y - min_y + 1)
+	var out := Image.create_empty(box.size.x + 2, box.size.y + 2, false, img.get_format())
+	out.fill(Color(0, 0, 0, 0))
+	out.blit_rect(img, box, Vector2i(1, 1))
+	return out
+
 func _bake_biome(biome: StringName, tiles: Dictionary) -> void:
 	var def: Dictionary = BIOMES[biome]
 	var dir := "%s/%s" % [OUT, biome]
@@ -230,4 +270,9 @@ func _bake_biome(biome: StringName, tiles: Dictionary) -> void:
 		if def["snow"]:
 			img = _snowify(img)
 		img.save_png("%s/blend_%02d.png" % [dir, mask])
+	for slot in PROPS[biome]:
+		var prop: Image = tiles[PROPS[biome][slot]]
+		prop.convert(Image.FORMAT_RGBA8)
+		prop = _trim_and_pad(prop)
+		prop.save_png("%s/%s.png" % [dir, slot])
 	print("bake_kenney: %s %s" % [biome, table])

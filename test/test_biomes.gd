@@ -45,3 +45,11 @@ func test_every_biome_carries_a_human_readable_label() -> bool:
 		var label: String = Biomes.get_def(biome)["label"]
 		assert_false(label.is_empty(), "%s has a label" % biome)
 	return true
+
+func test_every_biome_resolves_all_four_prop_slots() -> bool:
+	for biome in Biomes.KINDS:
+		for slot in Biomes.PROP_SLOTS:
+			var path := Biomes.prop_path(biome, slot)
+			assert_true(ResourceLoader.exists(path),
+				"%s %s resolves to a real resource (%s)" % [biome, slot, path])
+	return true
