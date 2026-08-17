@@ -108,7 +108,7 @@ func test_every_biome_ships_every_mask_the_pack_supplies() -> bool:
 
 func test_the_two_diagonal_masks_are_deliberately_absent() -> bool:
 	# The pack has no diagonal-only tiles in any pairing. Baking one would mean
-	# it came from somewhere it should not have. Biomes.blend_texture is what
+	# it came from somewhere it should not have. Biomes.blend_path is what
 	# resolves the gap at runtime (Task 2), not a file on disk.
 	for biome in _BIOMES:
 		for mask in [6, 9]:
@@ -602,7 +602,7 @@ static func prop_path(biome: StringName, slot: StringName) -> String:
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `godot --headless --quit --script test/run_tests.gd`
-Expected: PASS, whole suite green. `prop_texture` exists but is deliberately **not** exercised here — Task 3 is what bakes the props, and it adds the test that resolves all four slots. Asserting them now would commit a knowingly-red suite.
+Expected: PASS, whole suite green. `prop_path` exists but is deliberately **not** exercised here — Task 3 is what bakes the props, and it adds the test that resolves all four slots. Asserting them now would commit a knowingly-red suite.
 
 - [ ] **Step 5: Commit**
 
@@ -1241,7 +1241,7 @@ the ground layer stays seam-free) is still true and still worth pinning; only
 the expected origin moved.
 
 **Interfaces:**
-- Consumes: `Biomes.blend_texture` from Task 2.
+- Consumes: `Biomes.blend_path` from Task 2.
 - Produces: `MapRenderer.render(tiles: Array, rng: Rng = null, biome: StringName = Biomes.FIRST)`. Ground layer is `(cols + 1) * (rows + 1)` sprites at `(c * 48 - 24, r * 48 - 24)`, `z_index == _Z_GROUND`.
 - Produces: `MapRenderer.corner_mask(c: int, r: int) -> int` — public so tests can assert the lattice without reaching into rendering.
 
@@ -1352,7 +1352,7 @@ func test_spawn_and_goal_tiles_count_as_road_for_the_lattice() -> bool:
 	return true
 
 func test_the_demo_map_never_needs_a_diagonal_blend_tile() -> bool:
-	# The pack ships no diagonal-only tile. Biomes.blend_texture substitutes
+	# The pack ships no diagonal-only tile. Biomes.blend_path substitutes
 	# mask 15, and this asserts that substitution stays a safety net rather
 	# than something the shipped map actually depends on.
 	var renderer := MapRenderer.new()
@@ -1504,7 +1504,7 @@ every one of those tests renders with the default biome. **Their logic does not
 change**; only the four string values do.
 
 **Interfaces:**
-- Consumes: `Biomes.prop_texture` from Task 2, `corner_mask` from Task 6.
+- Consumes: `Biomes.prop_path` from Task 2, `corner_mask` from Task 6.
 - Produces: `prop_footprints()` unchanged in signature — still `Array` of `{"pos": Vector2, "radius": float}`.
 
 **None of the scatter rules change.** Spike count, the fire cap, the walkable-adjacency test and the blocked-tile stone/tree split all keep their existing behaviour and their existing tests.
