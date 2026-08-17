@@ -16,7 +16,8 @@
 - Every `test_*` method MUST be declared `-> bool` and end with `return true`. Every early `return` inside one must also `return true`. See `test/case.gd`.
 - A test that records zero assertions fails the run. So does a suite file with zero test methods.
 - Prefer flat `test_*` bodies over helper delegation; where a helper is unavoidable, assert on its result (see the known gap in `test/run_tests.gd`).
-- Tests read committed PNG bytes via `FileAccess.get_file_as_bytes` + `Image.load_png_from_buffer`, never the imported `Texture2D`.
+- **Asset-gate tests** (those measuring pixels) read committed PNG bytes via `FileAccess.get_file_as_bytes` + `Image.load_png_from_buffer`, never the imported `Texture2D`, so they gate the file that is in git. **Renderer tests** keep comparing `Texture2D.resource_path`, which is the existing convention documented in `test/test_map_renderer.gd`'s header.
+- Every task ends on a green suite. A task that knowingly commits a failing test is not done.
 - `Tiles.TILE_SIZE` stays **48**. `MIN_TOWER_SPACING` stays **44**.
 - `PATH_HALF_WIDTH` moves **26 → 14** (Task 9 only).
 - Enemies are untouched: `assets/enemies/**`, `game/enemy.tscn`, `game/enemy.gd`, `data/enemies.gd`.
@@ -504,13 +505,6 @@ func test_every_biome_resolves_every_blend_mask_the_pack_supplies() -> bool:
 			assert_true(tex != null, "%s mask %d resolves" % [biome, mask])
 	return true
 
-func test_every_biome_resolves_all_four_prop_slots() -> bool:
-	for biome in Biomes.KINDS:
-		for slot in [&"tree", &"stone", &"spike", &"fire"]:
-			var tex := Biomes.prop_texture(biome, slot)
-			assert_true(tex != null, "%s %s resolves" % [biome, slot])
-	return true
-
 func test_the_diagonal_masks_fall_back_to_the_full_road_tile() -> bool:
 	# The pack ships no diagonal-only tile in any pairing. 15 connects both
 	# diagonals rather than neither, which is the safer resolution.
@@ -592,7 +586,7 @@ static func prop_texture(biome: StringName, slot: StringName) -> Texture2D:
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `godot --headless --quit --script test/run_tests.gd`
-Expected: `test_biomes.gd` — the blend and diagonal tests PASS; **`test_every_biome_resolves_all_four_prop_slots` still FAILS** because Task 3 has not baked the props yet. That is expected and is the next task's starting condition.
+Expected: PASS, whole suite green. `prop_texture` exists but is deliberately **not** exercised here — Task 3 is what bakes the props, and it adds the test that resolves all four slots. Asserting them now would commit a knowingly-red suite.
 
 - [ ] **Step 5: Commit**
 
@@ -609,6 +603,7 @@ git commit -m "Add the biome table and its diagonal-mask fallback"
 - Modify: `tools/bake_kenney.gd` (add prop baking to `_bake_biome`)
 - Create: `assets/kenney/<biome>/{tree,stone,spike,fire}.png`
 - Test: `test/test_prop_assets.gd`
+- Test: `test/test_biomes.gd` (add the prop-slot test, which belongs to this task because this is the task that satisfies it)
 
 **Interfaces:**
 - Consumes: `BIOMES` and the image loading from Task 1.
@@ -724,6 +719,17 @@ func test_trimming_actually_shrank_the_source_canvas() -> bool:
 			if img.get_width() < 128 or img.get_height() < 128:
 				shrunk += 1
 	assert_eq(shrunk, _BIOMES.size() * _SLOTS.size(), "every prop was trimmed below 128px")
+	return true
+```
+
+And add to `test/test_biomes.gd` — this assertion lives here rather than in Task 2 because Task 3 is what makes it true, and a task must not commit a knowingly-red suite:
+
+```gdscript
+func test_every_biome_resolves_all_four_prop_slots() -> bool:
+	for biome in Biomes.KINDS:
+		for slot in Biomes.PROP_SLOTS:
+			var tex := Biomes.prop_texture(biome, slot)
+			assert_true(tex != null, "%s %s resolves" % [biome, slot])
 	return true
 ```
 
@@ -1200,7 +1206,22 @@ git commit -m "Rebake the tower atlas at its existing geometry"
 
 **Files:**
 - Modify: `game/map_renderer.gd` (`_draw_ground`, the preload block, `render`)
-- Modify: `test/test_map_renderer.gd` (ground-layer assertions)
+- Modify: `test/test_map_renderer.gd` (ground-layer assertions, the `_GRASS_PATH`/`_PATH_PATH` constants at lines 15-16, and `test_square_ground_tiles_still_land_exactly_on_their_tile_origin`)
+
+**Two things in the existing test file that the ground change invalidates.**
+`test/test_map_renderer.gd:9-16` declares eight hardcoded `res://assets/map/*.png`
+constants, and 12 of its 19 tests key off them. This task owns the two ground
+ones — delete `_GRASS_PATH` and `_PATH_PATH`, since a blended ground layer has
+no single grass or path texture to name. The six prop and endpoint constants
+stay; Tasks 7 and 8 own those.
+
+`test_square_ground_tiles_still_land_exactly_on_their_tile_origin` (line 577)
+asserts ground sprites land on their tile origin with zero slack. The lattice
+moves every ground sprite half a tile up and left, so its premise is now false.
+Rewrite it as the half-tile assertion below rather than deleting it — the
+property it was protecting (a square source gets zero slack from `_place`, so
+the ground layer stays seam-free) is still true and still worth pinning; only
+the expected origin moved.
 
 **Interfaces:**
 - Consumes: `Biomes.blend_texture` from Task 2.
@@ -1246,6 +1267,33 @@ func test_ground_sprites_are_offset_half_a_tile_so_roads_sit_on_tile_centres() -
 			assert_eq(posmod(int(sprite.position.x), Tiles.TILE_SIZE), half,
 				"ground sprite x is on the half-tile lattice")
 	assert_true(found, "the lattice point at (3, 5) was drawn")
+	renderer.free()
+	return true
+
+func test_square_ground_tiles_take_zero_slack_from_the_tile_box() -> bool:
+	# Replaces test_square_ground_tiles_still_land_exactly_on_their_tile_origin,
+	# whose premise the half-tile lattice offset invalidates. The property
+	# worth keeping is unchanged: _place splits leftover slack to centre a
+	# sprite, and a SQUARE source has none, which is what keeps the ground
+	# layer flush and seam-free. Only the origin it lands on moved.
+	var renderer := MapRenderer.new()
+	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
+	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
+	var half := Tiles.TILE_SIZE / 2
+	var checked := 0
+	for child in renderer.get_children():
+		if not (child is Sprite2D) or child.z_index != -1:
+			continue
+		var sprite: Sprite2D = child
+		var tex: Texture2D = sprite.texture
+		assert_eq(tex.get_width(), tex.get_height(), "a ground tile is square")
+		var c := int((sprite.position.x + half) / Tiles.TILE_SIZE)
+		var r := int((sprite.position.y + half) / Tiles.TILE_SIZE)
+		assert_eq(sprite.position,
+			Vector2(c * Tiles.TILE_SIZE - half, r * Tiles.TILE_SIZE - half),
+			"ground sprite takes zero slack, landing on its lattice point")
+		checked += 1
+	assert_true(checked > 0, "ground sprites were checked")
 	renderer.free()
 	return true
 
@@ -1330,7 +1378,17 @@ Expected: FAIL — `render` takes no biome argument and `corner_mask` does not e
 
 - [ ] **Step 3: Rewrite the ground layer**
 
-In `game/map_renderer.gd`, delete the eight texture preloads at lines 7-14 and the `_PROP_TEXTURES` const, and add a biome field:
+In `game/map_renderer.gd`, delete **only** the `_GRASS` and `_PATH` preloads.
+
+**Leave `_TREE`, `_STONE`, `_SPIKE`, `_FIRE`, `_CASTLE`, `_CAVE` and
+`_PROP_TEXTURES` exactly where they are** — Tasks 7 and 8 replace them.
+Deleting them here leaves `_draw_endpoints`, `_scatter_decoration` and
+`_draw_blocked` referencing undefined identifiers, which is a **parse error**,
+not a test failure: `map_renderer.gd` would fail to compile and take the whole
+suite down as a load error. The old `assets/map/*.png` survive until Task 10,
+so those preloads still resolve.
+
+Then add a biome field:
 
 ```gdscript
 var _biome: StringName = Biomes.FIRST
@@ -1412,9 +1470,17 @@ git commit -m "Draw the ground from a corner-mask lattice"
 ### Task 7: Per-biome props and an honest footprint set
 
 **Files:**
-- Modify: `game/map_renderer.gd` (`_scatter_decoration`, `_draw_blocked`, `_place`, `prop_footprints`)
-- Modify: `test/test_map_renderer.gd`
-- Test: `test/test_placement.gd` (add one footprint case)
+- Modify: `game/map_renderer.gd` (`_scatter_decoration`, `_draw_blocked`, `_place`, `prop_footprints`, and now the `_TREE`/`_STONE`/`_SPIKE`/`_FIRE`/`_PROP_TEXTURES` declarations Task 6 deliberately left in place)
+- Modify: `test/test_map_renderer.gd` (the four prop path constants, and every test that keys off them)
+
+**The prop path constants are this task's job.** `test/test_map_renderer.gd:9-12`
+declares `_SPIKE_PATH`, `_FIRE_PATH`, `_STONE_PATH` and `_TREE_PATH` as
+`res://assets/map/*.png`, and the scatter tests (spike counts, the fire cap, the
+stone/tree split across seeds, the exclusion zone), the aspect-ratio test, the
+mipmap-filter test and both footprint tests all match on them. Repoint all four
+at the forest biome — `res://assets/kenney/forest/spike.png` and so on — since
+every one of those tests renders with the default biome. **Their logic does not
+change**; only the four string values do.
 
 **Interfaces:**
 - Consumes: `Biomes.prop_texture` from Task 2, `corner_mask` from Task 6.
@@ -1589,8 +1655,16 @@ git commit -m "Resolve props per biome and track them for footprints"
 - Modify: `game/map_renderer.gd` (`_draw_endpoints`)
 - Modify: `data/maps.gd` (add `biome` to `demoMap`)
 - Modify: `game/game_board.gd` (`_ready` passes the biome)
-- Modify: `test/test_map_renderer.gd` (endpoint test)
+- Modify: `test/test_map_renderer.gd` (the `_CAVE_PATH`/`_CASTLE_PATH` constants at lines 13-14, and the endpoint test)
 - Modify: `test/test_data_tables.gd` (map def gains a key)
+
+**The last two path constants are this task's job.** `_CAVE_PATH` and
+`_CASTLE_PATH` at `test/test_map_renderer.gd:13-14` still point at
+`res://assets/map/`. Repoint them to `res://assets/kenney/cave.png` and
+`res://assets/kenney/castle.png` — note these are **not** under a biome
+directory, because the endpoints are shared across biomes. After this task no
+`res://assets/map/` string remains in the file, which is what lets Task 10
+delete that directory.
 
 **Interfaces:**
 - Consumes: `assets/kenney/castle.png` and `cave.png` from Task 4, `Biomes` from Task 2.
