@@ -84,8 +84,14 @@ Two measurements that matter later:
   that 249 was the best the *old* source sheet could achieve anywhere. The new
   art clears the gate outright, so the seam class of defect that gate was
   written for cannot recur.
-- **Props are free-standing with large transparent margins.** `tile130` (bush)
-  is 128×128 with an alpha bbox of 62×62 — it fills 48% of its canvas. §6.
+- **Most props are free-standing with large transparent margins.** `tile131`
+  (small bush) is 128×128 with an alpha bbox of 62×62 — it fills 19.7% of its
+  canvas. §6.
+- **But not all of them are.** `tile130` and `tile133` are tiling foliage
+  fills, not sprites: their art runs off all four canvas edges (tile130
+  measures edge alpha 255/255/191/255 over a full-canvas bbox). They are unusable
+  as props and are used nowhere. Any prop tile must be verified free-standing
+  before it is chosen — §6 explains why the margin gate alone cannot catch this.
 
 ## 3. What is explicitly not changing
 
@@ -133,9 +139,9 @@ per biome, in individual-PNG indices (see §2):
 
 | biome | ground↔road | tree | stone | spike | fire |
 |---|---|---|---|---|---|
-| forest | grass↔dirt | 130 (bush) | 136 (rock) | 132 (shrub) | 296 |
+| forest | grass↔dirt | 132 (shrub) | 136 (rock) | 131 (small bush) | 296 |
 | ice | snow↔stone | 181 (crystal) | 135 (rock) | 183 (shard) | 297 |
-| desert | sand↔dirt | 134 (spiked plant) | 137 (rock) | 131 (small bush) | 295 |
+| desert | sand↔dirt | 134 (spiked plant) | 137 (rock) | 135 (small rock) | 295 |
 
 Each of the three ground/road pairings — grass↔dirt, sand↔dirt, sand↔stone —
 already exists in the pack as a complete blend set. That is what makes three
@@ -178,7 +184,7 @@ blocking radius from **the texture's full dimensions** times the sprite scale.
 Its doc comment justifies deliberately over-covering: "blocking slightly too
 much reads as level design, while a tower clipping into a rock reads as a bug."
 
-Kenney art breaks the "slightly". The bush `tile130` occupies 62×62 of a
+Kenney art breaks the "slightly". The bush `tile131` occupies 62×62 of a
 128×128 canvas. Fitted into a 48px tile it draws about 23px wide but would
 claim the full 24px radius — a blocking circle over twice the area of the
 visible art. Players would hit invisible walls in open grass.

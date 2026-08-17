@@ -629,9 +629,16 @@ Source tiles, in individual-PNG indices:
 
 | biome | tree | stone | spike | fire |
 |---|---|---|---|---|
-| forest | 130 | 136 | 132 | 296 |
+| forest | 132 | 136 | 131 | 296 |
 | ice | 181 | 135 | 183 | 297 |
-| desert | 134 | 137 | 131 | 295 |
+| desert | 134 | 137 | 135 | 295 |
+
+**Tiles 130 and 133 are deliberately unused.** Both are the pack's tiling
+foliage fills, not free-standing sprites: their art runs off all four canvas
+edges (tile130 measures edge alpha 255/255/191/255 with a bbox covering the
+full 128×128). Padding transparency around clipped art produces a prop with
+hard-cut edges — the exact defect class the old `test_map_assets.gd` was
+written for. Every tile in the table above has clean transparent edges.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -646,7 +653,7 @@ extends TestCase
 # The tight-bbox gate is the one that matters for gameplay.
 # MapRenderer.prop_footprints() derives a tower-blocking radius from the
 # texture's full dimensions, so transparent padding becomes invisible wall.
-# Kenney's raw tile130 fills 48% of its 128x128 canvas: untrimmed it would
+# Kenney's raw tile131 fills 19.7% of its 128x128 canvas (bbox 62x62): untrimmed it would
 # block over twice the area it draws. The bake trims to the alpha bbox and
 # pads back exactly 1px, which is what makes "radius from displayed size" true
 # rather than merely conservative. See spec section 6.
@@ -779,7 +786,7 @@ Add the trim helper:
 ##
 ## Both halves are load-bearing. The crop is what makes prop_footprints()
 ## honest - it derives a blocking radius from the texture's full size, so
-## transparent padding becomes invisible wall (tile130 fills 48% of its canvas,
+## transparent padding becomes invisible wall (tile131 fills 19.7% of its canvas,
 ## which would block over twice the area it draws). The 1px pad is what keeps
 ## test_prop_assets.gd's margin gate satisfiable: a bare bbox crop has opaque
 ## edge pixels by construction.
@@ -1580,7 +1587,7 @@ func test_a_props_blocking_radius_is_half_the_tile_box_it_is_fitted_into() -> bo
 	# radius prop_footprints derives is always TILE_SIZE / 2 whatever the
 	# source dimensions are. That is precisely why trimming has to happen at
 	# bake time and cannot be compensated for here: the radius does not move,
-	# so the ART has to grow to fill it. tile130 untrimmed draws its subject at
+	# so the ART has to grow to fill it. tile131 untrimmed draws its subject at
 	# ~23px inside this same 24px radius - a blocking circle over twice the
 	# area of the visible art. test_prop_assets.gd's tight-bbox gate is what
 	# holds the other half of this bargain.
