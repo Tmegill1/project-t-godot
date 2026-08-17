@@ -43,15 +43,9 @@ func test_no_engine_or_scene_references_in_sim_or_data() -> bool:
 # Factored out of the test above so a dedicated test can exercise this
 # exact pipeline (see test_scan_pipeline_reports_every_detector_kind
 # below) rather than only the individual detector functions in isolation.
-#
-# Exception: data/biomes.gd is a resource index that intentionally couples to
-# textures via load() - this is a specific design, not a violation.
 func _scan_text_for_offences(path: String, text: String) -> Array[String]:
 	var offences: Array[String] = []
-	var is_biomes := path == "res://data/biomes.gd"
 	for token in FORBIDDEN:
-		if is_biomes and token == "load(":
-			continue
 		if _contains_outside_comments(text, token):
 			offences.append("%s contains %s" % [path, token])
 	if _has_node_shorthand_outside_comments(text):

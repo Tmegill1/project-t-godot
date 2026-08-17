@@ -15,17 +15,18 @@ func test_the_three_biomes_are_exactly_forest_ice_and_desert() -> bool:
 func test_every_biome_resolves_every_blend_mask_the_pack_supplies() -> bool:
 	for biome in Biomes.KINDS:
 		for mask in [0, 1, 2, 3, 4, 5, 7, 8, 10, 11, 12, 13, 14, 15]:
-			var tex := Biomes.blend_texture(biome, mask)
-			assert_true(tex != null, "%s mask %d resolves" % [biome, mask])
+			var path := Biomes.blend_path(biome, mask)
+			assert_true(ResourceLoader.exists(path),
+				"%s mask %d resolves to a real resource (%s)" % [biome, mask, path])
 	return true
 
 func test_the_diagonal_masks_fall_back_to_the_full_road_tile() -> bool:
 	# The pack ships no diagonal-only tile in any pairing. 15 connects both
 	# diagonals rather than neither, which is the safer resolution.
 	for biome in Biomes.KINDS:
-		var full := Biomes.blend_texture(biome, 15)
+		var full := Biomes.blend_path(biome, 15)
 		for mask in Biomes.DIAGONAL_MASKS:
-			assert_eq(Biomes.blend_texture(biome, mask), full,
+			assert_eq(Biomes.blend_path(biome, mask), full,
 				"%s mask %d falls back to 15" % [biome, mask])
 	return true
 

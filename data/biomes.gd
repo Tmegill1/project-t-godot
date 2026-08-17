@@ -31,9 +31,14 @@ const DIAGONAL_FALLBACK := 15
 static func get_def(biome: StringName) -> Dictionary:
 	return DEFS[biome]
 
-static func blend_texture(biome: StringName, mask: int) -> Texture2D:
+## Returns a path, never a loaded resource. data/ is held engine-free by
+## test/test_sim_purity.gd, whose docstring explains that resource loading
+## breaks the headless claim the whole harness rests on. The render layer
+## loads; this module only names. Same division as data/enemies.gd's
+## texture_key and data/towers.gd's sprite_frame.
+static func blend_path(biome: StringName, mask: int) -> String:
 	var resolved := DIAGONAL_FALLBACK if mask in DIAGONAL_MASKS else mask
-	return load("%s/blend_%02d.png" % [DEFS[biome]["dir"], resolved])
+	return "%s/blend_%02d.png" % [DEFS[biome]["dir"], resolved]
 
-static func prop_texture(biome: StringName, slot: StringName) -> Texture2D:
-	return load("%s/%s.png" % [DEFS[biome]["dir"], slot])
+static func prop_path(biome: StringName, slot: StringName) -> String:
+	return "%s/%s.png" % [DEFS[biome]["dir"], slot]
