@@ -6,10 +6,10 @@ extends TestCase
 # Texture2D.resource_path rather than by reaching into MapRenderer's private
 # _decorations dict, so these tests only rely on public state.
 
-const _SPIKE_PATH := "res://assets/map/spike.png"
-const _FIRE_PATH := "res://assets/map/fire.png"
-const _STONE_PATH := "res://assets/map/stone.png"
-const _TREE_PATH := "res://assets/map/tree.png"
+const _SPIKE_PATH := "res://assets/kenney/forest/spike.png"
+const _FIRE_PATH := "res://assets/kenney/forest/fire.png"
+const _STONE_PATH := "res://assets/kenney/forest/stone.png"
+const _TREE_PATH := "res://assets/kenney/forest/tree.png"
 const _CAVE_PATH := "res://assets/map/cave.png"
 const _CASTLE_PATH := "res://assets/map/castle.png"
 
@@ -786,4 +786,86 @@ func test_prop_footprint_radius_covers_the_sprite_s_longest_axis() -> bool:
 	assert_true(matched, "a footprint sits at the stone's displayed centre, not its top-left corner")
 
 	mr.free()
+	return true
+
+func test_props_come_from_the_biome_being_rendered() -> bool:
+	var forest := MapRenderer.new()
+	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
+	forest.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
+	var forest_paths := {}
+	for child in forest.get_children():
+		if child is Sprite2D and child.z_index == 1:
+			forest_paths[child.texture.resource_path] = true
+	forest.free()
+
+	var ice := MapRenderer.new()
+	ice.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"ice")
+	var shared := 0
+	for child in ice.get_children():
+		if child is Sprite2D and child.z_index == 1:
+			if forest_paths.has(child.texture.resource_path):
+				shared += 1
+	ice.free()
+	# The endpoints are shared across biomes; the props are not.
+	assert_true(shared <= 2, "ice props are not forest props (%d shared)" % shared)
+	return true
+
+func test_prop_footprints_cover_only_the_props() -> bool:
+	# Endpoints are excluded on purpose - they are drawn 3 tiles wide and a
+	# footprint from one would sterilise the ground around spawn and goal.
+	var renderer := MapRenderer.new()
+	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
+	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
+	var footprints := renderer.prop_footprints()
+	assert_true(footprints.size() > 0, "the demo map scatters props")
+	for entry in footprints:
+		var f: Dictionary = entry
+		var radius: float = f["radius"]
+		assert_true(radius > 0.0, "a footprint has a positive radius")
+		# A prop is fitted into one 48px tile, so no footprint may exceed half
+		# of it. A radius above 24 means an endpoint leaked in - those are
+		# drawn 3 tiles wide and would carry a 72px radius, sterilising the
+		# ground around spawn and goal.
+		assert_true(radius <= float(Tiles.TILE_SIZE) / 2.0,
+			"footprint radius %f fits inside one tile" % radius)
+	renderer.free()
+	return true
+
+func test_every_prop_sprite_contributes_exactly_one_footprint() -> bool:
+	# Guards the set-membership swap: a prop that fails to register produces no
+	# blocking circle at all and towers build straight through it, which no
+	# other assertion here would notice.
+	var renderer := MapRenderer.new()
+	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
+	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
+	var props := 0
+	for child in renderer.get_children():
+		if child is Sprite2D and child.z_index == 1 \
+				and not child.texture.resource_path.ends_with("castle.png") \
+				and not child.texture.resource_path.ends_with("cave.png"):
+			props += 1
+	assert_eq(renderer.prop_footprints().size(), props,
+		"one footprint per prop sprite, endpoints excluded")
+	renderer.free()
+	return true
+
+func test_a_props_blocking_radius_is_half_the_tile_box_it_is_fitted_into() -> bool:
+	# _place normalises every prop's LONGEST axis to exactly TILE_SIZE, so the
+	# radius prop_footprints derives is always TILE_SIZE / 2 whatever the
+	# source dimensions are. That is precisely why trimming has to happen at
+	# bake time and cannot be compensated for here: the radius does not move,
+	# so the ART has to grow to fill it. tile131 untrimmed draws its subject at
+	# ~23px inside this same 24px radius - a blocking circle over twice the
+	# area of the visible art. test_prop_assets.gd's tight-bbox gate is what
+	# holds the other half of this bargain.
+	var renderer := MapRenderer.new()
+	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
+	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
+	var footprints := renderer.prop_footprints()
+	assert_true(footprints.size() > 0, "the demo map scatters props")
+	for entry in footprints:
+		var f: Dictionary = entry
+		assert_almost_eq(f["radius"], float(Tiles.TILE_SIZE) / 2.0, 0.001,
+			"footprint radius is half the tile box")
+	renderer.free()
 	return true

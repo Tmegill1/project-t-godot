@@ -4,16 +4,8 @@ extends Node2D
 ## Draws a tile grid. Decoration scatter is seeded so a map renders
 ## identically every run.
 
-const _TREE := preload("res://assets/map/tree.png")
-const _STONE := preload("res://assets/map/stone.png")
 const _CASTLE := preload("res://assets/map/castle.png")
 const _CAVE := preload("res://assets/map/cave.png")
-const _SPIKE := preload("res://assets/map/spike.png")
-const _FIRE := preload("res://assets/map/fire.png")
-
-## Which textures count as solid props for placement. Ground tiles are not
-## props, and endpoints are excluded for the reason prop_footprints explains.
-const _PROP_TEXTURES := [_TREE, _STONE, _SPIKE, _FIRE]
 
 const _MAX_FIRE_TILES := 7
 
@@ -29,6 +21,14 @@ var _rows := 0
 var _cols := 0
 var _decorations := {}  # Vector2i -> Sprite2D
 var _biome: StringName = Biomes.FIRST
+
+## Sprites that count as solid props, recorded as they are created.
+##
+## This replaces the old _PROP_TEXTURES const array of preloads, which could
+## not express a per-biome prop set. Recording at creation is also strictly
+## more robust than comparing textures after the fact - two biomes could
+## legitimately share a texture without both being props.
+var _prop_sprites := {}
 
 func render(tiles: Array, rng: Rng = null, biome: StringName = Biomes.FIRST) -> void:
 	if rng == null:
@@ -49,6 +49,7 @@ func render(tiles: Array, rng: Rng = null, biome: StringName = Biomes.FIRST) -> 
 	for child in get_children():
 		child.free()
 	_decorations.clear()
+	_prop_sprites.clear()
 
 	_draw_ground()
 	_draw_endpoints()
@@ -73,7 +74,7 @@ func prop_footprints() -> Array:
 		if not (child is Sprite2D):
 			continue
 		var sprite: Sprite2D = child
-		if not (sprite.texture in _PROP_TEXTURES):
+		if not _prop_sprites.has(sprite):
 			continue
 		var tex: Texture2D = sprite.texture
 		var display := Vector2(tex.get_width(), tex.get_height()) * sprite.scale
@@ -120,6 +121,14 @@ func _place(texture: Texture2D, col: int, row: int, size_px: float,
 	s.z_index = z
 	add_child(s)
 	return s
+
+## Places a prop and records it as one, so prop_footprints can find it.
+func _place_prop(slot: StringName, col: int, row: int) -> Sprite2D:
+	# load() here, not in Biomes: data/ stays engine-free (test_sim_purity.gd).
+	var texture: Texture2D = load(Biomes.prop_path(_biome, slot))
+	var sprite := _place(texture, col, row, Tiles.TILE_SIZE, _Z_OVERLAY)
+	_prop_sprites[sprite] = true
+	return sprite
 
 ## Ground is drawn from a corner-mask lattice sampled at TILE CENTRES: each
 ## sprite spans the square between four adjacent centres, so the grid is
@@ -190,7 +199,7 @@ func _scatter_decoration(rng: Rng) -> void:
 	var shuffled := rng.shuffle(buildable)
 	for i in spike_count:
 		var t: Vector2i = shuffled[i]
-		_decorations[t] = _place(_SPIKE, t.x, t.y, Tiles.TILE_SIZE, _Z_OVERLAY)
+		_decorations[t] = _place_prop(&"spike", t.x, t.y)
 
 	var path_adjacent: Array = []
 	for r in _rows:
@@ -206,7 +215,7 @@ func _scatter_decoration(rng: Rng) -> void:
 	var shuffled_adjacent := rng.shuffle(path_adjacent)
 	for i in fire_count:
 		var t: Vector2i = shuffled_adjacent[i]
-		_decorations[t] = _place(_FIRE, t.x, t.y, Tiles.TILE_SIZE, _Z_OVERLAY)
+		_decorations[t] = _place_prop(&"fire", t.x, t.y)
 
 func _draw_blocked(rng: Rng) -> void:
 	var excluded := {}
@@ -231,7 +240,7 @@ func _draw_blocked(rng: Rng) -> void:
 		stones[shuffled[i]] = true
 
 	for t in blocked:
-		_place(_STONE if stones.has(t) else _TREE, t.x, t.y, Tiles.TILE_SIZE, _Z_OVERLAY)
+		_place_prop(&"stone" if stones.has(t) else &"tree", t.x, t.y)
 
 func _is_adjacent_to_walkable(row: int, col: int) -> bool:
 	# The loop variable below is untyped Variant (an array literal's element
