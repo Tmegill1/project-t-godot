@@ -4,8 +4,10 @@ extends Node2D
 ## Draws a tile grid. Decoration scatter is seeded so a map renders
 ## identically every run.
 
-const _CASTLE := preload("res://assets/map/castle.png")
-const _CAVE := preload("res://assets/map/cave.png")
+## Shared across every biome: the goal and spawn markers are player landmarks,
+## not scenery, and are the same object whatever the map is made of.
+const _CASTLE := preload("res://assets/kenney/castle.png")
+const _CAVE := preload("res://assets/kenney/cave.png")
 
 const _MAX_FIRE_TILES := 7
 

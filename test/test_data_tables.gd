@@ -140,3 +140,16 @@ func test_map_pixel_size_multiplies_both_axes_by_tile_size() -> bool:
 	assert_eq(size.y, int(m["rows"]) * int(m["tile_size"]), "height is rows * tile_size")
 	assert_eq(size, Vector2i(1104, 672), "the first map is 1104x672 px at 23x14 tiles of 48")
 	return true
+
+func test_every_map_names_a_biome_that_exists() -> bool:
+	for name in Maps.DEFS:
+		var def: Dictionary = Maps.DEFS[name]
+		assert_true(def.has("biome"), "%s names a biome" % name)
+		assert_true(Biomes.KINDS.has(def["biome"]),
+			"%s's biome %s is registered" % [name, def["biome"]])
+	return true
+
+func test_the_first_map_is_the_forest() -> bool:
+	assert_eq(Maps.get_def(Maps.FIRST)["biome"], &"forest",
+		"The Pass is a forest map")
+	return true

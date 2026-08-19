@@ -10,8 +10,8 @@ const _SPIKE_PATH := "res://assets/kenney/forest/spike.png"
 const _FIRE_PATH := "res://assets/kenney/forest/fire.png"
 const _STONE_PATH := "res://assets/kenney/forest/stone.png"
 const _TREE_PATH := "res://assets/kenney/forest/tree.png"
-const _CAVE_PATH := "res://assets/map/cave.png"
-const _CASTLE_PATH := "res://assets/map/castle.png"
+const _CAVE_PATH := "res://assets/kenney/cave.png"
+const _CASTLE_PATH := "res://assets/kenney/castle.png"
 
 func _demo_tiles() -> Array:
 	return Maps.build_tiles(Maps.FIRST)
