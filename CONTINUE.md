@@ -125,7 +125,7 @@ win or lose → retry or menu, with sound.
 | `audio/` — pooled playback, 17 core-slice events | ✅ complete |
 | Web export | ✅ preset + build; **boots and renders in a browser; not yet played in one** |
 | Deploy | ✅ live at **https://tmegill1.github.io/project-t-godot/** — every push to `master` republishes, at the address GitHub assigns (no custom domain) |
-| Tests | ✅ 5253 checks across 30 files, exit 0 |
+| Tests | ✅ 6574 checks across 35 files, exit 0 |
 | Tower upgrades | ✅ **all 11 tasks done** — rules, tower, board, harness, inspector, verified in the running game. See §4 |
 
 **The repo is public** and the game is deployed from it.
@@ -236,7 +236,8 @@ that follow are made by the engine *at runtime*, after the wasm has instantiated
 and the pack has been read — so seeing them is decent evidence the engine started,
 short of seeing a pixel.
 
-**3. Decide the open art question in §9** — the squashed stone tiles.
+**3. Decide the open art question in §9** — whether the endpoint markers
+should become per-biome art.
 
 **4. Playtest and tune.** Nothing here has been balanced, and the upgrade tiers
 are as unplaytested as everything else. See §9. `sim/harness.gd` now takes
@@ -472,17 +473,17 @@ the player runs, not only in the thing the tests run.
 
 ## 9. Open decisions for the project owner
 
-1. **The map tiles now look better than the original.** 5 of 8 rects were corrected
-   for clipping and bleed. The spec says the original's visual quirks are preserved
-   deliberately, so this is a real divergence. Every deviation is documented in a
-   header block in `tools/slice_atlas.gd` with reference/used/reason — any rect is
-   one edit from exact parity. **Decide whether you want parity or the better art.**
-2. **`map_renderer` scales decoration per-axis**, which squeezes the stone tile
-   ~2.2×. Left alone pending decision 1; it is the same call.
-3. **The balance is unplaytested.** The original's own handoff notes say every
+1. **Endpoint markers are shared across biomes, not themed per biome.** The
+   goal (a composed keep) and spawn (a composed cave mouth) render identically
+   in forest, ice and desert. Spec §8.1 defers per-biome endpoints
+   deliberately — a forest keep of stone, an ice fortress of crystal, a desert
+   one of sandstone would read better and make each map feel authored, but
+   triple the endpoint art and add two assets per future biome. **Decide
+   whether that's worth it** when maps 2 and 3 are actually built.
+2. **The balance is unplaytested.** The original's own handoff notes say every
    number is a placeholder. "Matches Phaser" will not mean "plays well." Tune with
    the harness, which is exactly what it is for.
-4. **Web export is 40.6 MB** — measured, not predicted; the design anticipated
+3. **Web export is 40.6 MB** — measured, not predicted; the design anticipated
    25–40 MB. 39.5 MB of that is `index.wasm`, the Godot engine binary. The
    game's own `index.pck` is 790 KB raw / 666 KB gzipped, against the Phaser
    build's 368 KB gzipped — so the game data itself is roughly 1.8× larger, but

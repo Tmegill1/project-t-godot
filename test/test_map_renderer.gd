@@ -700,9 +700,9 @@ func test_render_called_twice_does_not_double_up_sprites() -> bool:
 	mr.free()
 	return true
 
-# The mipmap chain that test_map_assets.gd gates is inert unless the sprite
-# selects a filter that reads it: Godot's TEXTURE_FILTER_LINEAR (the project
-# default) samples the base level only, however many mip levels exist. This is
+# A mipmap chain is inert unless the sprite selects a filter that reads it:
+# Godot's TEXTURE_FILTER_LINEAR (the project default) samples the base level
+# only, however many mip levels exist. This is
 # LINEAR_WITH_MIPMAPS and not NEAREST_WITH_MIPMAPS because the map art is
 # painted, high-resolution artwork rather than pixel art - the opposite call
 # from the enemy sheets, which are 48px pixel art and take a NEAREST filter
