@@ -84,6 +84,8 @@ func _init() -> void:
 	var tiles := _load_all()
 	for biome in BIOMES:
 		_bake_biome(biome, tiles)
+	for name in ENDPOINTS:
+		_compose_endpoint(ENDPOINTS[name], tiles).save_png("%s/%s.png" % [OUT, name])
 	_copy_licence()
 	print("bake_kenney: done")
 	quit()
@@ -264,6 +266,74 @@ func _trim_and_pad(img: Image) -> Image:
 	out.fill(Color(0, 0, 0, 0))
 	out.blit_rect(img, box, Vector2i(1, 1))
 	return out
+
+# Endpoint compositions. The pack ships no castle and no cave, so each is
+# assembled from pieces on a clear 256x256 canvas: {tile, offset, scale}.
+# Composing rather than cutting is why these need no edge budget - there is no
+# neighbouring artwork on the canvas to bleed in.
+#
+# THESE OFFSETS WERE VALIDATED BY EYE, NOT DERIVED. An earlier set placed the
+# pieces so they did not touch: three floating shapes that passed every
+# assertion in test_endpoint_assets.gd (which can only see margins and
+# non-blankness) and read as scattered debris. If you change a number here,
+# re-render and LOOK at it. The suite cannot see composition.
+#
+# The castle interlocks deliberately: the two bastions (229) sit on the same
+# bottom line as the wide base (228), and the tower (226) is dropped far
+# enough to overlap the base rather than hover above it.
+const ENDPOINT_CANVAS := 256
+
+const ENDPOINTS := {
+	"castle": {
+		"pieces": [
+			{"tile": 229, "at": Vector2i(28, 138), "px": 86},
+			{"tile": 229, "at": Vector2i(142, 138), "px": 86},
+			{"tile": 228, "at": Vector2i(58, 96), "px": 140},
+			{"tile": 226, "at": Vector2i(70, 36), "px": 116},
+		],
+	},
+	# The cave is a painted opening with boulders arched around it. The pack
+	# has no cave and no dark shape to borrow, so the mouth is drawn: without
+	# it the three rocks read as a rock pile, not somewhere enemies come from.
+	"cave": {
+		"mouth": Rect2i(76, 94, 104, 98),
+		"mouth_colour": Color8(34, 41, 48),
+		"pieces": [
+			{"tile": 136, "at": Vector2i(0, 84), "px": 122},
+			{"tile": 137, "at": Vector2i(138, 86), "px": 114},
+			{"tile": 135, "at": Vector2i(84, 40), "px": 100},
+		],
+	},
+}
+
+## Fills an ellipse inscribed in `box`. Godot's Image has no primitive for
+## this, and the cave needs one solid dark shape the pack cannot supply.
+func _fill_ellipse(img: Image, box: Rect2i, colour: Color) -> void:
+	var rx := float(box.size.x) / 2.0
+	var ry := float(box.size.y) / 2.0
+	var cx := float(box.position.x) + rx
+	var cy := float(box.position.y) + ry
+	for y in range(box.position.y, box.end.y):
+		for x in range(box.position.x, box.end.x):
+			var nx := (float(x) + 0.5 - cx) / rx
+			var ny := (float(y) + 0.5 - cy) / ry
+			if nx * nx + ny * ny <= 1.0:
+				img.set_pixel(x, y, colour)
+
+func _compose_endpoint(spec: Dictionary, tiles: Dictionary) -> Image:
+	var canvas := Image.create_empty(
+		ENDPOINT_CANVAS, ENDPOINT_CANVAS, false, Image.FORMAT_RGBA8)
+	canvas.fill(Color(0, 0, 0, 0))
+	# Mouth first: the boulders are drawn over it so they frame the opening.
+	if spec.has("mouth"):
+		_fill_ellipse(canvas, spec["mouth"], spec["mouth_colour"])
+	for piece in spec["pieces"]:
+		var p: Dictionary = piece
+		var src: Image = tiles[p["tile"]].duplicate()
+		src.convert(Image.FORMAT_RGBA8)
+		src.resize(p["px"], p["px"], Image.INTERPOLATE_LANCZOS)
+		canvas.blend_rect(src, Rect2i(Vector2i.ZERO, src.get_size()), p["at"])
+	return _trim_and_pad(canvas)
 
 func _bake_biome(biome: StringName, tiles: Dictionary) -> void:
 	var def: Dictionary = BIOMES[biome]
