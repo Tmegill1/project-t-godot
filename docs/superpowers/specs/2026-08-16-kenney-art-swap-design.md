@@ -313,8 +313,9 @@ assertion moves from `cols × rows` to `(cols + 1) × (rows + 1)` per §7.1.
 ### 8.1 Endpoints
 
 The pack has no castle and no cave. Two PNGs are baked from pack pieces: the
-goal as a fortified base built from structure tiles **226–229, 249 and 268**;
-the spawn as a dark rock mouth from boulders **135–137**. `_draw_endpoints()`
+goal as a keep built from a wide base (**228**), a central tower (**226**) and
+two flanking bastions (**229**); the spawn as a painted dark mouth ringed by
+boulders (**135**, **136**, **137**). `_draw_endpoints()`
 changes only which texture it loads — the 3-tile width, the `(-TILE_SIZE,
 -TILE_SIZE - 20)` offset and the `_Z_OVERLAY` layer all stay.
 

@@ -857,7 +857,20 @@ git commit -m "Bake trimmed per-biome props so footprints match the art"
 - Consumes: image loading and `_trim_and_pad` from Tasks 1 and 3.
 - Produces: two shared (not per-biome) PNGs at `res://assets/kenney/castle.png` and `res://assets/kenney/cave.png`.
 
-The pack has no castle and no cave. `castle` is composed from structure tiles **226** (turret base), **229** (shield block) and **249** (green base); `cave` from boulders **135**, **136** and **137**. Both are composed on a 256×256 canvas and trimmed, so `_draw_endpoints()`'s 3-tile scaling is unchanged.
+The pack has no castle and no cave. `castle` is a keep composed from a wide
+base (**228**), a central tower (**226**) dropped to overlap it, and two
+flanking bastions (**229**) on the base's bottom line. `cave` is a painted dark
+mouth with boulders (**135**, **136**, **137**) arched around it — the pack has
+no dark shape to borrow, and without one the rocks read as a pile rather than
+somewhere enemies emerge from. Both are composed on a 256×256 canvas and
+trimmed, so `_draw_endpoints()`'s 3-tile scaling is unchanged.
+
+**The offsets below were validated by rendering them and looking.** An earlier
+set placed the pieces so they never touched — three floating shapes that passed
+every assertion in `test_endpoint_assets.gd` and read as scattered debris.
+Margins and non-blankness are all a test can see here; composition is not
+machine-checkable, so treat the numbers as measured values and re-render if you
+change one.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -959,31 +972,68 @@ Add to `tools/bake_kenney.gd`:
 # assembled from pieces on a clear 256x256 canvas: {tile, offset, scale}.
 # Composing rather than cutting is why these need no edge budget - there is no
 # neighbouring artwork on the canvas to bleed in.
+#
+# THESE OFFSETS WERE VALIDATED BY EYE, NOT DERIVED. An earlier set placed the
+# pieces so they did not touch: three floating shapes that passed every
+# assertion in test_endpoint_assets.gd (which can only see margins and
+# non-blankness) and read as scattered debris. If you change a number here,
+# re-render and LOOK at it. The suite cannot see composition.
+#
+# The castle interlocks deliberately: the two bastions (229) sit on the same
+# bottom line as the wide base (228), and the tower (226) is dropped far
+# enough to overlap the base rather than hover above it.
 const ENDPOINT_CANVAS := 256
 
 const ENDPOINTS := {
-	"castle": [
-		{"tile": 229, "at": Vector2i(64, 96), "px": 128},
-		{"tile": 226, "at": Vector2i(32, 32), "px": 96},
-		{"tile": 249, "at": Vector2i(128, 32), "px": 96},
-	],
-	"cave": [
-		{"tile": 137, "at": Vector2i(16, 80), "px": 112},
-		{"tile": 135, "at": Vector2i(112, 64), "px": 128},
-		{"tile": 136, "at": Vector2i(72, 128), "px": 104},
-	],
+	"castle": {
+		"pieces": [
+			{"tile": 229, "at": Vector2i(28, 138), "px": 86},
+			{"tile": 229, "at": Vector2i(142, 138), "px": 86},
+			{"tile": 228, "at": Vector2i(58, 96), "px": 140},
+			{"tile": 226, "at": Vector2i(70, 36), "px": 116},
+		],
+	},
+	# The cave is a painted opening with boulders arched around it. The pack
+	# has no cave and no dark shape to borrow, so the mouth is drawn: without
+	# it the three rocks read as a rock pile, not somewhere enemies come from.
+	"cave": {
+		"mouth": Rect2i(76, 94, 104, 98),
+		"mouth_colour": Color8(34, 41, 48),
+		"pieces": [
+			{"tile": 136, "at": Vector2i(0, 84), "px": 122},
+			{"tile": 137, "at": Vector2i(138, 86), "px": 114},
+			{"tile": 135, "at": Vector2i(84, 40), "px": 100},
+		],
+	},
 }
 
-func _compose_endpoint(pieces: Array, tiles: Dictionary) -> Image:
+## Fills an ellipse inscribed in `box`. Godot's Image has no primitive for
+## this, and the cave needs one solid dark shape the pack cannot supply.
+func _fill_ellipse(img: Image, box: Rect2i, colour: Color) -> void:
+	var rx := float(box.size.x) / 2.0
+	var ry := float(box.size.y) / 2.0
+	var cx := float(box.position.x) + rx
+	var cy := float(box.position.y) + ry
+	for y in range(box.position.y, box.end.y):
+		for x in range(box.position.x, box.end.x):
+			var nx := (float(x) + 0.5 - cx) / rx
+			var ny := (float(y) + 0.5 - cy) / ry
+			if nx * nx + ny * ny <= 1.0:
+				img.set_pixel(x, y, colour)
+
+func _compose_endpoint(spec: Dictionary, tiles: Dictionary) -> Image:
 	var canvas := Image.create_empty(
 		ENDPOINT_CANVAS, ENDPOINT_CANVAS, false, Image.FORMAT_RGBA8)
 	canvas.fill(Color(0, 0, 0, 0))
-	for piece in pieces:
-		var spec: Dictionary = piece
-		var src: Image = tiles[spec["tile"]].duplicate()
+	# Mouth first: the boulders are drawn over it so they frame the opening.
+	if spec.has("mouth"):
+		_fill_ellipse(canvas, spec["mouth"], spec["mouth_colour"])
+	for piece in spec["pieces"]:
+		var p: Dictionary = piece
+		var src: Image = tiles[p["tile"]].duplicate()
 		src.convert(Image.FORMAT_RGBA8)
-		src.resize(spec["px"], spec["px"], Image.INTERPOLATE_LANCZOS)
-		canvas.blend_rect(src, Rect2i(Vector2i.ZERO, src.get_size()), spec["at"])
+		src.resize(p["px"], p["px"], Image.INTERPOLATE_LANCZOS)
+		canvas.blend_rect(src, Rect2i(Vector2i.ZERO, src.get_size()), p["at"])
 	return _trim_and_pad(canvas)
 ```
 
