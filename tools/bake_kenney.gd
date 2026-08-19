@@ -86,6 +86,7 @@ func _init() -> void:
 		_bake_biome(biome, tiles)
 	for name in ENDPOINTS:
 		_compose_endpoint(ENDPOINTS[name], tiles).save_png("%s/%s.png" % [OUT, name])
+	_bake_tower_atlas(tiles)
 	_copy_licence()
 	print("bake_kenney: done")
 	quit()
@@ -352,3 +353,79 @@ func _bake_biome(biome: StringName, tiles: Dictionary) -> void:
 		prop = _trim_and_pad(prop)
 		prop.save_png("%s/%s.png" % [dir, slot])
 	print("bake_kenney: %s %s" % [biome, table])
+
+# The tower atlas, rebuilt at the geometry game/tower.gd already assumes:
+# 5 columns of 96px frames, row-major, 20 frames.
+#
+# Each frame is a platform tile with a turret composited on top. The frame
+# numbers are dictated by data/towers.gd's sprite_frame/upgrade_frames, which
+# do NOT change - that is the point of rebaking at the same geometry. Frames
+# 3, 4, 14 and 15 are unreferenced and stay blank.
+const ATLAS_COLUMNS := 5
+const ATLAS_FRAME := 96
+const ATLAS_ROWS := 4
+
+# frame -> {base tile, turret tile}.
+#
+# Grouped by tower kind below, because the frame NUMBERS are dictated by
+# data/towers.gd's sprite_frame/upgrade_frames (which do not change - that is
+# the point of rebaking at the same geometry) and read as scrambled. What
+# matters is that each kind's four tiers escalate visibly:
+#
+#   basic  f8  f9  f11 f17 : small turret -> small turret -> twin rockets ->
+#                            twin rockets on a fortified base
+#   fast   f1  f0  f7  f16 : bare mount -> small turret -> rocket -> big rocket
+#   mortar f5  f6  f12 f13 : big rocket -> twin -> quad -> red siege form
+#   long   f2  f10 f18 f19 : rocket -> bigger -> biggest -> green siege form
+#
+# The base escalates with the tier too (227, 227, 228, 229), so a maxed tower
+# reads as fortified even where its turret is shared with a lower tier of
+# another kind. THIS MAPPING WAS VALIDATED BY RENDERING IT AND LOOKING. An
+# earlier version gave mortar four near-identical twin-rocket tiers and sent
+# basic from a green mass at tier 3 to a tiny rocket at tier 4; every
+# assertion in test_tower_atlas.gd passed on it, because the suite can only
+# see that a frame is non-empty and has clean margins.
+const ATLAS_FRAMES := {
+	# basic
+	8: {"base": 227, "turret": 245}, 9: {"base": 227, "turret": 246},
+	11: {"base": 228, "turret": 204}, 17: {"base": 229, "turret": 205},
+	# fast
+	1: {"base": 227, "turret": 203}, 0: {"base": 227, "turret": 248},
+	7: {"base": 228, "turret": 251}, 16: {"base": 229, "turret": 252},
+	# mortar
+	5: {"base": 227, "turret": 206}, 6: {"base": 227, "turret": 204},
+	12: {"base": 228, "turret": 205}, 13: {"base": 229, "turret": 250},
+	# long
+	2: {"base": 227, "turret": 251}, 10: {"base": 227, "turret": 252},
+	18: {"base": 228, "turret": 206}, 19: {"base": 229, "turret": 249},
+}
+
+const ATLAS_BASE_PX := 84
+const ATLAS_TURRET_PX := 64
+const ATLAS_MARGIN := 4
+
+func _bake_tower_atlas(tiles: Dictionary) -> void:
+	var sheet := Image.create_empty(
+		ATLAS_COLUMNS * ATLAS_FRAME, ATLAS_ROWS * ATLAS_FRAME, false, Image.FORMAT_RGBA8)
+	sheet.fill(Color(0, 0, 0, 0))
+	for frame in ATLAS_FRAMES:
+		var spec: Dictionary = ATLAS_FRAMES[frame]
+		var ox: int = (int(frame) % ATLAS_COLUMNS) * ATLAS_FRAME
+		var oy: int = (int(frame) / ATLAS_COLUMNS) * ATLAS_FRAME
+		# Both pieces are inset by ATLAS_MARGIN so no frame's art touches an
+		# edge - an AtlasTexture sampling a frame would otherwise pull in the
+		# neighbouring frame's pixels.
+		var base: Image = tiles[spec["base"]].duplicate()
+		base.convert(Image.FORMAT_RGBA8)
+		base.resize(ATLAS_BASE_PX, ATLAS_BASE_PX, Image.INTERPOLATE_LANCZOS)
+		var base_at := Vector2i(ox + (ATLAS_FRAME - ATLAS_BASE_PX) / 2,
+			oy + (ATLAS_FRAME - ATLAS_BASE_PX) / 2)
+		sheet.blend_rect(base, Rect2i(Vector2i.ZERO, base.get_size()), base_at)
+
+		var turret: Image = tiles[spec["turret"]].duplicate()
+		turret.convert(Image.FORMAT_RGBA8)
+		turret.resize(ATLAS_TURRET_PX, ATLAS_TURRET_PX, Image.INTERPOLATE_LANCZOS)
+		var turret_at := Vector2i(ox + (ATLAS_FRAME - ATLAS_TURRET_PX) / 2,
+			oy + (ATLAS_FRAME - ATLAS_TURRET_PX) / 2)
+		sheet.blend_rect(turret, Rect2i(Vector2i.ZERO, turret.get_size()), turret_at)
+	sheet.save_png("res://assets/towers.png")
