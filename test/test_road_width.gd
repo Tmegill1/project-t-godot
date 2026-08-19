@@ -43,7 +43,7 @@ func test_the_no_build_corridor_matches_the_road_the_art_draws() -> bool:
 	var scale := float(Tiles.TILE_SIZE) / float(img.get_height())
 	var drawn := float(_road_rows(img)) * scale * 2.0
 	assert_true(drawn > 12.0, "the road draws something, measured %f" % drawn)
-	assert_almost_eq(Placement.PATH_HALF_WIDTH, drawn / 2.0, 6.0,
+	assert_almost_eq(Placement.PATH_HALF_WIDTH, drawn / 2.0, 3.0,
 		"PATH_HALF_WIDTH tracks half the drawn road width of %f" % drawn)
 	return true
 

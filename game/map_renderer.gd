@@ -147,6 +147,8 @@ func _place_prop(slot: StringName, col: int, row: int) -> Sprite2D:
 ## between the row-8 and row-10 legs, and a half-tile lattice minifies the
 ## blend detail into a straight-edged bar.
 func _draw_ground() -> void:
+	# Exact at 48 (TILE_SIZE is even); intentional, as in tower.gd's frame_region.
+	@warning_ignore("integer_division")
 	var half := Tiles.TILE_SIZE / 2
 	for r in range(_rows + 1):
 		for c in range(_cols + 1):

@@ -3,13 +3,15 @@
 **Point an assistant at this file and say "continue this project."** It contains
 everything needed to resume with no prior conversation.
 
-Last updated: 2026-08-16 · Branch `feat/kenney-art-swap` · **core slice, tower
-upgrades and free placement all merged to `master`; the art swap is specced and
-planned, and implementation has not started**
+Last updated: 2026-08-18 · Branch `feat/kenney-art-swap` · **core slice, tower
+upgrades and free placement all merged to `master`; the Kenney art swap is
+implemented on this branch — all ten tasks done, suite green at 6574 checks
+across 35 files — and not yet merged**
 
-> **Continuing the art swap? Read §0 — it is the active work and nothing else
-> on this page is about it.** Read §5 and §6 too, whatever you do: the engine
-> facts and the standing rules apply to everything here.
+> **Picking this up after the art swap? Read §0 — it now covers what shipped
+> and the three rendering traps that are still true.** Read §5 and §6 too,
+> whatever you do: the engine facts and the standing rules apply to
+> everything here.
 
 > This file is the *orientation* document: state, how to run things, and the
 > hard-won facts that are expensive to rediscover. The per-task status table and
@@ -18,30 +20,33 @@ planned, and implementation has not started**
 
 ---
 
-## 0. ACTIVE WORK — the Kenney art swap
+## 0. THE KENNEY ART SWAP — implemented, not yet merged
 
-**Branch `feat/kenney-art-swap`, pushed, three commits, no implementation yet.**
-Every non-enemy asset is being replaced with Kenney's CC0 *Tower Defense
-(Top-Down)* pack, and the renderer gains a **biome layer** so a map declares
-itself forest, ice or desert.
+**Branch `feat/kenney-art-swap`, all ten tasks done, suite green at 6574
+checks across 35 files.** Every non-enemy asset has been replaced with
+Kenney's CC0 *Tower Defense (Top-Down)* pack, and the renderer gained a
+**biome layer** so a map declares itself forest, ice or desert. The old
+sliced reference sheet (`assets/map/`) and the tool that cut it
+(`tools/slice_atlas.gd`) are retired and deleted; see §2's asset row for the
+current layout.
 
-Read these two, in this order:
+Design and plan, useful if the rendering approach needs revisiting:
 
 - [`docs/superpowers/specs/2026-08-16-kenney-art-swap-design.md`](docs/superpowers/specs/2026-08-16-kenney-art-swap-design.md) — the design, approved
-- [`docs/superpowers/plans/2026-08-16-kenney-art-swap.md`](docs/superpowers/plans/2026-08-16-kenney-art-swap.md) — ten tasks, full code for every step
+- [`docs/superpowers/plans/2026-08-16-kenney-art-swap.md`](docs/superpowers/plans/2026-08-16-kenney-art-swap.md) — the ten tasks, as built
 
-**Execution method: `superpowers:subagent-driven-development`** — a fresh
-subagent per task, two-stage review between tasks. Start at Task 1; nothing is
-implemented yet.
+**Built with `superpowers:subagent-driven-development`** — a fresh subagent
+per task, two-stage review between tasks.
 
-**Scope boundary.** This branch is the art plus the biome layer. Map 2 and
-map 3 *layouts*, map-to-map progression, and `sim/economy.gd:42`'s dormant
-`limit_bonus_map2` are a **later branch**. Ice and desert are proven this
-branch by rendering the existing layout under them.
+**Scope boundary held.** This branch is the art plus the biome layer only.
+Map 2 and map 3 *layouts*, map-to-map progression, and `sim/economy.gd:42`'s
+dormant `limit_bonus_map2` stay a **later branch** — see §11. Ice and desert
+are proven on this branch by rendering the existing layout under them, not by
+new layouts.
 
-**Enemies are not touched.** `assets/enemies/**`, `game/enemy.tscn`,
-`game/enemy.gd` and `data/enemies.gd` all stay exactly as they are. Tyler is
-adding monster variety separately.
+**Enemies were not touched.** `assets/enemies/**`, `game/enemy.tscn`,
+`game/enemy.gd` and `data/enemies.gd` are exactly as they were before this
+branch. Monster variety is a separate, later effort.
 
 ### The three traps, all of which cost real time to find
 
@@ -114,7 +119,7 @@ win or lose → retry or menu, with sound.
 |---|---|
 | `sim/` — 11 modules | ✅ complete, reviewed |
 | `data/` — 9 modules | ✅ complete, reviewed |
-| `assets/` — 61 files | ✅ imported, sliced, verified visually |
+| `assets/` — 87 PNGs (`assets/kenney/` baked from Kenney's Tower Defense (Top-Down) pack, plus `assets/enemies/` and `assets/audio/`) | ✅ imported, baked, verified visually |
 | `game/` — board, enemy, tower, projectile, map renderer | ✅ complete |
 | `ui/` — menu, HUD (with a 1.5x speed toggle), build panel, tower inspector, game-over, victory | ✅ complete |
 | `audio/` — pooled playback, 17 core-slice events | ✅ complete |
@@ -522,18 +527,19 @@ the player runs, not only in the thing the tests run.
 cd ~/Projects/project-t-godot
 git checkout feat/kenney-art-swap
 godot --headless --import                            # once, after a fresh clone
-godot --headless --quit --script test/run_tests.gd   # expect 5253 checks, exit 0
+godot --headless --quit --script test/run_tests.gd   # expect 6574 checks, exit 0
 godot --path .                                       # and actually play a run
 ```
 
-**The active work is §0 — the Kenney art swap.** Its plan is written with full
-code for all ten tasks and nothing is implemented yet; execute it with
-`superpowers:subagent-driven-development`, starting at Task 1. Read §0's three
-traps first — each one produced a wrong-but-plausible result before it was
+**§0 — the Kenney art swap — is done and not yet merged.** All ten tasks are
+implemented and the suite is green. Merge `feat/kenney-art-swap` to `master`
+first; if you touch map rendering again afterward, read §0's three traps
+before you do — each one produced a wrong-but-plausible result before it was
 caught, and two of them look correct right up until the map is rendered.
 
-**After that branch merges**, the next piece is the map 2 and map 3 layouts
-plus map-to-map progression, which the art branch deliberately excludes.
+**After that merge**, the next piece is the map 2 and map 3 layouts plus
+map-to-map progression, which the art branch deliberately excludes and which
+needs its own spec and plan.
 
 **The other standing feature** is the five composable enemy properties —
 armoured, phased, swift, shielded, splitter. Pierce and detection are already

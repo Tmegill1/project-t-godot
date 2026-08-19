@@ -308,6 +308,17 @@ by hand.
 
 ---
 
+## Art
+
+Map, prop, endpoint and tower art is from Kenney's
+[Tower Defense (Top-Down)](https://kenney.nl/assets/tower-defense-top-down)
+pack, licensed CC0. `tools/bake_kenney.gd` bakes the committed assets under
+`assets/kenney/` from a copy extracted to `reference/kenney-td/`, which is
+gitignored. The ice biome's ground is a recolour of the pack's sand, since the
+pack ships no snow. Enemy sprites are not from this pack.
+
+---
+
 ## Balance is ported, not fixed
 
 Every number in `data/` is carried over from the Phaser original as-is. That
