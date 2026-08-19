@@ -702,12 +702,15 @@ func test_render_called_twice_does_not_double_up_sprites() -> bool:
 
 # A mipmap chain is inert unless the sprite selects a filter that reads it:
 # Godot's TEXTURE_FILTER_LINEAR (the project default) samples the base level
-# only, however many mip levels exist. This is
-# LINEAR_WITH_MIPMAPS and not NEAREST_WITH_MIPMAPS because the map art is
-# painted, high-resolution artwork rather than pixel art - the opposite call
-# from the enemy sheets, which are 48px pixel art and take a NEAREST filter
-# (see test_enemy.gd). Two different asset classes, two different right answers,
-# which is why neither is set project-wide as a default.
+# only, however many mip levels exist. This is LINEAR_WITH_MIPMAPS and not
+# NEAREST_WITH_MIPMAPS because the map art is painted, high-resolution
+# artwork rather than pixel art - the opposite call from the enemy sheets,
+# which are 48px pixel art and take a NEAREST filter (see test_enemy.gd).
+# Two different asset classes, two different right answers, which is why
+# neither is set project-wide as a default. The other half of this fix -
+# that a chain actually exists to sample - is pinned by
+# test_asset_import.gd, which reads mipmaps/generate=true off the committed
+# .import files.
 func test_map_sprites_select_a_filter_that_actually_samples_the_mipmap_chain() -> bool:
 	Grid.set_active(DemoMap.GRID_COLS, DemoMap.GRID_ROWS)
 	var tiles := _demo_tiles()
