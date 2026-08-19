@@ -60,10 +60,16 @@ const SINGLE_CORNER := [1, 2, 4, 8]
 # Prop source tiles, in individual-PNG indices. tree/stone/spike/fire are the
 # slot names MapRenderer's scatter rules already use; the biome only changes
 # which tile sits behind each one.
+# tile130 and tile133 are the pack's tiling foliage FILLS, not free-standing
+# sprites: their art runs edge-to-edge with fully opaque pixels touching all
+# four sides of the 128x128 canvas, so no alpha floor can ever trim them.
+# They must never appear as a value below. Do not "restore" tile130 for a
+# bigger-looking forest tree - it cannot be cropped to a footprint that
+# matches what it draws (see test_prop_assets.gd's trim-shrank-canvas test).
 const PROPS := {
-	&"forest": {&"tree": 130, &"stone": 136, &"spike": 132, &"fire": 296},
+	&"forest": {&"tree": 132, &"stone": 136, &"spike": 131, &"fire": 296},
 	&"ice": {&"tree": 181, &"stone": 135, &"spike": 183, &"fire": 297},
-	&"desert": {&"tree": 134, &"stone": 137, &"spike": 131, &"fire": 295},
+	&"desert": {&"tree": 134, &"stone": 137, &"spike": 135, &"fire": 295},
 }
 
 const PROP_ALPHA_FLOOR := 8.0 / 255.0

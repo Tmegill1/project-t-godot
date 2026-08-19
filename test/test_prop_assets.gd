@@ -83,17 +83,17 @@ func test_every_prop_is_trimmed_tight_so_its_footprint_is_honest() -> bool:
 	return true
 
 func test_trimming_actually_shrank_the_source_canvas() -> bool:
-	# A bake that forgot to trim would emit 128x128 for everything and still
-	# pass the margin gate. This is what catches that.
-	#
-	# forest/tree.png is a documented exception, not a bug: Kenney's tile130
-	# bush is drawn full-bleed, with fully opaque pixels sitting exactly at
-	# (0,64), (127,64), (64,0) and (64,127) - the alpha bbox genuinely is the
-	# whole 128x128 canvas, confirmed by direct inspection of
-	# reference/kenney-td/PNG/Retina/towerDefense_tile130.png. No alpha floor
-	# below ~191 could ever shrink it, so 11/12 (not 12/12) is what a correct
-	# bake produces. A regression that broke trimming entirely would still
-	# show up as a much lower count than 11.
+	# This is the only test in the suite that can catch a clipped,
+	# non-free-standing source tile being chosen for PROPS. The margin and
+	# tight-trim tests above cannot: _trim_and_pad's 1px pad manufactures a
+	# clean transparent border around ANY crop, including one taken from art
+	# that ran off the edge of its 128x128 canvas. A bush sliced off at the
+	# canvas edge and padded with 1px of transparency still passes both those
+	# gates, and renders with hard-cut edges. Every one of the 12 sources is
+	# free-standing with genuine margin to trim, so a correct bake shrinks
+	# all 12 below 128px in both dimensions; anything less means a bake that
+	# forgot to trim, or a PROPS entry pointing at a tiling fill instead of a
+	# sprite.
 	var shrunk := 0
 	for biome in _BIOMES:
 		for slot in _SLOTS:
@@ -103,6 +103,5 @@ func test_trimming_actually_shrank_the_source_canvas() -> bool:
 				continue
 			if img.get_width() < 128 or img.get_height() < 128:
 				shrunk += 1
-	assert_eq(shrunk, _BIOMES.size() * _SLOTS.size() - 1,
-		"every prop but forest/tree (full-bleed source art) was trimmed below 128px")
+	assert_eq(shrunk, _BIOMES.size() * _SLOTS.size(), "every prop was trimmed below 128px")
 	return true
