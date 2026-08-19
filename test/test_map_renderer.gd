@@ -12,8 +12,6 @@ const _STONE_PATH := "res://assets/map/stone.png"
 const _TREE_PATH := "res://assets/map/tree.png"
 const _CAVE_PATH := "res://assets/map/cave.png"
 const _CASTLE_PATH := "res://assets/map/castle.png"
-const _GRASS_PATH := "res://assets/map/grass.png"
-const _PATH_PATH := "res://assets/map/path.png"
 
 func _demo_tiles() -> Array:
 	return Maps.build_tiles(Maps.FIRST)
@@ -51,28 +49,114 @@ func test_a_different_seed_gives_a_different_layout() -> bool:
 	b.free()
 	return true
 
-func test_ground_layer_has_one_sprite_per_tile_with_the_right_texture() -> bool:
-	Grid.set_active(DemoMap.GRID_COLS, DemoMap.GRID_ROWS)
-	var tiles := _demo_tiles()
-	var mr := MapRenderer.new()
-	mr.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED))
-
-	var ground_by_pos := {}
-	for child in mr.get_children():
+func test_ground_layer_has_one_sprite_per_lattice_point() -> bool:
+	# The lattice samples terrain at tile CENTRES, so a sprite spans the square
+	# between four adjacent centres and the grid gains one row and column.
+	# See spec section 7.1 for why the alternatives were rejected.
+	var renderer := MapRenderer.new()
+	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
+	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
+	var ground := 0
+	for child in renderer.get_children():
 		if child is Sprite2D and child.z_index == -1:
-			ground_by_pos[child.position] = child.texture.resource_path
-			assert_false(child.centered, "ground sprites are top-left anchored (centered = false), matching Phaser's setOrigin(0,0)")
-	assert_eq(ground_by_pos.size(), DemoMap.GRID_COLS * DemoMap.GRID_ROWS, "one ground sprite per tile")
+			ground += 1
+	var expected := (DemoMap.GRID_COLS + 1) * (DemoMap.GRID_ROWS + 1)
+	assert_eq(ground, expected, "one ground sprite per lattice point")
+	renderer.free()
+	return true
 
-	for r in tiles.size():
-		for c in tiles[r].size():
-			var pos := Vector2(c * Tiles.TILE_SIZE, r * Tiles.TILE_SIZE)
-			assert_true(ground_by_pos.has(pos), "a ground sprite exists at col %d row %d" % [c, r])
-			var kind = tiles[r][c]
-			var expected := _PATH_PATH if (kind == Tiles.PATH or kind == Tiles.SPAWN or kind == Tiles.GOAL) else _GRASS_PATH
-			assert_eq(ground_by_pos.get(pos), expected, "ground texture at col %d row %d" % [c, r])
+func test_ground_sprites_are_offset_half_a_tile_so_roads_sit_on_tile_centres() -> bool:
+	# If the lattice is anchored anywhere else the road draws half a tile off
+	# the world-space route PathFinder emits and enemies walk beside it.
+	var renderer := MapRenderer.new()
+	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
+	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
+	var half := Tiles.TILE_SIZE / 2
+	var found := false
+	for child in renderer.get_children():
+		if child is Sprite2D and child.z_index == -1:
+			var sprite: Sprite2D = child
+			if sprite.position == Vector2(3 * Tiles.TILE_SIZE - half, 5 * Tiles.TILE_SIZE - half):
+				found = true
+			# posmod, not %: the c == 0 column sits at -24, and GDScript's %
+			# keeps the sign, so a plain modulo returns -24 and fails here.
+			assert_eq(posmod(int(sprite.position.x), Tiles.TILE_SIZE), half,
+				"ground sprite x is on the half-tile lattice")
+	assert_true(found, "the lattice point at (3, 5) was drawn")
+	renderer.free()
+	return true
 
-	mr.free()
+func test_the_corner_mask_reads_road_from_the_four_surrounding_tile_centres() -> bool:
+	# Bit order is fixed and load-bearing: TL=1, TR=2, BL=4, BR=8.
+	var renderer := MapRenderer.new()
+	var tiles: Array = []
+	for r in 3:
+		var row: Array = []
+		for c in 3:
+			row.append(Tiles.BUILDABLE)
+		tiles.append(row)
+	tiles[1][1] = Tiles.PATH
+	renderer.render(tiles, Rng.new(1), &"forest")
+	# Lattice point (1, 1) has tile (1, 1) as its BOTTOM-RIGHT corner.
+	assert_eq(renderer.corner_mask(1, 1), 8, "road at bottom-right sets bit 8")
+	assert_eq(renderer.corner_mask(2, 1), 4, "road at bottom-left sets bit 4")
+	assert_eq(renderer.corner_mask(1, 2), 2, "road at top-right sets bit 2")
+	assert_eq(renderer.corner_mask(2, 2), 1, "road at top-left sets bit 1")
+	assert_eq(renderer.corner_mask(0, 0), 0, "no road nearby is mask 0")
+	renderer.free()
+	return true
+
+func test_spawn_and_goal_tiles_count_as_road_for_the_lattice() -> bool:
+	# Tiles.WALKABLE is PATH, SPAWN and GOAL. The old _draw_ground drew the
+	# path texture on all three, and the road must not break at the endpoints.
+	var renderer := MapRenderer.new()
+	var tiles: Array = []
+	for r in 2:
+		var row: Array = []
+		for c in 2:
+			row.append(Tiles.BUILDABLE)
+		tiles.append(row)
+	tiles[0][0] = Tiles.SPAWN
+	tiles[1][1] = Tiles.GOAL
+	renderer.render(tiles, Rng.new(1), &"forest")
+	assert_eq(renderer.corner_mask(1, 1), 1 | 8, "spawn and goal both read as road")
+	renderer.free()
+	return true
+
+func test_the_demo_map_never_needs_a_diagonal_blend_tile() -> bool:
+	# The pack ships no diagonal-only tile. Biomes.blend_path substitutes
+	# mask 15, and this asserts that substitution stays a safety net rather
+	# than something the shipped map actually depends on.
+	var renderer := MapRenderer.new()
+	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
+	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
+	var diagonal := 0
+	for r in range(DemoMap.GRID_ROWS + 1):
+		for c in range(DemoMap.GRID_COLS + 1):
+			if renderer.corner_mask(c, r) in Biomes.DIAGONAL_MASKS:
+				diagonal += 1
+	assert_eq(diagonal, 0, "the demo map produces no diagonal corner cases")
+	renderer.free()
+	return true
+
+func test_every_ground_sprite_uses_the_texture_its_mask_names() -> bool:
+	var renderer := MapRenderer.new()
+	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
+	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
+	var half := Tiles.TILE_SIZE / 2
+	var checked := 0
+	for child in renderer.get_children():
+		if not (child is Sprite2D) or child.z_index != -1:
+			continue
+		var sprite: Sprite2D = child
+		var c := int((sprite.position.x + half) / Tiles.TILE_SIZE)
+		var r := int((sprite.position.y + half) / Tiles.TILE_SIZE)
+		assert_eq(sprite.texture.resource_path,
+			Biomes.blend_path(&"forest", renderer.corner_mask(c, r)),
+			"lattice point (%d, %d) uses its mask's texture" % [c, r])
+		checked += 1
+	assert_true(checked > 0, "ground sprites were checked")
+	renderer.free()
 	return true
 
 func test_render_defaults_to_the_default_decoration_seed_when_no_rng_is_given() -> bool:
@@ -574,31 +658,31 @@ func test_decorations_preserve_their_aspect_ratio_and_sit_centred_in_the_tile() 
 # centring offset as *derived* rather than a constant: an implementation that
 # always shifted by a fixed amount would pass the stone test above but move
 # ground tiles off the grid, opening seams between them.
-func test_square_ground_tiles_still_land_exactly_on_their_tile_origin() -> bool:
-	Grid.set_active(DemoMap.GRID_COLS, DemoMap.GRID_ROWS)
-	var tiles := _demo_tiles()
-	var mr := MapRenderer.new()
-	mr.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED))
-
-	var grass: Sprite2D = null
-	for child in mr.get_children():
-		if child is Sprite2D and child.texture.resource_path == _GRASS_PATH:
-			grass = child
-			break
-	assert_true(grass != null, "a grass sprite was drawn on the demo map")
-
-	var tex := grass.texture
-	assert_eq(tex.get_width(), tex.get_height(), "precondition: grass.png is square")
-
-	var box := float(Tiles.TILE_SIZE)
-	assert_almost_eq(grass.scale.x, box / float(tex.get_width()), 0.0001, "grass scales to exactly one tile wide")
-	assert_almost_eq(grass.scale.y, box / float(tex.get_height()), 0.0001, "grass scales to exactly one tile tall")
-
-	var tile := Vector2i(int(grass.position.x / box), int(grass.position.y / box))
-	assert_eq(grass.position, Vector2(tile.x * box, tile.y * box),
-		"a square source gets no centring shift - ground tiles stay flush on the grid, leaving no seams")
-
-	mr.free()
+func test_square_ground_tiles_take_zero_slack_from_the_tile_box() -> bool:
+	# Replaces test_square_ground_tiles_still_land_exactly_on_their_tile_origin,
+	# whose premise the half-tile lattice offset invalidates. The property
+	# worth keeping is unchanged: _place splits leftover slack to centre a
+	# sprite, and a SQUARE source has none, which is what keeps the ground
+	# layer flush and seam-free. Only the origin it lands on moved.
+	var renderer := MapRenderer.new()
+	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
+	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
+	var half := Tiles.TILE_SIZE / 2
+	var checked := 0
+	for child in renderer.get_children():
+		if not (child is Sprite2D) or child.z_index != -1:
+			continue
+		var sprite: Sprite2D = child
+		var tex: Texture2D = sprite.texture
+		assert_eq(tex.get_width(), tex.get_height(), "a ground tile is square")
+		var c := int((sprite.position.x + half) / Tiles.TILE_SIZE)
+		var r := int((sprite.position.y + half) / Tiles.TILE_SIZE)
+		assert_eq(sprite.position,
+			Vector2(c * Tiles.TILE_SIZE - half, r * Tiles.TILE_SIZE - half),
+			"ground sprite takes zero slack, landing on its lattice point")
+		checked += 1
+	assert_true(checked > 0, "ground sprites were checked")
+	renderer.free()
 	return true
 
 func test_render_called_twice_does_not_double_up_sprites() -> bool:

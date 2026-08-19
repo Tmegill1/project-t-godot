@@ -4,8 +4,6 @@ extends Node2D
 ## Draws a tile grid. Decoration scatter is seeded so a map renders
 ## identically every run.
 
-const _GRASS := preload("res://assets/map/grass.png")
-const _PATH := preload("res://assets/map/path.png")
 const _TREE := preload("res://assets/map/tree.png")
 const _STONE := preload("res://assets/map/stone.png")
 const _CASTLE := preload("res://assets/map/castle.png")
@@ -30,10 +28,12 @@ var _tiles: Array = []
 var _rows := 0
 var _cols := 0
 var _decorations := {}  # Vector2i -> Sprite2D
+var _biome: StringName = Biomes.FIRST
 
-func render(tiles: Array, rng: Rng = null) -> void:
+func render(tiles: Array, rng: Rng = null, biome: StringName = Biomes.FIRST) -> void:
 	if rng == null:
 		rng = Rng.new(Seeds.DEFAULT_DECORATION_SEED)
+	_biome = biome
 	_tiles = tiles
 	_rows = tiles.size()
 	_cols = tiles[0].size() if _rows > 0 else 0
@@ -121,14 +121,53 @@ func _place(texture: Texture2D, col: int, row: int, size_px: float,
 	add_child(s)
 	return s
 
+## Ground is drawn from a corner-mask lattice sampled at TILE CENTRES: each
+## sprite spans the square between four adjacent centres, so the grid is
+## (cols + 1) x (rows + 1) and every sprite sits half a tile up and left of its
+## lattice point.
+##
+## Anchoring anywhere else moves the road off the world-space route PathFinder
+## emits - enemies follow tile centres, so the road has to be centred on them.
+## The half-tile overhang this produces falls outside the viewport on the left,
+## top and bottom, and under TowerPanel's 95%-opaque background on the right.
+##
+## Two alternatives were measured and rejected (spec section 7.1): sampling at
+## grid intersections draws a 70px road but floods the one-tile buildable strip
+## between the row-8 and row-10 legs, and a half-tile lattice minifies the
+## blend detail into a straight-edged bar.
 func _draw_ground() -> void:
-	for r in _rows:
-		for c in _cols:
-			var kind = _tiles[r][c]
-			if kind == Tiles.PATH or kind == Tiles.SPAWN or kind == Tiles.GOAL:
-				_place(_PATH, c, r, Tiles.TILE_SIZE, _Z_GROUND)
-			else:
-				_place(_GRASS, c, r, Tiles.TILE_SIZE, _Z_GROUND)
+	var half := Tiles.TILE_SIZE / 2
+	for r in range(_rows + 1):
+		for c in range(_cols + 1):
+			# load() rather than a texture from Biomes: data/ is held
+			# engine-free by test_sim_purity.gd, so the render layer is where
+			# a path becomes a resource. Godot's ResourceLoader caches by
+			# path, so the 360 calls per render are dictionary hits.
+			var texture: Texture2D = load(Biomes.blend_path(_biome, corner_mask(c, r)))
+			_place(texture, c, r, Tiles.TILE_SIZE, _Z_GROUND,
+				Vector2(-half, -half))
+
+## The four tiles surrounding lattice point (c, r), as a bitmask.
+## Bit order is fixed: TL=1, TR=2, BL=4, BR=8, set means road.
+## Public so tests can assert the lattice without inspecting sprites.
+func corner_mask(c: int, r: int) -> int:
+	var mask := 0
+	if _is_road(c - 1, r - 1):
+		mask |= 1
+	if _is_road(c, r - 1):
+		mask |= 2
+	if _is_road(c - 1, r):
+		mask |= 4
+	if _is_road(c, r):
+		mask |= 8
+	return mask
+
+## Out of bounds reads as ground, which is what closes the lattice at the map
+## edge without a special case.
+func _is_road(c: int, r: int) -> bool:
+	if r < 0 or r >= _rows or c < 0 or c >= _cols:
+		return false
+	return _tiles[r][c] in Tiles.WALKABLE
 
 func _draw_endpoints() -> void:
 	# Drawn 3 tiles wide, offset up and left, matching the Phaser build.
