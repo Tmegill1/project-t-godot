@@ -1202,17 +1202,39 @@ const ATLAS_COLUMNS := 5
 const ATLAS_FRAME := 96
 const ATLAS_ROWS := 4
 
-# frame -> {platform tile, turret tile}. Tier order per kind reads as a bigger
-# and more numerous weapon; see data/towers.gd for which kind owns which.
+# frame -> {base tile, turret tile}.
+#
+# Grouped by tower kind below, because the frame NUMBERS are dictated by
+# data/towers.gd's sprite_frame/upgrade_frames (which do not change - that is
+# the point of rebaking at the same geometry) and read as scrambled. What
+# matters is that each kind's four tiers escalate visibly:
+#
+#   basic  f8  f9  f11 f17 : small turret -> small turret -> twin rockets ->
+#                            twin rockets on a fortified base
+#   fast   f1  f0  f7  f16 : bare mount -> small turret -> rocket -> big rocket
+#   mortar f5  f6  f12 f13 : big rocket -> twin -> quad -> red siege form
+#   long   f2  f10 f18 f19 : rocket -> bigger -> biggest -> green siege form
+#
+# The base escalates with the tier too (227, 227, 228, 229), so a maxed tower
+# reads as fortified even where its turret is shared with a lower tier of
+# another kind. THIS MAPPING WAS VALIDATED BY RENDERING IT AND LOOKING. An
+# earlier version gave mortar four near-identical twin-rocket tiers and sent
+# basic from a green mass at tier 3 to a tiny rocket at tier 4; every
+# assertion in test_tower_atlas.gd passed on it, because the suite can only
+# see that a frame is non-empty and has clean margins.
 const ATLAS_FRAMES := {
-	0: {"base": 227, "turret": 245}, 1: {"base": 227, "turret": 203},
-	2: {"base": 227, "turret": 206}, 5: {"base": 228, "turret": 204},
-	6: {"base": 228, "turret": 205}, 7: {"base": 227, "turret": 246},
-	8: {"base": 227, "turret": 247}, 9: {"base": 227, "turret": 248},
-	10: {"base": 228, "turret": 206}, 11: {"base": 228, "turret": 249},
-	12: {"base": 229, "turret": 204}, 13: {"base": 229, "turret": 205},
-	16: {"base": 228, "turret": 250}, 17: {"base": 228, "turret": 251},
-	18: {"base": 229, "turret": 252}, 19: {"base": 229, "turret": 250},
+	# basic
+	8: {"base": 227, "turret": 245}, 9: {"base": 227, "turret": 246},
+	11: {"base": 228, "turret": 204}, 17: {"base": 229, "turret": 205},
+	# fast
+	1: {"base": 227, "turret": 203}, 0: {"base": 227, "turret": 248},
+	7: {"base": 228, "turret": 251}, 16: {"base": 229, "turret": 252},
+	# mortar
+	5: {"base": 227, "turret": 206}, 6: {"base": 227, "turret": 204},
+	12: {"base": 228, "turret": 205}, 13: {"base": 229, "turret": 250},
+	# long
+	2: {"base": 227, "turret": 251}, 10: {"base": 227, "turret": 252},
+	18: {"base": 228, "turret": 206}, 19: {"base": 229, "turret": 249},
 }
 
 const ATLAS_BASE_PX := 84

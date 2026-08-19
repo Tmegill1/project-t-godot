@@ -172,7 +172,7 @@ swap.
 Each frame composites a platform tile and a turret sprite. Sixteen of the twenty
 frames are referenced by `data/towers.gd` (3, 4, 14 and 15 are unused today);
 the tier progression reads as larger and more numerous weapons, drawn from
-turrets **203–206** and **245–252**.
+turrets **203–206** and **245–252**, with both the base and the turret stepping up per tier.
 
 Towers are **not** biome-themed. They are player objects rather than scenery,
 and a tower that changed appearance per map would read as a different tower.
