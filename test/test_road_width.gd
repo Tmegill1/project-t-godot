@@ -43,8 +43,19 @@ func test_the_no_build_corridor_matches_the_road_the_art_draws() -> bool:
 	var scale := float(Tiles.TILE_SIZE) / float(img.get_height())
 	var drawn := float(_road_rows(img)) * scale * 2.0
 	assert_true(drawn > 12.0, "the road draws something, measured %f" % drawn)
-	assert_almost_eq(Placement.PATH_HALF_WIDTH, drawn / 2.0, 3.0,
-		"PATH_HALF_WIDTH tracks half the drawn road width of %f" % drawn)
+	# Two bounds, not an equality: PATH_HALF_WIDTH is half the drawn road plus
+	# a deliberate margin, so pinning it to `drawn / 2.0` with a tolerance wide
+	# enough to contain the margin also accepts values BELOW the road's own
+	# half-width - a no-build corridor narrower than the road it guards, which
+	# would let towers be built on painted road. The lower bound is the real
+	# invariant; the upper bound keeps the margin from growing into a wall.
+	var half_road := drawn / 2.0
+	assert_true(Placement.PATH_HALF_WIDTH >= half_road,
+		"PATH_HALF_WIDTH %f is never narrower than the drawn road's half-width %f"
+			% [Placement.PATH_HALF_WIDTH, half_road])
+	assert_true(Placement.PATH_HALF_WIDTH <= half_road + 4.0,
+		"PATH_HALF_WIDTH %f stays within a small margin of the drawn road's half-width %f"
+			% [Placement.PATH_HALF_WIDTH, half_road])
 	return true
 
 func test_path_half_width_is_the_value_the_spec_amendment_names() -> bool:
