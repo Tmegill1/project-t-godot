@@ -6,10 +6,17 @@ extends TestCase
 # The tight-bbox gate is the one that matters for gameplay.
 # MapRenderer.prop_footprints() derives a tower-blocking radius from the
 # texture's full dimensions, so transparent padding becomes invisible wall.
-# Kenney's raw tile130 fills 48% of its 128x128 canvas: untrimmed it would
-# block over twice the area it draws. The bake trims to the alpha bbox and
-# pads back exactly 1px, which is what makes "radius from displayed size" true
-# rather than merely conservative. See spec section 6.
+# Kenney's raw tile131 (forest's spike) is the clean case: a 62x62 alpha bbox
+# at 19.7% fill inside its 128x128 canvas, so untrimmed it would block a
+# radius over twice what it actually draws. The bake trims to the alpha bbox
+# and pads back exactly 1px, which is what makes "radius from displayed size"
+# true rather than merely conservative. See spec section 6.
+#
+# tile130 is NOT an example of this - it looks like one until measured. It is
+# 82.7% opaque with a full-canvas bbox and art running off all four edges, so
+# there is no alpha floor that trims it at all; that is exactly why PROPS in
+# tools/bake_kenney.gd never points at it. Treating tile130 as "mostly empty
+# margin, needs trimming" is the misreading this comment used to make.
 
 const _BIOMES := ["forest", "ice", "desert"]
 const _SLOTS := ["tree", "stone", "spike", "fire"]

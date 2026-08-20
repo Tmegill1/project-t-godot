@@ -113,8 +113,9 @@ func _place(texture: Texture2D, col: int, row: int, size_px: float,
 	var slack := (Vector2(size_px, size_px) - src * factor) / 2.0
 	s.position = Vector2(col * Tiles.TILE_SIZE, row * Tiles.TILE_SIZE) + offset + slack
 	s.scale = Vector2.ONE * factor
-	# Every tile here is minified, several of them hard (stone.png 216px into
-	# 48px). The project-wide default filter is plain LINEAR, which samples the
+	# Every tile here is minified, several of them hard (the largest Kenney
+	# source in this renderer is 128px, drawn into a 48px tile). The
+	# project-wide default filter is plain LINEAR, which samples the
 	# base level only and aliases badly at those ratios; this reads the mipmap
 	# chain that the .import files generate instead. LINEAR rather than NEAREST
 	# because this art is painted, not pixel art - the enemy sheets are the

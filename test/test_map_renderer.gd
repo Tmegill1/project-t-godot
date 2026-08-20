@@ -603,13 +603,15 @@ func test_blocked_tiles_get_three_to_five_stones_and_nothing_in_the_exclusion_zo
 # aspect ratio*, then centres the result in that box. This is a deliberate
 # divergence from the Phaser reference, which calls
 # setDisplaySize(TILE_SIZE, TILE_SIZE) and therefore stretches every source
-# to a square regardless of its true proportions - stone.png is 216x97, so
-# the reference (and this port before the fix) squashed it more than 2:1.
+# to a square regardless of its true proportions (see map_renderer.gd's
+# DELIBERATE DIVERGENCE note for the reference's own, much more extreme,
+# numbers - that history is about the pre-Kenney art and stays there).
 #
-# stone.png is the sharpest case in the asset set: nearly 2.23:1, so a
-# regression to non-uniform scaling is impossible to miss here. Expected
-# geometry is derived from the texture's own dimensions rather than
-# hardcoded, so the rule is what is pinned, not one particular PNG's size.
+# The Kenney forest/stone.png this test exercises is 112x98 (about 1.14:1),
+# so a regression to non-uniform scaling is still visible here even though
+# it is a mild case. Expected geometry is derived from the texture's own
+# dimensions rather than hardcoded, so the rule is what is pinned, not one
+# particular PNG's size.
 func test_decorations_preserve_their_aspect_ratio_and_sit_centred_in_the_tile() -> bool:
 	Grid.set_active(DemoMap.GRID_COLS, DemoMap.GRID_ROWS)
 	var tiles := _demo_tiles()
@@ -759,8 +761,10 @@ func test_prop_footprints_cover_every_prop_and_no_endpoint() -> bool:
 
 # The radius is half the LONGEST displayed axis, so it over-covers rather than
 # under-covers. Blocking slightly too much reads as level design; a tower
-# clipping into a rock reads as a bug. stone.png displays about 48x22, so a
-# radius taken from the short axis would be ~11 and let towers sit inside it.
+# clipping into a rock reads as a bug. stone.png displays about 48x42, so a
+# radius taken from the short axis would give ~21 instead of ~24 - a small
+# under-cover here, but the rule the test pins is the one that stays correct
+# for whichever prop is least square.
 func test_prop_footprint_radius_covers_the_sprite_s_longest_axis() -> bool:
 	Grid.set_active(DemoMap.GRID_COLS, DemoMap.GRID_ROWS)
 	var tiles := _demo_tiles()

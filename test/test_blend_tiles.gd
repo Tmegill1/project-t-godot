@@ -57,7 +57,7 @@ func test_every_biome_ships_every_mask_the_pack_supplies() -> bool:
 
 func test_the_two_diagonal_masks_are_deliberately_absent() -> bool:
 	# The pack has no diagonal-only tiles in any pairing. Baking one would mean
-	# it came from somewhere it should not have. Biomes.blend_texture is what
+	# it came from somewhere it should not have. Biomes.blend_path is what
 	# resolves the gap at runtime (Task 2), not a file on disk.
 	for biome in _BIOMES:
 		for mask in [6, 9]:
@@ -68,7 +68,13 @@ func test_the_two_diagonal_masks_are_deliberately_absent() -> bool:
 
 func test_blend_tiles_are_square_and_fully_opaque() -> bool:
 	# Ground draws edge to edge across the board; one transparent pixel repeats
-	# as a seam at every tile boundary.
+	# as a seam at every tile boundary. All 42 committed blend PNGs are 8-bit
+	# RGB with no alpha channel at all, so sampling get_pixel(...).a would
+	# always read 1.0 regardless of what the bake actually did - a tautology
+	# that cannot fail. Asserting the format instead (detect_alpha() ==
+	# ALPHA_NONE) is the check that is actually load-bearing: it is what
+	# guarantees no pixel can seam, rather than restating a guarantee the
+	# format already gives for free.
 	for biome in _BIOMES:
 		for mask in _MASKS:
 			var img := _blend_image(biome, mask)
@@ -77,11 +83,8 @@ func test_blend_tiles_are_square_and_fully_opaque() -> bool:
 				continue
 			assert_eq(img.get_width(), 128, "%s/blend_%02d width" % [biome, mask])
 			assert_eq(img.get_height(), 128, "%s/blend_%02d height" % [biome, mask])
-			var min_alpha := 255
-			for y in range(0, 128, 4):
-				for x in range(0, 128, 4):
-					min_alpha = mini(min_alpha, int(round(img.get_pixel(x, y).a * 255.0)))
-			assert_eq(min_alpha, 255, "%s/blend_%02d is fully opaque" % [biome, mask])
+			assert_eq(img.detect_alpha(), Image.ALPHA_NONE,
+				"%s/blend_%02d has no alpha at all, so it cannot seam" % [biome, mask])
 	return true
 
 func test_each_tiles_four_corners_match_the_mask_in_its_filename() -> bool:
