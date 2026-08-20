@@ -489,6 +489,13 @@ the player runs, not only in the thing the tests run.
    build's 368 KB gzipped — so the game data itself is roughly 1.8× larger, but
    that difference is noise beside the engine. Trimming art or audio cannot
    meaningfully move the total; only a different engine would.
+4. **The HUD's white "Gold / Lives / Wave" text has no backing plate**, and
+   screenshots from the Kenney art swap show it is nearly illegible over the
+   snow biome and low-contrast over sand; it read fine over green grass. Not
+   fixed on this branch: only forest is wired to a playable map today, so ice
+   and desert are unreachable in game, and the right fix — a backing plate, a
+   text shadow, or a per-biome tint — is a design call, not a bug fix. Whoever
+   wires up the ice map will meet this immediately.
 
 ---
 
