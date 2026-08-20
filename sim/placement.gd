@@ -20,10 +20,20 @@ const REASON_TOO_CLOSE := &"too_close"
 ## pitch so day-one density roughly matches the grid this replaces.
 const MIN_TOWER_SPACING := 44.0
 
-## Half the width of the corridor kept clear along the enemy route. Half a
-## tile (24) plus a small margin, so a tower may not encroach on the road
-## enemies visibly walk down.
-const PATH_HALF_WIDTH := 26.0
+## Half the width of the corridor towers may not be built in, measured from the
+## path centreline.
+##
+## Tied to what the art draws, not to the tile size. The Kenney road lands at
+## about 23px wide (Kenney draws ~3-tile corridors; this map's roads are one
+## tile, so only the blend lobes carry it), which puts the honest half-width at
+## 14 rather than the 26 the old 48px reference road justified. Leaving it at
+## 26 would refuse placement across a 14px band of open-looking ground on each
+## side of the road - the same invisible-wall defect that untrimmed prop
+## footprints cause, arriving from the road side.
+##
+## test/test_road_width.gd re-measures the road off the committed blend tiles
+## and fails if this drifts away from it.
+const PATH_HALF_WIDTH := 14.0
 
 ## Shortest distance from `point` to the segment ab.
 ##

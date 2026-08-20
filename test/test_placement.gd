@@ -172,12 +172,12 @@ func test_can_place_thresholds_are_exact_on_both_sides() -> bool:
 	var just_outside := Placement.can_place(Vector2(300.0 + 44.1, 100.0), 20.0, [], towers, _far_path(), _BOUNDS)
 	assert_true(just_outside["ok"], "44.1px apart clears MIN_TOWER_SPACING and is allowed")
 
-	# radius 20 + PATH_HALF_WIDTH 26 = 46
+	# radius 20 + PATH_HALF_WIDTH 14 = 34
 	var path := [PackedVector2Array([Vector2(0.0, 100.0), Vector2(500.0, 100.0)])]
-	var near := Placement.can_place(Vector2(250.0, 100.0 + 45.9), 20.0, [], [], path, _BOUNDS)
-	assert_false(near["ok"], "45.9px from the road centre is inside radius + PATH_HALF_WIDTH")
-	var clear := Placement.can_place(Vector2(250.0, 100.0 + 46.1), 20.0, [], [], path, _BOUNDS)
-	assert_true(clear["ok"], "46.1px from the road centre clears the corridor")
+	var near := Placement.can_place(Vector2(250.0, 100.0 + 33.9), 20.0, [], [], path, _BOUNDS)
+	assert_false(near["ok"], "33.9px from the road centre is inside radius + PATH_HALF_WIDTH")
+	var clear := Placement.can_place(Vector2(250.0, 100.0 + 34.1), 20.0, [], [], path, _BOUNDS)
+	assert_true(clear["ok"], "34.1px from the road centre clears the corridor")
 	return true
 
 # With several rules failing at once the reported reason must be stable and

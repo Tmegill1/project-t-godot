@@ -6,14 +6,12 @@ extends TestCase
 # Texture2D.resource_path rather than by reaching into MapRenderer's private
 # _decorations dict, so these tests only rely on public state.
 
-const _SPIKE_PATH := "res://assets/map/spike.png"
-const _FIRE_PATH := "res://assets/map/fire.png"
-const _STONE_PATH := "res://assets/map/stone.png"
-const _TREE_PATH := "res://assets/map/tree.png"
-const _CAVE_PATH := "res://assets/map/cave.png"
-const _CASTLE_PATH := "res://assets/map/castle.png"
-const _GRASS_PATH := "res://assets/map/grass.png"
-const _PATH_PATH := "res://assets/map/path.png"
+const _SPIKE_PATH := "res://assets/kenney/forest/spike.png"
+const _FIRE_PATH := "res://assets/kenney/forest/fire.png"
+const _STONE_PATH := "res://assets/kenney/forest/stone.png"
+const _TREE_PATH := "res://assets/kenney/forest/tree.png"
+const _CAVE_PATH := "res://assets/kenney/cave.png"
+const _CASTLE_PATH := "res://assets/kenney/castle.png"
 
 func _demo_tiles() -> Array:
 	return Maps.build_tiles(Maps.FIRST)
@@ -51,28 +49,114 @@ func test_a_different_seed_gives_a_different_layout() -> bool:
 	b.free()
 	return true
 
-func test_ground_layer_has_one_sprite_per_tile_with_the_right_texture() -> bool:
-	Grid.set_active(DemoMap.GRID_COLS, DemoMap.GRID_ROWS)
-	var tiles := _demo_tiles()
-	var mr := MapRenderer.new()
-	mr.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED))
-
-	var ground_by_pos := {}
-	for child in mr.get_children():
+func test_ground_layer_has_one_sprite_per_lattice_point() -> bool:
+	# The lattice samples terrain at tile CENTRES, so a sprite spans the square
+	# between four adjacent centres and the grid gains one row and column.
+	# See spec section 7.1 for why the alternatives were rejected.
+	var renderer := MapRenderer.new()
+	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
+	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
+	var ground := 0
+	for child in renderer.get_children():
 		if child is Sprite2D and child.z_index == -1:
-			ground_by_pos[child.position] = child.texture.resource_path
-			assert_false(child.centered, "ground sprites are top-left anchored (centered = false), matching Phaser's setOrigin(0,0)")
-	assert_eq(ground_by_pos.size(), DemoMap.GRID_COLS * DemoMap.GRID_ROWS, "one ground sprite per tile")
+			ground += 1
+	var expected := (DemoMap.GRID_COLS + 1) * (DemoMap.GRID_ROWS + 1)
+	assert_eq(ground, expected, "one ground sprite per lattice point")
+	renderer.free()
+	return true
 
-	for r in tiles.size():
-		for c in tiles[r].size():
-			var pos := Vector2(c * Tiles.TILE_SIZE, r * Tiles.TILE_SIZE)
-			assert_true(ground_by_pos.has(pos), "a ground sprite exists at col %d row %d" % [c, r])
-			var kind = tiles[r][c]
-			var expected := _PATH_PATH if (kind == Tiles.PATH or kind == Tiles.SPAWN or kind == Tiles.GOAL) else _GRASS_PATH
-			assert_eq(ground_by_pos.get(pos), expected, "ground texture at col %d row %d" % [c, r])
+func test_ground_sprites_are_offset_half_a_tile_so_roads_sit_on_tile_centres() -> bool:
+	# If the lattice is anchored anywhere else the road draws half a tile off
+	# the world-space route PathFinder emits and enemies walk beside it.
+	var renderer := MapRenderer.new()
+	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
+	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
+	var half := Tiles.TILE_SIZE / 2
+	var found := false
+	for child in renderer.get_children():
+		if child is Sprite2D and child.z_index == -1:
+			var sprite: Sprite2D = child
+			if sprite.position == Vector2(3 * Tiles.TILE_SIZE - half, 5 * Tiles.TILE_SIZE - half):
+				found = true
+			# posmod, not %: the c == 0 column sits at -24, and GDScript's %
+			# keeps the sign, so a plain modulo returns -24 and fails here.
+			assert_eq(posmod(int(sprite.position.x), Tiles.TILE_SIZE), half,
+				"ground sprite x is on the half-tile lattice")
+	assert_true(found, "the lattice point at (3, 5) was drawn")
+	renderer.free()
+	return true
 
-	mr.free()
+func test_the_corner_mask_reads_road_from_the_four_surrounding_tile_centres() -> bool:
+	# Bit order is fixed and load-bearing: TL=1, TR=2, BL=4, BR=8.
+	var renderer := MapRenderer.new()
+	var tiles: Array = []
+	for r in 3:
+		var row: Array = []
+		for c in 3:
+			row.append(Tiles.BUILDABLE)
+		tiles.append(row)
+	tiles[1][1] = Tiles.PATH
+	renderer.render(tiles, Rng.new(1), &"forest")
+	# Lattice point (1, 1) has tile (1, 1) as its BOTTOM-RIGHT corner.
+	assert_eq(renderer.corner_mask(1, 1), 8, "road at bottom-right sets bit 8")
+	assert_eq(renderer.corner_mask(2, 1), 4, "road at bottom-left sets bit 4")
+	assert_eq(renderer.corner_mask(1, 2), 2, "road at top-right sets bit 2")
+	assert_eq(renderer.corner_mask(2, 2), 1, "road at top-left sets bit 1")
+	assert_eq(renderer.corner_mask(0, 0), 0, "no road nearby is mask 0")
+	renderer.free()
+	return true
+
+func test_spawn_and_goal_tiles_count_as_road_for_the_lattice() -> bool:
+	# Tiles.WALKABLE is PATH, SPAWN and GOAL. The old _draw_ground drew the
+	# path texture on all three, and the road must not break at the endpoints.
+	var renderer := MapRenderer.new()
+	var tiles: Array = []
+	for r in 2:
+		var row: Array = []
+		for c in 2:
+			row.append(Tiles.BUILDABLE)
+		tiles.append(row)
+	tiles[0][0] = Tiles.SPAWN
+	tiles[1][1] = Tiles.GOAL
+	renderer.render(tiles, Rng.new(1), &"forest")
+	assert_eq(renderer.corner_mask(1, 1), 1 | 8, "spawn and goal both read as road")
+	renderer.free()
+	return true
+
+func test_the_demo_map_never_needs_a_diagonal_blend_tile() -> bool:
+	# The pack ships no diagonal-only tile. Biomes.blend_path substitutes
+	# mask 15, and this asserts that substitution stays a safety net rather
+	# than something the shipped map actually depends on.
+	var renderer := MapRenderer.new()
+	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
+	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
+	var diagonal := 0
+	for r in range(DemoMap.GRID_ROWS + 1):
+		for c in range(DemoMap.GRID_COLS + 1):
+			if renderer.corner_mask(c, r) in Biomes.DIAGONAL_MASKS:
+				diagonal += 1
+	assert_eq(diagonal, 0, "the demo map produces no diagonal corner cases")
+	renderer.free()
+	return true
+
+func test_every_ground_sprite_uses_the_texture_its_mask_names() -> bool:
+	var renderer := MapRenderer.new()
+	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
+	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
+	var half := Tiles.TILE_SIZE / 2
+	var checked := 0
+	for child in renderer.get_children():
+		if not (child is Sprite2D) or child.z_index != -1:
+			continue
+		var sprite: Sprite2D = child
+		var c := int((sprite.position.x + half) / Tiles.TILE_SIZE)
+		var r := int((sprite.position.y + half) / Tiles.TILE_SIZE)
+		assert_eq(sprite.texture.resource_path,
+			Biomes.blend_path(&"forest", renderer.corner_mask(c, r)),
+			"lattice point (%d, %d) uses its mask's texture" % [c, r])
+		checked += 1
+	assert_true(checked > 0, "ground sprites were checked")
+	renderer.free()
 	return true
 
 func test_render_defaults_to_the_default_decoration_seed_when_no_rng_is_given() -> bool:
@@ -519,13 +603,15 @@ func test_blocked_tiles_get_three_to_five_stones_and_nothing_in_the_exclusion_zo
 # aspect ratio*, then centres the result in that box. This is a deliberate
 # divergence from the Phaser reference, which calls
 # setDisplaySize(TILE_SIZE, TILE_SIZE) and therefore stretches every source
-# to a square regardless of its true proportions - stone.png is 216x97, so
-# the reference (and this port before the fix) squashed it more than 2:1.
+# to a square regardless of its true proportions (see map_renderer.gd's
+# DELIBERATE DIVERGENCE note for the reference's own, much more extreme,
+# numbers - that history is about the pre-Kenney art and stays there).
 #
-# stone.png is the sharpest case in the asset set: nearly 2.23:1, so a
-# regression to non-uniform scaling is impossible to miss here. Expected
-# geometry is derived from the texture's own dimensions rather than
-# hardcoded, so the rule is what is pinned, not one particular PNG's size.
+# The Kenney forest/stone.png this test exercises is 112x98 (about 1.14:1),
+# so a regression to non-uniform scaling is still visible here even though
+# it is a mild case. Expected geometry is derived from the texture's own
+# dimensions rather than hardcoded, so the rule is what is pinned, not one
+# particular PNG's size.
 func test_decorations_preserve_their_aspect_ratio_and_sit_centred_in_the_tile() -> bool:
 	Grid.set_active(DemoMap.GRID_COLS, DemoMap.GRID_ROWS)
 	var tiles := _demo_tiles()
@@ -574,31 +660,31 @@ func test_decorations_preserve_their_aspect_ratio_and_sit_centred_in_the_tile() 
 # centring offset as *derived* rather than a constant: an implementation that
 # always shifted by a fixed amount would pass the stone test above but move
 # ground tiles off the grid, opening seams between them.
-func test_square_ground_tiles_still_land_exactly_on_their_tile_origin() -> bool:
-	Grid.set_active(DemoMap.GRID_COLS, DemoMap.GRID_ROWS)
-	var tiles := _demo_tiles()
-	var mr := MapRenderer.new()
-	mr.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED))
-
-	var grass: Sprite2D = null
-	for child in mr.get_children():
-		if child is Sprite2D and child.texture.resource_path == _GRASS_PATH:
-			grass = child
-			break
-	assert_true(grass != null, "a grass sprite was drawn on the demo map")
-
-	var tex := grass.texture
-	assert_eq(tex.get_width(), tex.get_height(), "precondition: grass.png is square")
-
-	var box := float(Tiles.TILE_SIZE)
-	assert_almost_eq(grass.scale.x, box / float(tex.get_width()), 0.0001, "grass scales to exactly one tile wide")
-	assert_almost_eq(grass.scale.y, box / float(tex.get_height()), 0.0001, "grass scales to exactly one tile tall")
-
-	var tile := Vector2i(int(grass.position.x / box), int(grass.position.y / box))
-	assert_eq(grass.position, Vector2(tile.x * box, tile.y * box),
-		"a square source gets no centring shift - ground tiles stay flush on the grid, leaving no seams")
-
-	mr.free()
+func test_square_ground_tiles_take_zero_slack_from_the_tile_box() -> bool:
+	# Replaces test_square_ground_tiles_still_land_exactly_on_their_tile_origin,
+	# whose premise the half-tile lattice offset invalidates. The property
+	# worth keeping is unchanged: _place splits leftover slack to centre a
+	# sprite, and a SQUARE source has none, which is what keeps the ground
+	# layer flush and seam-free. Only the origin it lands on moved.
+	var renderer := MapRenderer.new()
+	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
+	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
+	var half := Tiles.TILE_SIZE / 2
+	var checked := 0
+	for child in renderer.get_children():
+		if not (child is Sprite2D) or child.z_index != -1:
+			continue
+		var sprite: Sprite2D = child
+		var tex: Texture2D = sprite.texture
+		assert_eq(tex.get_width(), tex.get_height(), "a ground tile is square")
+		var c := int((sprite.position.x + half) / Tiles.TILE_SIZE)
+		var r := int((sprite.position.y + half) / Tiles.TILE_SIZE)
+		assert_eq(sprite.position,
+			Vector2(c * Tiles.TILE_SIZE - half, r * Tiles.TILE_SIZE - half),
+			"ground sprite takes zero slack, landing on its lattice point")
+		checked += 1
+	assert_true(checked > 0, "ground sprites were checked")
+	renderer.free()
 	return true
 
 func test_render_called_twice_does_not_double_up_sprites() -> bool:
@@ -616,14 +702,17 @@ func test_render_called_twice_does_not_double_up_sprites() -> bool:
 	mr.free()
 	return true
 
-# The mipmap chain that test_map_assets.gd gates is inert unless the sprite
-# selects a filter that reads it: Godot's TEXTURE_FILTER_LINEAR (the project
-# default) samples the base level only, however many mip levels exist. This is
-# LINEAR_WITH_MIPMAPS and not NEAREST_WITH_MIPMAPS because the map art is
-# painted, high-resolution artwork rather than pixel art - the opposite call
-# from the enemy sheets, which are 48px pixel art and take a NEAREST filter
-# (see test_enemy.gd). Two different asset classes, two different right answers,
-# which is why neither is set project-wide as a default.
+# A mipmap chain is inert unless the sprite selects a filter that reads it:
+# Godot's TEXTURE_FILTER_LINEAR (the project default) samples the base level
+# only, however many mip levels exist. This is LINEAR_WITH_MIPMAPS and not
+# NEAREST_WITH_MIPMAPS because the map art is painted, high-resolution
+# artwork rather than pixel art - the opposite call from the enemy sheets,
+# which are 48px pixel art and take a NEAREST filter (see test_enemy.gd).
+# Two different asset classes, two different right answers, which is why
+# neither is set project-wide as a default. The other half of this fix -
+# that a chain actually exists to sample - is pinned by
+# test_asset_import.gd, which reads mipmaps/generate=true off the committed
+# .import files.
 func test_map_sprites_select_a_filter_that_actually_samples_the_mipmap_chain() -> bool:
 	Grid.set_active(DemoMap.GRID_COLS, DemoMap.GRID_ROWS)
 	var tiles := _demo_tiles()
@@ -672,8 +761,10 @@ func test_prop_footprints_cover_every_prop_and_no_endpoint() -> bool:
 
 # The radius is half the LONGEST displayed axis, so it over-covers rather than
 # under-covers. Blocking slightly too much reads as level design; a tower
-# clipping into a rock reads as a bug. stone.png displays about 48x22, so a
-# radius taken from the short axis would be ~11 and let towers sit inside it.
+# clipping into a rock reads as a bug. stone.png displays about 48x42, so a
+# radius taken from the short axis would give ~21 instead of ~24 - a small
+# under-cover here, but the rule the test pins is the one that stays correct
+# for whichever prop is least square.
 func test_prop_footprint_radius_covers_the_sprite_s_longest_axis() -> bool:
 	Grid.set_active(DemoMap.GRID_COLS, DemoMap.GRID_ROWS)
 	var tiles := _demo_tiles()
@@ -702,4 +793,86 @@ func test_prop_footprint_radius_covers_the_sprite_s_longest_axis() -> bool:
 	assert_true(matched, "a footprint sits at the stone's displayed centre, not its top-left corner")
 
 	mr.free()
+	return true
+
+func test_props_come_from_the_biome_being_rendered() -> bool:
+	var forest := MapRenderer.new()
+	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
+	forest.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
+	var forest_paths := {}
+	for child in forest.get_children():
+		if child is Sprite2D and child.z_index == 1:
+			forest_paths[child.texture.resource_path] = true
+	forest.free()
+
+	var ice := MapRenderer.new()
+	ice.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"ice")
+	var shared := 0
+	for child in ice.get_children():
+		if child is Sprite2D and child.z_index == 1:
+			if forest_paths.has(child.texture.resource_path):
+				shared += 1
+	ice.free()
+	# The endpoints are shared across biomes; the props are not.
+	assert_true(shared <= 2, "ice props are not forest props (%d shared)" % shared)
+	return true
+
+func test_prop_footprints_cover_only_the_props() -> bool:
+	# Endpoints are excluded on purpose - they are drawn 3 tiles wide and a
+	# footprint from one would sterilise the ground around spawn and goal.
+	var renderer := MapRenderer.new()
+	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
+	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
+	var footprints := renderer.prop_footprints()
+	assert_true(footprints.size() > 0, "the demo map scatters props")
+	for entry in footprints:
+		var f: Dictionary = entry
+		var radius: float = f["radius"]
+		assert_true(radius > 0.0, "a footprint has a positive radius")
+		# A prop is fitted into one 48px tile, so no footprint may exceed half
+		# of it. A radius above 24 means an endpoint leaked in - those are
+		# drawn 3 tiles wide and would carry a 72px radius, sterilising the
+		# ground around spawn and goal.
+		assert_true(radius <= float(Tiles.TILE_SIZE) / 2.0,
+			"footprint radius %f fits inside one tile" % radius)
+	renderer.free()
+	return true
+
+func test_every_prop_sprite_contributes_exactly_one_footprint() -> bool:
+	# Guards the set-membership swap: a prop that fails to register produces no
+	# blocking circle at all and towers build straight through it, which no
+	# other assertion here would notice.
+	var renderer := MapRenderer.new()
+	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
+	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
+	var props := 0
+	for child in renderer.get_children():
+		if child is Sprite2D and child.z_index == 1 \
+				and not child.texture.resource_path.ends_with("castle.png") \
+				and not child.texture.resource_path.ends_with("cave.png"):
+			props += 1
+	assert_eq(renderer.prop_footprints().size(), props,
+		"one footprint per prop sprite, endpoints excluded")
+	renderer.free()
+	return true
+
+func test_a_props_blocking_radius_is_half_the_tile_box_it_is_fitted_into() -> bool:
+	# _place normalises every prop's LONGEST axis to exactly TILE_SIZE, so the
+	# radius prop_footprints derives is always TILE_SIZE / 2 whatever the
+	# source dimensions are. That is precisely why trimming has to happen at
+	# bake time and cannot be compensated for here: the radius does not move,
+	# so the ART has to grow to fill it. tile131 untrimmed draws its subject at
+	# ~23px inside this same 24px radius - a blocking circle over twice the
+	# area of the visible art. test_prop_assets.gd's tight-bbox gate is what
+	# holds the other half of this bargain.
+	var renderer := MapRenderer.new()
+	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
+	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
+	var footprints := renderer.prop_footprints()
+	assert_true(footprints.size() > 0, "the demo map scatters props")
+	for entry in footprints:
+		var f: Dictionary = entry
+		assert_almost_eq(f["radius"], float(Tiles.TILE_SIZE) / 2.0, 0.001,
+			"footprint radius is half the tile box")
+	renderer.free()
 	return true

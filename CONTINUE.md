@@ -3,18 +3,94 @@
 **Point an assistant at this file and say "continue this project."** It contains
 everything needed to resume with no prior conversation.
 
-Last updated: 2026-08-15 · Branch `master` · **core slice and tower upgrades
-both complete and merged; playable end to end and deployed**
+Last updated: 2026-08-18 · Branch `feat/kenney-art-swap` · **core slice, tower
+upgrades and free placement all merged to `master`; the Kenney art swap is
+implemented on this branch — all ten tasks done, suite green at 6689 checks
+across 36 files — and not yet merged**
 
-> **Starting the next piece of work?** Everything planned so far is built and
-> merged; §4 is what is left, and none of it is implementation. Read §5 and §6
-> first whatever you do next — the engine facts and the standing rules apply to
+> **Picking this up after the art swap? Read §0 — it now covers what shipped
+> and the three rendering traps that are still true.** Read §5 and §6 too,
+> whatever you do: the engine facts and the standing rules apply to
 > everything here.
 
 > This file is the *orientation* document: state, how to run things, and the
 > hard-won facts that are expensive to rediscover. The per-task status table and
 > the decision log live in [`PROGRESS.md`](PROGRESS.md) and are **not** duplicated
 > here — read that too, and trust it over this file for task-by-task status.
+
+---
+
+## 0. THE KENNEY ART SWAP — implemented, not yet merged
+
+**Branch `feat/kenney-art-swap`, all ten tasks done, suite green at 6689
+checks across 36 files.** Every non-enemy asset has been replaced with
+Kenney's CC0 *Tower Defense (Top-Down)* pack, and the renderer gained a
+**biome layer** so a map declares itself forest, ice or desert. The old
+sliced reference sheet (`assets/map/`) and the tool that cut it
+(`tools/slice_atlas.gd`) are retired and deleted; see §2's asset row for the
+current layout.
+
+Design and plan, useful if the rendering approach needs revisiting:
+
+- [`docs/superpowers/specs/2026-08-16-kenney-art-swap-design.md`](docs/superpowers/specs/2026-08-16-kenney-art-swap-design.md) — the design, approved
+- [`docs/superpowers/plans/2026-08-16-kenney-art-swap.md`](docs/superpowers/plans/2026-08-16-kenney-art-swap.md) — the ten tasks, as built
+
+**Built with `superpowers:subagent-driven-development`** — a fresh subagent
+per task, two-stage review between tasks.
+
+**Scope boundary held.** This branch is the art plus the biome layer only.
+Map 2 and map 3 *layouts*, map-to-map progression, and `sim/economy.gd:42`'s
+dormant `limit_bonus_map2` stay a **later branch** — see §11. Ice and desert
+are proven on this branch by rendering the existing layout under them, not by
+new layouts.
+
+**Enemies were not touched.** `assets/enemies/**`, `game/enemy.tscn`,
+`game/enemy.gd` and `data/enemies.gd` are exactly as they were before this
+branch. Monster variety is a separate, later effort.
+
+### The three traps, all of which cost real time to find
+
+**1. The tilesheet's packing order is NOT the individual-PNG numbering.**
+70 of the 299 tiles differ, starting at index 15 and including the whole
+130–137 prop range. Every index in the spec and plan is a
+`towerDefense_tileNNN.png` index. If you "verify" one against a tilesheet
+contact sheet you will correct it into a bug.
+
+**2. Corner classification alone picks a table that tiles WRONGLY.** Each
+terrain pairing appears twice in the pack — once with the road drawn as a small
+overlay lobe, once with the roles reversed — and both classify identically by
+corner colour. The separator is a measurement: road-pixel fraction ~0.04 in the
+family we want, ~0.46 in the other. Index position is not a usable rule (for
+grass↔dirt the correct family is the higher indices, for sand↔stone the lower).
+If `test_blend_tiles.gd`'s road-fraction gate goes red, the bake picked the
+inverted family — **fix the selection, never the threshold.**
+
+**3. The road draws 23px, and that is a measured consequence, not a bug.**
+Kenney draws roads as ~3-tile corridors; this map's are one tile wide with a
+one-tile grass gap between the row-8 and row-10 legs. Two alternatives were
+built and rejected: sampling at grid intersections draws a 70px road but floods
+that buildable grass strip and paints it as road, and a half-tile lattice
+draws 36px but minifies the blend detail into a straight-edged bar. So
+`PATH_HALF_WIDTH` follows the art **26 → 14** (Task 9), which is a deliberate
+amendment to spec §3. Whether 14 plays well is a **playtest** question — turn
+the constant and re-run, per §7's convention.
+
+### Where the source art lives
+
+`reference/kenney-td/` — extracted, **gitignored**, already in place. The
+Retina 128×128 set at `reference/kenney-td/PNG/Retina/` is what the bake reads;
+the 3.2MB archive is not committed. `tools/bake_kenney.gd` (Task 1) is the tool
+that turns it into committed assets under `assets/kenney/`.
+
+### One more thing that bites
+
+`prop_footprints()` derives a blocking radius from the texture's **full**
+dimensions, and `_place` normalises every prop's longest axis to `TILE_SIZE`.
+So the radius is **always 24 whatever the source size is** — trimming cannot
+change it. That is precisely why props are trimmed to their alpha bbox at bake
+time: the radius cannot move, so the *art* has to grow to fill it. Untrimmed,
+Kenney's bush draws its subject at ~23px inside that same 24px radius and
+players hit invisible walls in open grass.
 
 ---
 
@@ -43,13 +119,13 @@ win or lose → retry or menu, with sound.
 |---|---|
 | `sim/` — 11 modules | ✅ complete, reviewed |
 | `data/` — 9 modules | ✅ complete, reviewed |
-| `assets/` — 61 files | ✅ imported, sliced, verified visually |
+| `assets/` — 87 PNGs (`assets/kenney/` baked from Kenney's Tower Defense (Top-Down) pack, plus `assets/enemies/` and `assets/audio/`) | ✅ imported, baked, verified visually |
 | `game/` — board, enemy, tower, projectile, map renderer | ✅ complete |
 | `ui/` — menu, HUD (with a 1.5x speed toggle), build panel, tower inspector, game-over, victory | ✅ complete |
 | `audio/` — pooled playback, 17 core-slice events | ✅ complete |
 | Web export | ✅ preset + build; **boots and renders in a browser; not yet played in one** |
 | Deploy | ✅ live at **https://tmegill1.github.io/project-t-godot/** — every push to `master` republishes, at the address GitHub assigns (no custom domain) |
-| Tests | ✅ 4798 checks across 29 files, exit 0 |
+| Tests | ✅ 6689 checks across 36 files, exit 0 |
 | Tower upgrades | ✅ **all 11 tasks done** — rules, tower, board, harness, inspector, verified in the running game. See §4 |
 
 **The repo is public** and the game is deployed from it.
@@ -160,7 +236,8 @@ that follow are made by the engine *at runtime*, after the wasm has instantiated
 and the pack has been read — so seeing them is decent evidence the engine started,
 short of seeing a pixel.
 
-**3. Decide the open art question in §9** — the squashed stone tiles.
+**3. Decide the open art question in §9** — whether the endpoint markers
+should become per-biome art.
 
 **4. Playtest and tune.** Nothing here has been balanced, and the upgrade tiers
 are as unplaytested as everything else. See §9. `sim/harness.gd` now takes
@@ -396,22 +473,29 @@ the player runs, not only in the thing the tests run.
 
 ## 9. Open decisions for the project owner
 
-1. **The map tiles now look better than the original.** 5 of 8 rects were corrected
-   for clipping and bleed. The spec says the original's visual quirks are preserved
-   deliberately, so this is a real divergence. Every deviation is documented in a
-   header block in `tools/slice_atlas.gd` with reference/used/reason — any rect is
-   one edit from exact parity. **Decide whether you want parity or the better art.**
-2. **`map_renderer` scales decoration per-axis**, which squeezes the stone tile
-   ~2.2×. Left alone pending decision 1; it is the same call.
-3. **The balance is unplaytested.** The original's own handoff notes say every
+1. **Endpoint markers are shared across biomes, not themed per biome.** The
+   goal (a composed keep) and spawn (a composed cave mouth) render identically
+   in forest, ice and desert. Spec §8.1 defers per-biome endpoints
+   deliberately — a forest keep of stone, an ice fortress of crystal, a desert
+   one of sandstone would read better and make each map feel authored, but
+   triple the endpoint art and add two assets per future biome. **Decide
+   whether that's worth it** when maps 2 and 3 are actually built.
+2. **The balance is unplaytested.** The original's own handoff notes say every
    number is a placeholder. "Matches Phaser" will not mean "plays well." Tune with
    the harness, which is exactly what it is for.
-4. **Web export is 40.6 MB** — measured, not predicted; the design anticipated
+3. **Web export is 40.6 MB** — measured, not predicted; the design anticipated
    25–40 MB. 39.5 MB of that is `index.wasm`, the Godot engine binary. The
    game's own `index.pck` is 790 KB raw / 666 KB gzipped, against the Phaser
    build's 368 KB gzipped — so the game data itself is roughly 1.8× larger, but
    that difference is noise beside the engine. Trimming art or audio cannot
    meaningfully move the total; only a different engine would.
+4. **The HUD's white "Gold / Lives / Wave" text has no backing plate**, and
+   screenshots from the Kenney art swap show it is nearly illegible over the
+   snow biome and low-contrast over sand; it read fine over green grass. Not
+   fixed on this branch: only forest is wired to a playable map today, so ice
+   and desert are unreachable in game, and the right fix — a backing plate, a
+   text shadow, or a per-biome tint — is a design call, not a bug fix. Whoever
+   wires up the ice map will meet this immediately.
 
 ---
 
@@ -449,17 +533,26 @@ the player runs, not only in the thing the tests run.
 
 ```bash
 cd ~/Projects/project-t-godot
+git checkout feat/kenney-art-swap
 godot --headless --import                            # once, after a fresh clone
-godot --headless --quit --script test/run_tests.gd   # expect 4798 checks, exit 0
+godot --headless --quit --script test/run_tests.gd   # expect 6689 checks, exit 0
 godot --path .                                       # and actually play a run
 ```
 
-Then pick one of two things.
+**§0 — the Kenney art swap — is done and not yet merged.** All ten tasks are
+implemented and the suite is green. Merge `feat/kenney-art-swap` to `master`
+first; if you touch map rendering again afterward, read §0's three traps
+before you do — each one produced a wrong-but-plausible result before it was
+caught, and two of them look correct right up until the map is rendered.
 
-**To take the next feature**, the obvious one is the five composable enemy
-properties — armoured, phased, swift, shielded, splitter. Pierce and detection
-are already wired and waiting for them, and the upgrade tiers that carry those
-effects are inert until they land. It needs its own spec and plan.
+**After that merge**, the next piece is the map 2 and map 3 layouts plus
+map-to-map progression, which the art branch deliberately excludes and which
+needs its own spec and plan.
+
+**The other standing feature** is the five composable enemy properties —
+armoured, phased, swift, shielded, splitter. Pierce and detection are already
+wired and waiting for them, and the upgrade tiers that carry those effects are
+inert until they land. It needs its own spec and plan.
 
 **To close the last verification gap**, play the deployed build at
 https://tmegill1.github.io/project-t-godot/ — place a tower, buy a tier, run a

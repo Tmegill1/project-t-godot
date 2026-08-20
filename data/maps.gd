@@ -7,6 +7,7 @@ const DEFS := {
 		"label": "The Pass",
 		"cols": 23, "rows": 14, "tile_size": 48,
 		"tower_budget": 16, "starting_gold": 100,
+		"biome": &"forest",
 		"next": &"map2",
 	},
 }

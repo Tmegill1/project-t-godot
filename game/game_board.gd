@@ -50,7 +50,7 @@ func _ready() -> void:
 	var def := Maps.get_def(_map_name)
 	Grid.set_active(def["cols"], def["rows"], def["tile_size"])
 	_tiles = Maps.build_tiles(_map_name)
-	_map_renderer.render(_tiles)
+	_map_renderer.render(_tiles, null, def["biome"])
 	_paths = PathFinder.get_all_spawn_paths(_tiles)
 
 	_gold = int(def["starting_gold"])

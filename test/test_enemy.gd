@@ -673,10 +673,10 @@ func test_a_plain_hit_leaves_no_residue_for_a_later_slow_to_inherit() -> bool:
 # nothing at runtime. The assertion reads the node property rather than the
 # scene file's text, so it stays true however the value comes to be set.
 #
-# Deliberately NOT applied project-wide: assets/map/*.png and towers.png are
-# painted, high-resolution art downscaled hard (stone.png 216px -> 48px, a
-# 22% reduction), and NEAREST on that produces dropped-pixel aliasing. Only
-# the genuine pixel art wants a nearest filter. See map_renderer.gd.
+# Deliberately NOT applied project-wide: assets/kenney/** and assets/towers.png
+# are painted, high-resolution art downscaled hard (128px Kenney sources into
+# 48px tiles, a 37% reduction), and NEAREST on that produces dropped-pixel
+# aliasing. Only the genuine pixel art wants a nearest filter. See map_renderer.gd.
 func test_enemy_sprites_use_a_nearest_filter_so_the_pixel_art_stays_sharp() -> bool:
 	var e := _ready_enemy()
 	var sprite: AnimatedSprite2D = e.get_node("Sprite")
