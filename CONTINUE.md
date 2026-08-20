@@ -5,8 +5,8 @@ everything needed to resume with no prior conversation.
 
 Last updated: 2026-08-18 · Branch `feat/kenney-art-swap` · **core slice, tower
 upgrades and free placement all merged to `master`; the Kenney art swap is
-implemented on this branch — all ten tasks done, suite green at 6574 checks
-across 35 files — and not yet merged**
+implemented on this branch — all ten tasks done, suite green at 6689 checks
+across 36 files — and not yet merged**
 
 > **Picking this up after the art swap? Read §0 — it now covers what shipped
 > and the three rendering traps that are still true.** Read §5 and §6 too,
@@ -22,8 +22,8 @@ across 35 files — and not yet merged**
 
 ## 0. THE KENNEY ART SWAP — implemented, not yet merged
 
-**Branch `feat/kenney-art-swap`, all ten tasks done, suite green at 6574
-checks across 35 files.** Every non-enemy asset has been replaced with
+**Branch `feat/kenney-art-swap`, all ten tasks done, suite green at 6689
+checks across 36 files.** Every non-enemy asset has been replaced with
 Kenney's CC0 *Tower Defense (Top-Down)* pack, and the renderer gained a
 **biome layer** so a map declares itself forest, ice or desert. The old
 sliced reference sheet (`assets/map/`) and the tool that cut it
@@ -125,7 +125,7 @@ win or lose → retry or menu, with sound.
 | `audio/` — pooled playback, 17 core-slice events | ✅ complete |
 | Web export | ✅ preset + build; **boots and renders in a browser; not yet played in one** |
 | Deploy | ✅ live at **https://tmegill1.github.io/project-t-godot/** — every push to `master` republishes, at the address GitHub assigns (no custom domain) |
-| Tests | ✅ 6574 checks across 35 files, exit 0 |
+| Tests | ✅ 6689 checks across 36 files, exit 0 |
 | Tower upgrades | ✅ **all 11 tasks done** — rules, tower, board, harness, inspector, verified in the running game. See §4 |
 
 **The repo is public** and the game is deployed from it.
@@ -528,7 +528,7 @@ the player runs, not only in the thing the tests run.
 cd ~/Projects/project-t-godot
 git checkout feat/kenney-art-swap
 godot --headless --import                            # once, after a fresh clone
-godot --headless --quit --script test/run_tests.gd   # expect 6574 checks, exit 0
+godot --headless --quit --script test/run_tests.gd   # expect 6689 checks, exit 0
 godot --path .                                       # and actually play a run
 ```
 
