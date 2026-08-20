@@ -348,7 +348,13 @@ func _bake_biome(biome: StringName, tiles: Dictionary) -> void:
 			img = _snowify(img)
 		img.save_png("%s/blend_%02d.png" % [dir, mask])
 	for slot in PROPS[biome]:
-		var prop: Image = tiles[PROPS[biome][slot]]
+		# .duplicate() first, like the endpoint and atlas bakes - this runs
+		# three times (once per biome) over a PROPS table with tiles shared
+		# across biomes (e.g. tile 135 is both ice's stone and desert's
+		# spike), so mutating tiles[...] in place here, unlike its neighbours,
+		# would be the one bake path where an in-place .convert() could
+		# outlive the biome that made it.
+		var prop: Image = tiles[PROPS[biome][slot]].duplicate()
 		prop.convert(Image.FORMAT_RGBA8)
 		prop = _trim_and_pad(prop)
 		prop.save_png("%s/%s.png" % [dir, slot])
@@ -402,7 +408,6 @@ const ATLAS_FRAMES := {
 
 const ATLAS_BASE_PX := 84
 const ATLAS_TURRET_PX := 64
-const ATLAS_MARGIN := 4
 
 func _bake_tower_atlas(tiles: Dictionary) -> void:
 	var sheet := Image.create_empty(
@@ -412,9 +417,14 @@ func _bake_tower_atlas(tiles: Dictionary) -> void:
 		var spec: Dictionary = ATLAS_FRAMES[frame]
 		var ox: int = (int(frame) % ATLAS_COLUMNS) * ATLAS_FRAME
 		var oy: int = (int(frame) / ATLAS_COLUMNS) * ATLAS_FRAME
-		# Both pieces are inset by ATLAS_MARGIN so no frame's art touches an
-		# edge - an AtlasTexture sampling a frame would otherwise pull in the
-		# neighbouring frame's pixels.
+		# Both pieces are centred in the 96px frame, not inset by a shared
+		# margin constant - the inset falls out of (ATLAS_FRAME - piece) / 2
+		# and differs per piece: 6px for the 84px base, 16px for the 64px
+		# turret. The smaller of the two, the base's 6px, is what keeps art
+		# off the frame edge - an AtlasTexture sampling a frame would
+		# otherwise pull in the neighbouring frame's pixels - and it is that
+		# same 6px that test_tower_atlas.gd's transparent-margin assertion
+		# depends on.
 		var base: Image = tiles[spec["base"]].duplicate()
 		base.convert(Image.FORMAT_RGBA8)
 		base.resize(ATLAS_BASE_PX, ATLAS_BASE_PX, Image.INTERPOLATE_LANCZOS)
