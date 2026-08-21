@@ -70,6 +70,10 @@ func _init() -> void:
 	_bake_roads(sheet)
 	_bake_tower_atlas(sheet)
 	_bake_enemies(sheet)
+	var decor := _decor_sprites(sheet)
+	print("bake_sheet: %d decor sprites found" % decor.size())
+	_bake_props(decor)
+	_bake_endpoints(sheet, decor)
 	print("bake_sheet: done")
 	quit()
 
@@ -510,3 +514,211 @@ func _bake_enemies(sheet: Image) -> void:
 				Vector2i.ZERO)
 			_trim(_key(cut)).save_png("%s/variant_%d.png" % [dir, i])
 		print("bake_sheet: %s x%d variants" % [kind, spans.size()])
+
+const DECOR_X0 := 1237
+const DECOR_X1 := 1525
+const DECOR_Y0 := 216
+const DECOR_Y1 := 740
+
+## The floor a connected component has to clear to be a decor sprite rather
+## than a letter of the "EXTRAS / DECOR" heading. MEASURED: the column holds 42
+## components, the 29 above this floor are exactly the 29 decor objects and the
+## 13 below it are exactly the heading's letters.
+const DECOR_MIN_W := 18
+const DECOR_MIN_H := 18
+const DECOR_MIN_AREA := 250
+
+const _NEIGHBOURS: Array[Vector2i] = [
+	Vector2i(-1, -1), Vector2i(0, -1), Vector2i(1, -1),
+	Vector2i(-1, 0), Vector2i(1, 0),
+	Vector2i(-1, 1), Vector2i(0, 1), Vector2i(1, 1),
+]
+
+## Which decor sprite fills which prop slot, per biome, as an index into
+## _decor_sprites' reading order. The slot NAMES are fixed by MapRenderer's
+## scatter rules and do not change; only what sits behind each one is
+## per-biome.
+##
+## The indices in reading order are: 0 signpost, 1 pine, 2 flat stump, 3 leafy
+## tree, 4 banner, 5 crates, 6 rock pair, 7 fallen log, 8 boulder cluster,
+## 9 mossy stump, 10 bush, 11 stone spire, 12 mushrooms, 13 grey rock,
+## 14 berry plant, 15 handcart, 16 planks, 17 barrel, 18 white flowers,
+## 19 campfire, 20 mossy stump, 21 spike fence, 22 wooden cross, 23 skull and
+## crossbones, 24 orange flowers, 25 rock outcrop, 26 mossy stump, 27 stump,
+## 28 small skull. Every one of the twelve below was rendered at the 48px the
+## renderer draws it into and checked by eye; the sheet has no cactus, so
+## desert's tree is a dead stump and its spike is bones.
+const PROP_SLOTS := {
+	&"forest": {&"tree": 3, &"stone": 8, &"spike": 21, &"fire": 19},
+	&"ice": {&"tree": 1, &"stone": 6, &"spike": 11, &"fire": 19},
+	&"desert": {&"tree": 2, &"stone": 25, &"spike": 23, &"fire": 19},
+}
+
+const ENDPOINT_CANVAS := 256
+
+## The keep, and the banners and crates flanking it. Pieces are placed by
+## CENTRE rather than by top-left so a one-pixel change in a source's trimmed
+## size does not walk the composition sideways. {decor, px, centre, flip}.
+const CASTLE_KEEP_PX := 180
+const CASTLE_KEEP_CENTRE := Vector2i(127, 120)
+const CASTLE_PIECES := [
+	{"decor": 4, "px": 70, "centre": Vector2i(36, 155), "flip": false},
+	{"decor": 4, "px": 70, "centre": Vector2i(219, 155), "flip": true},
+	{"decor": 5, "px": 56, "centre": Vector2i(58, 216), "flip": false},
+	{"decor": 5, "px": 56, "centre": Vector2i(198, 216), "flip": true},
+]
+
+## The mouth, then three rocks around its RIM - not over it. Stacking rocks on
+## top of the mouth makes a rock pile and a mouth wider than the rocks makes a
+## black blob; both were composed and rendered before this arrangement.
+const CAVE_MOUTH := Rect2i(50, 78, 156, 124)
+const CAVE_MOUTH_COLOUR := Color8(11, 13, 17)
+const CAVE_PIECES := [
+	{"decor": 25, "px": 96, "centre": Vector2i(128, 80), "flip": false},
+	{"decor": 13, "px": 72, "centre": Vector2i(62, 128), "flip": false},
+	{"decor": 6, "px": 84, "centre": Vector2i(198, 132), "flip": true},
+]
+
+## Every decor sprite in the column, in reading order: rows top to bottom,
+## sprites left to right within a row.
+##
+## Connected components, not a band scan. The column's objects are staggered,
+## so no row inside it is ever empty - a band scan returns the whole column as
+## one 283x411 blob. Each sprite is cut from its own component's MASK rather
+## than its bounding rectangle, so a neighbour overlapping the rectangle does
+## not ride along, and gets the same 1px transparent pad _trim gives everything
+## else.
+func _decor_sprites(sheet: Image) -> Array:
+	var w := DECOR_X1 - DECOR_X0
+	var h := DECOR_Y1 - DECOR_Y0
+	var region := Image.create_empty(w, h, false, Image.FORMAT_RGBA8)
+	region.blit_rect(sheet, Rect2i(DECOR_X0, DECOR_Y0, w, h), Vector2i.ZERO)
+	region = _key(region)
+	var solid := []
+	solid.resize(w * h)
+	for y in h:
+		for x in w:
+			solid[y * w + x] = region.get_pixel(x, y).a > 8.0 / 255.0
+	var labels := PackedInt32Array()
+	labels.resize(w * h)
+	var found := []
+	var next_label := 0
+	for sy in h:
+		for sx in w:
+			var seed := sy * w + sx
+			if not solid[seed] or labels[seed] != 0:
+				continue
+			next_label += 1
+			labels[seed] = next_label
+			var stack := [seed]
+			var min_x := sx
+			var max_x := sx
+			var min_y := sy
+			var max_y := sy
+			var area := 0
+			while not stack.is_empty():
+				var i: int = stack.pop_back()
+				area += 1
+				var cy := i / w
+				var cx := i % w
+				min_x = mini(min_x, cx)
+				max_x = maxi(max_x, cx)
+				min_y = mini(min_y, cy)
+				max_y = maxi(max_y, cy)
+				for step in _NEIGHBOURS:
+					var ny := cy + step.y
+					var nx := cx + step.x
+					if ny < 0 or ny >= h or nx < 0 or nx >= w:
+						continue
+					var j := ny * w + nx
+					if solid[j] and labels[j] == 0:
+						labels[j] = next_label
+						stack.push_back(j)
+			if max_x - min_x + 1 < DECOR_MIN_W or max_y - min_y + 1 < DECOR_MIN_H \
+					or area < DECOR_MIN_AREA:
+				continue
+			found.append({"id": next_label, "x0": min_x, "y0": min_y,
+				"x1": max_x, "y1": max_y})
+	found.sort_custom(func(a, b):
+		if int(a["y0"]) != int(b["y0"]):
+			return int(a["y0"]) < int(b["y0"])
+		return int(a["x0"]) < int(b["x0"]))
+	var out := []
+	for item in found:
+		var bx: int = int(item["x0"])
+		var by: int = int(item["y0"])
+		var bw: int = int(item["x1"]) - bx + 1
+		var bh: int = int(item["y1"]) - by + 1
+		var id: int = int(item["id"])
+		var sprite := Image.create_empty(bw + 2, bh + 2, false, Image.FORMAT_RGBA8)
+		sprite.fill(Color(0, 0, 0, 0))
+		for y in bh:
+			for x in bw:
+				if labels[(by + y) * w + bx + x] == id:
+					sprite.set_pixel(x + 1, y + 1, region.get_pixel(bx + x, by + y))
+		out.append(sprite)
+	return out
+
+## Scales a sprite to fit a px box preserving aspect, then blends it onto the
+## canvas centred on `centre`.
+func _place_piece(canvas: Image, src: Image, px: int, centre: Vector2i,
+		flip: bool) -> void:
+	var piece: Image = src.duplicate()
+	var factor := float(px) / float(maxi(piece.get_width(), piece.get_height()))
+	piece.resize(maxi(1, int(piece.get_width() * factor)),
+		maxi(1, int(piece.get_height() * factor)), Image.INTERPOLATE_LANCZOS)
+	if flip:
+		piece.flip_x()
+	canvas.blend_rect(piece, Rect2i(Vector2i.ZERO, piece.get_size()),
+		centre - piece.get_size() / 2)
+
+func _bake_props(decor: Array) -> void:
+	for biome in PROP_SLOTS:
+		var dir := "res://assets/art/%s" % biome
+		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(dir))
+		for slot in PROP_SLOTS[biome]:
+			var index: int = int(PROP_SLOTS[biome][slot])
+			assert(index < decor.size(), "decor index %d is past the column" % index)
+			(decor[index] as Image).save_png("%s/%s.png" % [dir, slot])
+		print("bake_sheet: %s props" % biome)
+
+func _bake_endpoints(sheet: Image, decor: Array) -> void:
+	var castle := Image.create_empty(
+		ENDPOINT_CANVAS, ENDPOINT_CANVAS, false, Image.FORMAT_RGBA8)
+	castle.fill(Color(0, 0, 0, 0))
+	_place_piece(castle, _tower_sprite(sheet, &"long", 3), CASTLE_KEEP_PX,
+		CASTLE_KEEP_CENTRE, false)
+	for piece in CASTLE_PIECES:
+		var spec: Dictionary = piece
+		var index: int = int(spec["decor"])
+		assert(index < decor.size(), "decor index %d is past the column" % index)
+		_place_piece(castle, decor[index], int(spec["px"]), spec["centre"],
+			bool(spec["flip"]))
+	_trim(castle).save_png("res://assets/art/castle.png")
+
+	var cave := Image.create_empty(
+		ENDPOINT_CANVAS, ENDPOINT_CANVAS, false, Image.FORMAT_RGBA8)
+	cave.fill(Color(0, 0, 0, 0))
+	# An ellipse inscribed in CAVE_MOUTH, drawn by hand because Image has no
+	# shape drawing.
+	var rx := float(CAVE_MOUTH.size.x) / 2.0
+	var ry := float(CAVE_MOUTH.size.y) / 2.0
+	var cx := float(CAVE_MOUTH.position.x) + rx
+	var cy := float(CAVE_MOUTH.position.y) + ry
+	for y in CAVE_MOUTH.size.y:
+		for x in CAVE_MOUTH.size.x:
+			var px := float(CAVE_MOUTH.position.x + x) + 0.5
+			var py := float(CAVE_MOUTH.position.y + y) + 0.5
+			var dx := (px - cx) / rx
+			var dy := (py - cy) / ry
+			if dx * dx + dy * dy <= 1.0:
+				cave.set_pixel(CAVE_MOUTH.position.x + x, CAVE_MOUTH.position.y + y,
+					CAVE_MOUTH_COLOUR)
+	for piece in CAVE_PIECES:
+		var spec: Dictionary = piece
+		var index: int = int(spec["decor"])
+		assert(index < decor.size(), "decor index %d is past the column" % index)
+		_place_piece(cave, decor[index], int(spec["px"]), spec["centre"],
+			bool(spec["flip"]))
+	_trim(cave).save_png("res://assets/art/cave.png")
+	print("bake_sheet: endpoints")
