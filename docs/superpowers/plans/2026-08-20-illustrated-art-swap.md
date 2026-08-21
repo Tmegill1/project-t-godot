@@ -439,20 +439,30 @@ func test_the_composed_straight_is_road_north_south_and_surround_east_west() -> 
 		assert_false(_edge_is_road(img, biome, "W"), "%s straight is surround at the west edge" % biome)
 	return true
 
-func test_road_pieces_carry_no_navy_background() -> bool:
+func test_road_pieces_have_no_unkeyed_background_left() -> bool:
+	# Not "no dark pixels". The pieces' own outlines and painted shadows are
+	# legitimately dark, and forest keeps them unshifted because its palette is
+	# identity - so a brightness rule fails every forest piece while passing the
+	# recoloured biomes, which is a property of the recolour, not of the key.
+	# What must not survive is the SHEET BACKGROUND: an opaque pixel within the
+	# key's own tolerance of (9, 22, 28) means the key never ran.
+	var background := Vector3(9.0, 22.0, 28.0)
 	for biome in _BIOMES:
 		for mask in _MASKS:
 			var img := _road(biome, mask)
 			assert_true(img != null, "%s/road_%02d.png decodes" % [biome, mask])
 			if img == null:
 				continue
-			var navy := 0
-			for y in range(0, img.get_height(), 3):
-				for x in range(0, img.get_width(), 3):
+			var survivors := 0
+			for y in range(0, img.get_height(), 2):
+				for x in range(0, img.get_width(), 2):
 					var c := img.get_pixel(x, y)
-					if c.a > 0.5 and c.r < 0.10 and c.g < 0.14 and c.b < 0.16:
-						navy += 1
-			assert_eq(navy, 0, "%s/road_%02d has no leftover navy" % [biome, mask])
+					if c.a <= 0.5:
+						continue
+					if (Vector3(c.r, c.g, c.b) * 255.0).distance_squared_to(background) <= 250.0:
+						survivors += 1
+			assert_eq(survivors, 0,
+				"%s/road_%02d has %d unkeyed background pixels" % [biome, mask, survivors])
 	return true
 ```
 
