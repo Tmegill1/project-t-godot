@@ -6,8 +6,8 @@ extends Node2D
 
 ## Shared across every biome: the goal and spawn markers are player landmarks,
 ## not scenery, and are the same object whatever the map is made of.
-const _CASTLE := preload("res://assets/kenney/castle.png")
-const _CAVE := preload("res://assets/kenney/cave.png")
+const _CASTLE := preload("res://assets/art/castle.png")
+const _CAVE := preload("res://assets/art/cave.png")
 
 const _MAX_FIRE_TILES := 7
 
@@ -133,51 +133,77 @@ func _place_prop(slot: StringName, col: int, row: int) -> Sprite2D:
 	_prop_sprites[sprite] = true
 	return sprite
 
-## Ground is drawn from a corner-mask lattice sampled at TILE CENTRES: each
-## sprite spans the square between four adjacent centres, so the grid is
-## (cols + 1) x (rows + 1) and every sprite sits half a tile up and left of its
-## lattice point.
+## Ground is one sprite per tile, on the tile grid.
 ##
-## Anchoring anywhere else moves the road off the world-space route PathFinder
-## emits - enemies follow tile centres, so the road has to be centred on them.
-## The half-tile overhang this produces falls outside the viewport on the left,
-## top and bottom, and under TowerPanel's 95%-opaque background on the right.
+## This replaces a corner-mask lattice that sampled terrain at tile centres
+## over a (cols+1) x (rows+1) grid offset half a tile. That existed because the
+## previous art blended between terrains; this art does not - its cells are
+## discrete cards and its road pieces are shapes. An edge mask over orthogonal
+## neighbours is the simpler thing that this art actually wants.
 ##
-## Two alternatives were measured and rejected (spec section 7.1): sampling at
-## grid intersections draws a 70px road but floods the one-tile buildable strip
-## between the row-8 and row-10 legs, and a half-tile lattice minifies the
-## blend detail into a straight-edged bar.
+## Ground variety is drawn from its own Rng rather than the decoration one.
+## Which of the six ground cards a tile gets is cosmetic and should not move
+## when the decoration seed changes; drawing from the passed rng here would
+## also shift the whole decoration stream, since _draw_ground runs first.
 func _draw_ground() -> void:
-	# Exact at 48 (TILE_SIZE is even); intentional, as in tower.gd's frame_region.
-	@warning_ignore("integer_division")
-	var half := Tiles.TILE_SIZE / 2
-	for r in range(_rows + 1):
-		for c in range(_cols + 1):
+	var variants := Rng.new(Seeds.DEFAULT_GROUND_SEED)
+	for r in _rows:
+		for c in _cols:
 			# load() rather than a texture from Biomes: data/ is held
 			# engine-free by test_sim_purity.gd, so the render layer is where
 			# a path becomes a resource. Godot's ResourceLoader caches by
-			# path, so the 360 calls per render are dictionary hits.
-			var texture: Texture2D = load(Biomes.blend_path(_biome, corner_mask(c, r)))
-			_place(texture, c, r, Tiles.TILE_SIZE, _Z_GROUND,
-				Vector2(-half, -half))
+			# path, so the repeated calls are dictionary hits.
+			if _is_road(c, r):
+				_place_tile(load(Biomes.road_path(_biome, edge_mask(c, r))), c, r)
+			else:
+				_place_tile(load(Biomes.ground_path(
+					_biome, variants.int_range(0, Biomes.GROUND_VARIANTS - 1))), c, r)
 
-## The four tiles surrounding lattice point (c, r), as a bitmask.
-## Bit order is fixed: TL=1, TR=2, BL=4, BR=8, set means road.
-## Public so tests can assert the lattice without inspecting sprites.
-func corner_mask(c: int, r: int) -> int:
+## The four orthogonal neighbours of a cell that are road, as a bitmask.
+## Bit order is fixed: N=1, E=2, S=4, W=8. Out of bounds is not road.
+## Public so tests can assert the mask without inspecting sprites.
+func edge_mask(c: int, r: int) -> int:
 	var mask := 0
-	if _is_road(c - 1, r - 1):
-		mask |= 1
 	if _is_road(c, r - 1):
+		mask |= 1
+	if _is_road(c + 1, r):
 		mask |= 2
-	if _is_road(c - 1, r):
+	if _is_road(c, r + 1):
 		mask |= 4
-	if _is_road(c, r):
+	if _is_road(c - 1, r):
 		mask |= 8
 	return mask
 
-## Out of bounds reads as ground, which is what closes the lattice at the map
-## edge without a special case.
+## Draws a ground or road tile STRETCHED to fill its cell exactly.
+##
+## Deliberately not _place. A tile is a cell of a grid and has to cover its
+## cell; _place fits a source inside the box preserving aspect and centres it
+## in the slack, which is right for a prop and opens seams here - the road
+## pieces are 66x63, so aspect-fitting leaves 2.2px of transparency under
+## every one of them. The distortion this trades for is 4.7% on the roads and
+## under 2% on the ground.
+##
+## prop_footprints reads displayed size to derive a blocking radius and its
+## doc comment says that only measures correctly because _place scales
+## uniformly. That stays true: props still go through _place, and nothing
+## drawn here is ever recorded as a prop.
+func _place_tile(texture: Texture2D, col: int, row: int) -> Sprite2D:
+	var s := Sprite2D.new()
+	s.texture = texture
+	s.centered = false
+	s.position = Vector2(col * Tiles.TILE_SIZE, row * Tiles.TILE_SIZE)
+	s.scale = Vector2(
+		float(Tiles.TILE_SIZE) / float(texture.get_width()),
+		float(Tiles.TILE_SIZE) / float(texture.get_height()))
+	# Same reasoning as _place: this art is painted, not pixel art, and every
+	# tile is minified from 66px into 48px.
+	s.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	s.z_index = _Z_GROUND
+	add_child(s)
+	return s
+
+## Out of bounds reads as ground, which is what the edge mask needs at the
+## map's border without a special case.
 func _is_road(c: int, r: int) -> bool:
 	if r < 0 or r >= _rows or c < 0 or c >= _cols:
 		return false

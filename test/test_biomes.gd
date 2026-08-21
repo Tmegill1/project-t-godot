@@ -1,8 +1,7 @@
 extends TestCase
 
 # The biome table is three directories with an identical file layout, so most
-# of what could go wrong is a path that does not resolve. These check that,
-# plus the one piece of real logic: the diagonal-mask fallback.
+# of what could go wrong is a path that does not resolve. These check that.
 
 func test_the_three_biomes_are_exactly_forest_ice_and_desert() -> bool:
 	assert_eq(Biomes.KINDS.size(), 3, "three biomes")
@@ -12,22 +11,14 @@ func test_the_three_biomes_are_exactly_forest_ice_and_desert() -> bool:
 	assert_eq(Biomes.FIRST, &"forest", "forest is the first biome")
 	return true
 
-func test_every_biome_resolves_every_blend_mask_the_pack_supplies() -> bool:
+func test_every_biome_resolves_its_ground_and_road_pieces() -> bool:
 	for biome in Biomes.KINDS:
-		for mask in [0, 1, 2, 3, 4, 5, 7, 8, 10, 11, 12, 13, 14, 15]:
-			var path := Biomes.blend_path(biome, mask)
-			assert_true(ResourceLoader.exists(path),
-				"%s mask %d resolves to a real resource (%s)" % [biome, mask, path])
-	return true
-
-func test_the_diagonal_masks_fall_back_to_the_full_road_tile() -> bool:
-	# The pack ships no diagonal-only tile in any pairing. 15 connects both
-	# diagonals rather than neither, which is the safer resolution.
-	for biome in Biomes.KINDS:
-		var full := Biomes.blend_path(biome, 15)
-		for mask in Biomes.DIAGONAL_MASKS:
-			assert_eq(Biomes.blend_path(biome, mask), full,
-				"%s mask %d falls back to 15" % [biome, mask])
+		for i in Biomes.GROUND_VARIANTS:
+			assert_true(ResourceLoader.exists(Biomes.ground_path(biome, i)),
+				"%s ground %d resolves" % [biome, i])
+		for mask in 16:
+			assert_true(ResourceLoader.exists(Biomes.road_path(biome, mask)),
+				"%s road %d resolves" % [biome, mask])
 	return true
 
 func test_each_biome_uses_its_own_directory() -> bool:

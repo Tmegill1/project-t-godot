@@ -10,3 +10,7 @@ const DEFAULT_DEMO_MAP_SEED := 20260804
 const DEFAULT_MAP2_SEED := 20260805
 const DEFAULT_MAP3_SEED := 20260806
 const DEFAULT_DECORATION_SEED := 771144
+
+## Which of the six ground cards each tile gets. Separate from the decoration
+## seed so ground variety does not move when decoration does.
+const DEFAULT_GROUND_SEED := 20260821
