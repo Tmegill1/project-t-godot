@@ -362,38 +362,42 @@ func _road(biome: String, mask: int) -> Image:
 		return null
 	return img
 
-## Whether the middle of the given edge is road rather than surround. Road is
-## the warmer, brighter material in every environment; sampling well inside
-## the card border avoids the scalloped edging.
-func _edge_is_road(img: Image, edge: String) -> bool:
+## Where each biome's road and surround should have landed after the bake's
+## recolouring. Only the grass row holds road pieces on this sheet, so desert
+## and ice are recoloured from it - which is exactly why this test cannot use
+## a "road is warmer" heuristic: desert's road AND its surround are both warm,
+## and the road is the darker of the two.
+const _PALETTES := {
+	"forest": {"surround": Vector3(88, 101, 14), "road": Vector3(132, 103, 39)},
+	"desert": {"surround": Vector3(170, 123, 62), "road": Vector3(132, 103, 39)},
+	"ice": {"surround": Vector3(91, 145, 190), "road": Vector3(200, 220, 235)},
+}
+
+## Whether the middle of the given edge is road rather than surround, decided
+## by which of that biome's two palettes the sampled material is nearer to.
+func _edge_is_road(img: Image, biome: String, edge: String) -> bool:
 	var w := img.get_width()
 	var h := img.get_height()
-	var lo_x := w / 3
-	var hi_x := 2 * w / 3
-	var lo_y := h / 3
-	var hi_y := 2 * h / 3
-	var inset := maxi(4, mini(w, h) / 6)
+	var inset := maxi(6, mini(w, h) / 5)
+	var centre := {
+		"N": Vector2i(w / 2, inset), "S": Vector2i(w / 2, h - inset),
+		"W": Vector2i(inset, h / 2), "E": Vector2i(w - inset, h / 2),
+	}[edge] as Vector2i
 	var acc := Vector3.ZERO
 	var n := 0
-	var xs := []
-	var ys := []
-	match edge:
-		"N": xs = range(lo_x, hi_x); ys = range(inset, inset + 6)
-		"S": xs = range(lo_x, hi_x); ys = range(h - inset - 6, h - inset)
-		"W": xs = range(inset, inset + 6); ys = range(lo_y, hi_y)
-		_: xs = range(w - inset - 6, w - inset); ys = range(lo_y, hi_y)
-	for x in xs:
-		for y in ys:
-			var c := img.get_pixel(x, y)
+	for dy in range(-3, 4):
+		for dx in range(-3, 4):
+			var c := img.get_pixel(
+				clampi(centre.x + dx, 0, w - 1), clampi(centre.y + dy, 0, h - 1))
 			if c.a > 0.5:
-				acc += Vector3(c.r, c.g, c.b)
+				acc += Vector3(c.r, c.g, c.b) * 255.0
 				n += 1
 	if n == 0:
 		return false
 	var mean := acc / float(n)
-	# Road material is warmer than the surround in all three environments:
-	# dirt against grass, dirt against sand, pale ice path against ice field.
-	return mean.r > mean.b + 0.06
+	var palette: Dictionary = _PALETTES[biome]
+	return mean.distance_squared_to(palette["road"]) \
+		< mean.distance_squared_to(palette["surround"])
 
 func test_every_biome_ships_every_road_piece() -> bool:
 	for biome in _BIOMES:
@@ -414,7 +418,7 @@ func test_each_piece_connects_exactly_where_its_name_says() -> bool:
 				continue
 			var derived := 0
 			for edge in bits:
-				if _edge_is_road(img, edge):
+				if _edge_is_road(img, biome, edge):
 					derived |= int(bits[edge])
 			assert_eq(derived, mask,
 				"%s/road_%02d connects %d - the piece and its name disagree"
@@ -429,10 +433,10 @@ func test_the_composed_straight_is_road_north_south_and_surround_east_west() -> 
 		assert_true(img != null, "%s/road_05.png decodes" % biome)
 		if img == null:
 			continue
-		assert_true(_edge_is_road(img, "N"), "%s straight is road at the north edge" % biome)
-		assert_true(_edge_is_road(img, "S"), "%s straight is road at the south edge" % biome)
-		assert_false(_edge_is_road(img, "E"), "%s straight is surround at the east edge" % biome)
-		assert_false(_edge_is_road(img, "W"), "%s straight is surround at the west edge" % biome)
+		assert_true(_edge_is_road(img, biome, "N"), "%s straight is road at the north edge" % biome)
+		assert_true(_edge_is_road(img, biome, "S"), "%s straight is road at the south edge" % biome)
+		assert_false(_edge_is_road(img, biome, "E"), "%s straight is surround at the east edge" % biome)
+		assert_false(_edge_is_road(img, biome, "W"), "%s straight is surround at the west edge" % biome)
 	return true
 
 func test_road_pieces_carry_no_navy_background() -> bool:
@@ -462,31 +466,96 @@ Expected: FAIL — no `road_*.png` exists.
 Add to `tools/bake_sheet.gd`:
 
 ```gdscript
-## Path rows, per biome. Same pitch as the ground rows.
-const ROAD_ROWS := {
-	&"forest": {"x": 78, "y": 697},
-	&"desert": {"x": 78, "y": 772},
-	&"ice": {"x": 78, "y": 854},
+## The path row. There is only ONE - the terrain block's four rows are GRASS,
+## PATH, DESERT and ICE, and only PATH holds road pieces; the other three are
+## ground variants. Desert and ice roads are therefore RECOLOURED from these,
+## not cut from their own rows.
+##
+## Origin follows the same 85px row cadence Task 1 established: grass 619,
+## path 704, desert 788, ice 873.
+const ROAD_ROW := {"x": 77, "y": 704}
+const ROAD_SLOTS_IN_ROW := 6
+
+## Where each biome's road and surround should land after recolouring.
+## Measured off the committed ground tiles: a biome's road keeps the sheet's
+## dirt except on ice, where a dirt track through a frozen field reads wrong.
+const ROAD_PALETTES := {
+	&"forest": {"surround": Color8(88, 101, 14), "road": Color8(132, 103, 39)},
+	&"desert": {"surround": Color8(170, 123, 62), "road": Color8(132, 103, 39)},
+	&"ice": {"surround": Color8(91, 145, 190), "road": Color8(200, 220, 235)},
 }
 
-## Which slot in the path row holds which connection mask. Derived by sampling
-## each piece's edge midpoints past the card border; see the test, which
-## re-derives it from the committed output.
-const ROAD_SLOTS := {0: 0, 3: 2, 7: 4, 15: 5}
+## Source materials in the grass row, measured by clustering a solid piece.
+const SOURCE_SURROUND := Vector3(53.0, 65.9, 14.4)
+const SOURCE_ROAD := Vector3(131.8, 102.8, 39.0)
 
-## Mask 5 (north-south straight) has no piece on the sheet. It is composed from
-## the cross by masking the east and west arms with the cross's own corners.
+## Mask 5 (north-south straight) has no piece on the sheet and is composed
+## from the cross.
 const ROAD_COMPOSED_STRAIGHT := 5
 
+## Which edges of a piece are road, as a mask. N=1, E=2, S=4, W=8.
+##
+## DERIVED, never tabulated. A hand-written slot-to-mask table for this sheet
+## has been wrong three times; this samples each edge's midpoint band well
+## inside the card border, where the material is unambiguous, and the test
+## re-derives the same property from the committed bytes.
+func _road_mask(piece: Image) -> int:
+	var w := piece.get_width()
+	var h := piece.get_height()
+	var inset := maxi(6, mini(w, h) / 5)
+	var probes := {
+		1: [Vector2i(w / 2, inset)],
+		2: [Vector2i(w - inset, h / 2)],
+		4: [Vector2i(w / 2, h - inset)],
+		8: [Vector2i(inset, h / 2)],
+	}
+	var mask := 0
+	for bit in probes:
+		var p: Vector2i = probes[bit][0]
+		var acc := Vector3.ZERO
+		var n := 0
+		for dy in range(-3, 4):
+			for dx in range(-3, 4):
+				var c := piece.get_pixel(
+					clampi(p.x + dx, 0, w - 1), clampi(p.y + dy, 0, h - 1))
+				if c.a > 0.5:
+					acc += Vector3(c.r, c.g, c.b) * 255.0
+					n += 1
+		if n == 0:
+			continue
+		var mean := acc / float(n)
+		if mean.distance_squared_to(SOURCE_ROAD) < mean.distance_squared_to(SOURCE_SURROUND):
+			mask |= int(bit)
+	return mask
+
+## Shifts every pixel of one material toward a target colour, preserving its
+## own shading as an offset rather than flattening it to a flat fill.
+func _recolour(img: Image, source: Vector3, target: Color) -> Image:
+	var out: Image = img.duplicate()
+	var goal := Vector3(target.r, target.g, target.b) * 255.0
+	for y in out.get_height():
+		for x in out.get_width():
+			var c := out.get_pixel(x, y)
+			if c.a <= 0.0:
+				continue
+			var v := Vector3(c.r, c.g, c.b) * 255.0
+			if v.distance_squared_to(source) > v.distance_squared_to(SOURCE_ROAD if source == SOURCE_SURROUND else SOURCE_SURROUND):
+				continue
+			var shifted := goal + (v - source)
+			out.set_pixel(x, y, Color(
+				clampf(shifted.x / 255.0, 0.0, 1.0),
+				clampf(shifted.y / 255.0, 0.0, 1.0),
+				clampf(shifted.z / 255.0, 0.0, 1.0), c.a))
+	return out
+
 func _compose_straight(cross: Image) -> Image:
-	var out := cross.duplicate()
+	var out: Image = cross.duplicate()
 	var w := out.get_width()
 	var h := out.get_height()
 	var arm := w / 3
-	# The cross's corners are surround material. Mirror the top-left corner
-	# down the west arm and the top-right corner down the east arm, so the
-	# straight gains surround on both sides while keeping the cross's own
-	# palette and edging.
+	# The cross's own corners are surround material. Mirroring them down the
+	# east and west arms turns it into a north-south straight while keeping
+	# the piece's palette and edging.
 	for y in range(arm, h - arm):
 		for x in range(0, arm):
 			out.set_pixel(x, y, cross.get_pixel(x, mini(arm - 1, y % arm)))
@@ -495,18 +564,27 @@ func _compose_straight(cross: Image) -> Image:
 	return out
 
 func _bake_roads(sheet: Image) -> void:
-	for biome in ROAD_ROWS:
-		var row: Dictionary = ROAD_ROWS[biome]
+	# Cut the one road row once, then recolour it per biome.
+	var pieces := {}
+	for slot in ROAD_SLOTS_IN_ROW:
+		var piece := _cell(sheet, int(ROAD_ROW["x"]) + PITCH * slot, int(ROAD_ROW["y"]))
+		var mask := _road_mask(piece)
+		# Later slots win on a tie: the row holds two crosses and two curves,
+		# and the later of each pair carries more decoration.
+		pieces[mask] = piece
+	assert(pieces.has(15), "no cross found in the path row")
+	pieces[ROAD_COMPOSED_STRAIGHT] = _compose_straight(pieces[15])
+	print("bake_sheet: road masks found %s" % [pieces.keys()])
+
+	for biome in ROAD_PALETTES:
 		var dir := "res://assets/art/%s" % biome
 		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(dir))
-		var pieces := {}
-		for mask in ROAD_SLOTS:
-			var slot: int = int(ROAD_SLOTS[mask])
-			var img := _cell(sheet, int(row["x"]) + PITCH * slot, int(row["y"]))
-			pieces[mask] = img
-			img.save_png("%s/road_%02d.png" % [dir, int(mask)])
-		_compose_straight(pieces[15]).save_png(
-			"%s/road_%02d.png" % [dir, ROAD_COMPOSED_STRAIGHT])
+		var palette: Dictionary = ROAD_PALETTES[biome]
+		for mask in pieces:
+			var out: Image = pieces[mask]
+			out = _recolour(out, SOURCE_SURROUND, palette["surround"])
+			out = _recolour(out, SOURCE_ROAD, palette["road"])
+			out.save_png("%s/road_%02d.png" % [dir, int(mask)])
 		print("bake_sheet: %s roads" % biome)
 ```
 
