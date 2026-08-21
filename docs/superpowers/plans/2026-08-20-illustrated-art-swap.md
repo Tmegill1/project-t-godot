@@ -24,7 +24,7 @@
 - Source sheet background is `(9, 22, 28)`; the sheet has **no alpha channel**.
 - Terrain and road rows use **pitch 67**, tiles **64×64**, **6 tiles per row**.
 - `Enemies.KINDS` stays `[slime, ogre, bee]` and every stat and wave schedule is unchanged — only sprites change.
-- Do not edit `sim/placement.gd` except the single constant in Task 9.
+- Do not edit `sim/placement.gd` except the single constant in Task 8.
 
 ---
 
@@ -707,10 +707,15 @@ func _bake_tower_atlas(sheet: Image) -> void:
 		var frames: Array = Towers.DEFS[kind]["upgrade_frames"]
 		var xs: Array = TOWER_LEVELS[kind]
 		for level in xs.size():
-			var region := Image.create_empty(
-				int(xs[level + 1]) - int(xs[level]) if level + 1 < xs.size() else 96,
-				TOWER_BAND_H, false, Image.FORMAT_RGBA8)
-			var width: int = region.get_width()
+			# The last level in a group has no following offset to measure
+			# against, so it falls back to 96 - clamped to the sheet's right
+			# edge, because the barracks group's last level starts at 1460 and
+			# 1460 + 96 would read past the 1536-wide sheet.
+			var width: int = 96
+			if level + 1 < xs.size():
+				width = int(xs[level + 1]) - int(xs[level])
+			width = mini(width, sheet.get_width() - int(xs[level]))
+			var region := Image.create_empty(width, TOWER_BAND_H, false, Image.FORMAT_RGBA8)
 			region.blit_rect(sheet, Rect2i(int(xs[level]), TOWER_BAND_Y, width, TOWER_BAND_H),
 				Vector2i.ZERO)
 			var sprite := _trim(_key(region))
@@ -1161,6 +1166,14 @@ git commit -m "Cut props per biome and compose the endpoint markers"
 - Test: `test/test_map_renderer.gd`
 - Test: `test/test_biomes.gd`
 
+**Repoint the endpoint preloads in this task.** `game/map_renderer.gd:9-10`
+preloads `_CASTLE` and `_CAVE` from `res://assets/kenney/`. Task 5 wrote the
+replacements to `res://assets/art/`, and Task 9 deletes the Kenney directory —
+so leaving these would turn a `preload` into a parse error and take the whole
+suite down as a load failure rather than a test failure. Change both constants
+to `res://assets/art/castle.png` and `res://assets/art/cave.png`;
+`_draw_endpoints`'s body does not change.
+
 **Interfaces:**
 - Consumes: the ground and road assets from Tasks 1 and 2.
 - Produces: `Biomes.ground_path(biome, index) -> String`, `Biomes.road_path(biome, mask) -> String`, and `MapRenderer.edge_mask(c, r) -> int`.
@@ -1426,6 +1439,20 @@ func test_an_enemy_faces_the_way_it_travels() -> bool:
 	e.set_facing_from_travel(false)
 	assert_true(sprite.flip_h != left, "travelling the other way flips the sprite")
 	e.free()
+	return true
+
+func test_the_declared_variant_count_matches_what_was_baked() -> bool:
+	# The count is hand-written in data/enemies.gd while the bake decides the
+	# real number. A count that is too high makes the spawn pick a file that
+	# does not exist - a crash on a path only a live wave reaches.
+	for kind in Enemies.KINDS:
+		var on_disk := 0
+		while FileAccess.file_exists(
+				"res://assets/art/enemies/%s/variant_%d.png" % [kind, on_disk]):
+			on_disk += 1
+		assert_eq(Enemies.variant_count(kind), on_disk,
+			"%s declares %d variants and %d are baked"
+				% [kind, Enemies.variant_count(kind), on_disk])
 	return true
 
 func test_death_despawns_after_the_tween_rather_than_an_animation() -> bool:
