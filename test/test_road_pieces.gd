@@ -128,3 +128,35 @@ func test_road_pieces_have_no_unkeyed_background_left() -> bool:
 			assert_eq(survivors, 0,
 				"%s/road_%02d has %d unkeyed background pixels" % [biome, mask, survivors])
 	return true
+
+func test_no_composed_piece_carries_a_black_slot_in_its_interior() -> bool:
+	# _patch_arm used to fill an absent arm by copying an adjacent corner of
+	# the cross, and that corner carries the card's own outer border on its
+	# outer edges - so the copy dragged a near-black stripe into the middle of
+	# the tile. Tiled up it read as a bar across the road at every cell
+	# boundary. Nothing else in this file could see it: the piece still had
+	# the right mask, the right palette and a clean margin.
+	#
+	# The interior is everything more than BORDER from an edge. The card's own
+	# border lives outside that and is left alone.
+	const _BORDER := 6
+	const _DARK := 45.0 / 255.0
+	for biome in Biomes.KINDS:
+		for mask in 16:
+			var bytes := FileAccess.get_file_as_bytes(
+				"res://assets/art/%s/road_%02d.png" % [biome, mask])
+			assert_false(bytes.is_empty(), "%s road %d exists" % [biome, mask])
+			if bytes.is_empty():
+				continue
+			var img := Image.new()
+			assert_eq(img.load_png_from_buffer(bytes), OK,
+				"%s road %d decodes" % [biome, mask])
+			var dark := 0
+			for y in range(_BORDER, img.get_height() - _BORDER):
+				for x in range(_BORDER, img.get_width() - _BORDER):
+					var c := img.get_pixel(x, y)
+					if c.a > 0.5 and c.r < _DARK and c.g < _DARK and c.b < _DARK:
+						dark += 1
+			assert_eq(dark, 0,
+				"%s road %d has %d near-black interior pixels" % [biome, mask, dark])
+	return true

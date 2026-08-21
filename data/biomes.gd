@@ -34,13 +34,12 @@ static func prop_path(biome: StringName, slot: StringName) -> String:
 static func ground_path(biome: StringName, index: int) -> String:
 	return "%s/ground_%d.png" % [DEFS[biome]["dir"], index]
 
+## Every one of the sixteen edge masks as a road piece. There is no fallback
+## and no rotation: the bake composes all sixteen from the sheet's cross, so
+## every mask a map can produce has a file - including the four dead ends,
+## which no rotation of the pieces the sheet itself draws can reach.
 static func road_path(biome: StringName, mask: int) -> String:
 	return "%s/road_%02d.png" % [DEFS[biome]["dir"], mask]
 
-## Ground variants per biome, and every one of the sixteen edge masks as a
-## road piece. There is no fallback and no rotation: the bake composes all
-## sixteen from the sheet's cross, so every mask a map can produce has a file
-## - including the four dead ends, which no rotation of the pieces the sheet
-## itself draws can reach.
+## Ground variants per biome.
 const GROUND_VARIANTS := 6
-const ROAD_MASKS := 16

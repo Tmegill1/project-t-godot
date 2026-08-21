@@ -166,8 +166,7 @@ func test_ground_and_road_tiles_fill_their_cell_exactly() -> bool:
 		if not (child is Sprite2D) or child.z_index != -1:
 			continue
 		var sprite: Sprite2D = child
-		var tex: Texture2D = sprite.texture
-		var display := Vector2(tex.get_width(), tex.get_height()) * sprite.scale
+		var display := sprite.region_rect.size * sprite.scale
 		assert_almost_eq(display.x, box, 0.01, "a tile is exactly one cell wide")
 		assert_almost_eq(display.y, box, 0.01, "a tile is exactly one cell tall")
 		var c := int(round(sprite.position.x / box))
@@ -877,3 +876,79 @@ func test_a_props_blocking_radius_is_half_the_tile_box_it_is_fitted_into() -> bo
 			"footprint radius is half the tile box")
 	renderer.free()
 	return true
+
+func test_tiles_are_drawn_without_their_card_border() -> bool:
+	# The sheet's terrain tiles are cards with a painted dark edge. Drawn
+	# whole, every cell boundary carries two of those edges back to back and
+	# the map reads as a grid of cards in black gutters. The renderer draws
+	# the interior of each tile instead.
+	var renderer := MapRenderer.new()
+	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
+	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
+	var checked := 0
+	for child in renderer.get_children():
+		if not (child is Sprite2D) or child.z_index != -1:
+			continue
+		var sprite: Sprite2D = child
+		assert_true(sprite.region_enabled, "a tile is drawn from a region")
+		var tex: Texture2D = sprite.texture
+		assert_eq(sprite.region_rect,
+			Rect2(MapRenderer.TILE_BLEED, MapRenderer.TILE_BLEED,
+				tex.get_width() - MapRenderer.TILE_BLEED * 2.0,
+				tex.get_height() - MapRenderer.TILE_BLEED * 2.0),
+			"the region is the tile's interior")
+		checked += 1
+	assert_true(checked > 0, "tiles were checked")
+	renderer.free()
+	return true
+
+func test_the_bleed_is_wide_enough_for_the_widest_card_border() -> bool:
+	# Measured: probing inward from each edge of all 66 ground and road PNGs
+	# in all three biomes, the run of near-black pixels - the card's border
+	# plus _trim's 1px pad - never exceeds 5. A bleed under that leaves a dark
+	# line; far over it eats art. This pins the measurement rather than the
+	# taste.
+	var worst := 0
+	for biome in Biomes.KINDS:
+		for i in Biomes.GROUND_VARIANTS:
+			worst = maxi(worst, _border_run(Biomes.ground_path(biome, i)))
+		for mask in 16:
+			worst = maxi(worst, _border_run(Biomes.road_path(biome, mask)))
+	assert_true(worst > 0, "the tiles do have a card border to crop")
+	assert_true(MapRenderer.TILE_BLEED > worst,
+		"the bleed %d clears the widest border %d" % [MapRenderer.TILE_BLEED, worst])
+	assert_true(MapRenderer.TILE_BLEED <= worst + 3,
+		"the bleed %d does not eat art beyond the border %d"
+			% [MapRenderer.TILE_BLEED, worst])
+	return true
+
+## Longest run of near-black pixels reaching in from any edge of a tile.
+func _border_run(path: String) -> int:
+	var bytes := FileAccess.get_file_as_bytes(path)
+	if bytes.is_empty():
+		return 0
+	var img := Image.new()
+	if img.load_png_from_buffer(bytes) != OK:
+		return 0
+	var w := img.get_width()
+	var h := img.get_height()
+	var worst := 0
+	for probe in [w / 4, w / 2, 3 * w / 4]:
+		worst = maxi(worst, _run_from(img, probe, 0, 0, 1))
+		worst = maxi(worst, _run_from(img, probe, h - 1, 0, -1))
+	for probe in [h / 4, h / 2, 3 * h / 4]:
+		worst = maxi(worst, _run_from(img, 0, probe, 1, 0))
+		worst = maxi(worst, _run_from(img, w - 1, probe, -1, 0))
+	return worst
+
+func _run_from(img: Image, x: int, y: int, dx: int, dy: int) -> int:
+	var n := 0
+	while x >= 0 and x < img.get_width() and y >= 0 and y < img.get_height():
+		var c := img.get_pixel(x, y)
+		var lum := (c.r + c.g + c.b) / 3.0 * c.a
+		if lum >= 45.0 / 255.0:
+			break
+		n += 1
+		x += dx
+		y += dy
+	return n

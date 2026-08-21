@@ -100,9 +100,7 @@ func prop_footprints() -> Array:
 ## Centring has to be applied to the position because these sprites are
 ## top-left anchored (centered = false, matching Phaser's setOrigin(0, 0)):
 ## once a sprite no longer fills its box, the leftover slack is split evenly
-## rather than all landing on the right/bottom edge. A square source has zero
-## slack and so still lands exactly on its tile origin, which is what keeps
-## the ground layer flush and seam-free.
+## rather than all landing on the right/bottom edge.
 func _place(texture: Texture2D, col: int, row: int, size_px: float,
 		z: int, offset := Vector2.ZERO) -> Sprite2D:
 	var s := Sprite2D.new()
@@ -174,6 +172,22 @@ func edge_mask(c: int, r: int) -> int:
 		mask |= 8
 	return mask
 
+## How much of each tile's edge is the card's painted border rather than
+## terrain, and is therefore not drawn.
+##
+## The sheet's terrain tiles are cards with a dark scalloped edge and a drop
+## shadow. Drawn whole, every cell boundary carries two of those edges back to
+## back and the board reads as a grid of cards in black gutters - the single
+## most visible thing about the first map rendered from this art. The spec
+## called for tiles "scaled to slightly overfill each cell" to close them,
+## which works for the ground and cannot work for the road: a road tile's
+## leading border is then drawn over its neighbour's road instead of over its
+## grass. Cropping removes it in both cases.
+##
+## MEASURED at 5 - the widest near-black run reaching in from any edge across
+## all 66 ground and road PNGs in all three biomes - plus one.
+const TILE_BLEED := 6
+
 ## Draws a ground or road tile STRETCHED to fill its cell exactly.
 ##
 ## Deliberately not _place. A tile is a cell of a grid and has to cover its
@@ -191,10 +205,15 @@ func _place_tile(texture: Texture2D, col: int, row: int) -> Sprite2D:
 	var s := Sprite2D.new()
 	s.texture = texture
 	s.centered = false
+	# The card's border is cropped rather than drawn - see TILE_BLEED.
+	s.region_enabled = true
+	s.region_rect = Rect2(TILE_BLEED, TILE_BLEED,
+		texture.get_width() - TILE_BLEED * 2.0,
+		texture.get_height() - TILE_BLEED * 2.0)
 	s.position = Vector2(col * Tiles.TILE_SIZE, row * Tiles.TILE_SIZE)
 	s.scale = Vector2(
-		float(Tiles.TILE_SIZE) / float(texture.get_width()),
-		float(Tiles.TILE_SIZE) / float(texture.get_height()))
+		float(Tiles.TILE_SIZE) / s.region_rect.size.x,
+		float(Tiles.TILE_SIZE) / s.region_rect.size.y)
 	# Same reasoning as _place: this art is painted, not pixel art, and every
 	# tile is minified from 66px into 48px.
 	s.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
