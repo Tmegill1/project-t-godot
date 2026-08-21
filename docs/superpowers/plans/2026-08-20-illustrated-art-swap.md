@@ -2159,7 +2159,7 @@ git commit -m "Draw the road from an edge mask and drop the corner lattice"
 - Consumes: the variant sprites from Task 4.
 - Produces: `Enemy` draws a `Sprite2D` rather than an `AnimatedSprite2D`; `Enemy.setup` takes an optional `Rng`; `Enemies.variant_count(kind) -> int`.
 
-**What is removed:** `_facing`, `_set_facing`, `_play_walk`, `_build_frames`, the `FRAME_SIZE`/`FRAMES_PER_SHEET`/`WALK_FPS`/`DEATH_FPS` constants and every `_sprite.play(...)` call. `game/enemy.tscn`'s `AnimatedSprite2D` becomes a `Sprite2D`, keeping `texture_filter = 1` — these sprites are still minified and want the same filtering.
+**What is removed:** `_facing`, `_set_facing`, `_play_walk`, `_build_frames`, the `FRAME_SIZE`/`FRAMES_PER_SHEET`/`WALK_FPS`/`DEATH_FPS` constants and every `_sprite.play(...)` call. `game/enemy.tscn`'s `AnimatedSprite2D` becomes a `Sprite2D`, and its `texture_filter` moves from NEAREST to LINEAR_WITH_MIPMAPS — see Step 4.
 
 **What replaces it:** one variant chosen at spawn from a seeded `Rng`, flipped horizontally by travel direction, with a sine bob while moving. Death becomes a fade-and-shrink tween.
 
@@ -2362,7 +2362,9 @@ const DEFAULT_SPAWN_SEED := 20260822
 
 - [ ] **Step 4: Rewrite the enemy view**
 
-In `game/enemy.tscn`, change the `Sprite` node's type from `AnimatedSprite2D` to `Sprite2D`, keeping `texture_filter = 1`.
+In `game/enemy.tscn`, change the `Sprite` node's type from `AnimatedSprite2D` to `Sprite2D`, and change `texture_filter` from `1` to `4`.
+
+`1` is `TEXTURE_FILTER_NEAREST` and it was the right call for what it filtered: Kenney's enemies are 48px hand-placed pixel art, and a linear filter on pixel art smears it. These variants are painted, not pixel art, and they are minified — the ogre 79 × 76 into 58px tall, the goblin 60 × 52 into 34, the bat 100 × 44 into 28, so between 1.3× and 1.6×. `4` is `TEXTURE_FILTER_LINEAR_WITH_MIPMAPS`, matching what `MapRenderer._place` already uses for the props for the same reason. Task 10 turns mipmap generation on for the variant `.import` files; a mipmap filter reading a chain nobody generated silently falls back to the base level.
 
 In `game/enemy.gd`, delete `_facing`, `_set_facing`, `_play_walk`, `_build_frames`, and the `FRAME_SIZE`, `FRAMES_PER_SHEET`, `WALK_FPS` and `DEATH_FPS` constants. Update the class docstring's "owns an animated sprite" to "owns a sprite". Then add:
 
@@ -2855,18 +2857,36 @@ git rm -r assets/kenney tools/bake_kenney.gd tools/bake_kenney.gd.uid \
           test/test_endpoint_assets.gd test/test_endpoint_assets.gd.uid
 ```
 
-`test_asset_import.gd` gated `mipmaps/generate=true` on `assets/kenney/**`. The illustrated assets are drawn the same way — minified into 48px cells — so **re-home that gate onto `assets/art/**` rather than dropping it**, in a new `test/test_art_import.gd`. Losing it is how the mipmap defect happened last time: a gate was deleted with its assets and nothing replaced it.
+`test_asset_import.gd` gated `mipmaps/generate=true` on `assets/kenney/**`, and its own docstring ends "Do not delete this gate." **Re-home it onto the illustrated art rather than dropping it** — losing it is exactly how the mipmap defect happened last time, and it has already happened again: every `.import` sidecar written for `assets/art/**` and `assets/towers.png` currently says `mipmaps/generate=false`, so `MapRenderer`'s mipmap filter has been reading a chain nobody generated and silently falling back to the base level ever since Task 1.
 
-- [ ] **Step 3: Run the suite**
+- [ ] **Step 3: Generate the mipmaps that are actually wanted, and only those**
+
+The re-homed gate is not a blanket sweep over `assets/art/**`. Which files want a chain follows from how hard each is minified and whether it is region-sampled, both measured:
+
+| Asset | Source → drawn | Minification | Chain? |
+|---|---|---|---|
+| props (`<biome>/{tree,stone,spike,fire}.png`) | up to 96 × 61 → 48 box | up to 1.83× | **yes** |
+| endpoints (`castle.png`, `cave.png`) | ~220² → 144 box | ~1.49× | **yes** |
+| enemy variants (`enemies/<kind>/variant_N.png`) | up to 105 × 47 → 28–58 tall | 1.3–1.6× | **yes** |
+| ground and road tiles | 66 → 54 region → 48 cell | 1.125× | **no** |
+| `assets/towers.png` | region-sampled atlas | — | **no** |
+
+The tiles are excluded for two reasons, and either alone would be enough. They are barely minified — Task 8 crops the card border, so 54 source pixels land in 48. And they are **region-sampled**: Task 8 set `region_enabled` on every tile sprite, and a mip level averages across the region's boundary, which for these tiles means averaging the card's dark border back into the terrain — reintroducing by hand the seam Task 8 exists to remove. `assets/towers.png` is excluded for the same region-sampling reason and its exclusion was already load-bearing; carry `test_asset_import.gd`'s paragraph on it across verbatim.
+
+So, in `game/map_renderer.gd`, `_place_tile`'s filter drops from `TEXTURE_FILTER_LINEAR_WITH_MIPMAPS` to `TEXTURE_FILTER_LINEAR`, with a comment saying why the tile path differs from `_place`'s. `_place` keeps the mipmap filter — that is the prop and endpoint path, and those do get a chain.
+
+Set `mipmaps/generate=true` in the `.import` sidecars for the three included groups, re-run `godot --headless --import`, and `git checkout -- project.godot`. Then write `test/test_art_import.gd` to pin exactly that split: every included file has `mipmaps/generate=true`, every excluded one has `false`. A gate that only checks the `true` side lets a later sweep turn the tiles on and nothing would catch it.
+
+- [ ] **Step 4: Run the suite**
 
 Run: `godot --headless --quit --script test/run_tests.gd`
 Expected: PASS. The check count drops with the deleted files and rises with the re-homed gate; report the new number.
 
-- [ ] **Step 4: Credit and document**
+- [ ] **Step 5: Credit and document**
 
 Update `README.md`'s art section and `CONTINUE.md` §0 to describe the illustrated sheet, where it is vendored, and that `tools/bake_sheet.gd` regenerates everything. Record the two facts a future reader needs: the road is an **edge** mask (not the corner mask the previous art used), and the sheet has no alpha so extraction keys a background colour.
 
-- [ ] **Step 5: Screenshot all three biomes and a wave**
+- [ ] **Step 6: Screenshot all three biomes and a wave**
 
 Run the game, capture the forest map, then re-render under `&"ice"` and `&"desert"` at runtime through the Godot MCP rather than editing `Maps.DEFS`:
 
@@ -2877,7 +2897,7 @@ board.get_node("MapRenderer").render(board._tiles, null, &"ice")
 
 Check each for: road pieces meeting without visible mismatch at corners and junctions, no leftover navy fringing on any sprite, towers reading clearly against the ground, and the tile grid reading as intended rather than as a defect. Then start a wave and confirm enemies show visible variety and die with a visible fade rather than vanishing.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add -A
