@@ -368,8 +368,8 @@ func _road(biome: String, mask: int) -> Image:
 ## a "road is warmer" heuristic: desert's road AND its surround are both warm,
 ## and the road is the darker of the two.
 const _PALETTES := {
-	"forest": {"surround": Vector3(88, 101, 14), "road": Vector3(132, 103, 39)},
-	"desert": {"surround": Vector3(170, 123, 62), "road": Vector3(132, 103, 39)},
+	"forest": {"surround": Vector3(58, 69, 16), "road": Vector3(168, 119, 55)},
+	"desert": {"surround": Vector3(170, 123, 62), "road": Vector3(105, 76, 42)},
 	"ice": {"surround": Vector3(91, 145, 190), "road": Vector3(200, 220, 235)},
 }
 
@@ -491,15 +491,33 @@ const ROAD_MASKS := [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
 ## Where each biome's road and surround land after recolouring. Measured off
 ## the committed ground tiles. Ice recolours the road too: a dirt track across
 ## a frozen field reads wrong.
+## Where each biome's road and surround land after recolouring.
+##
+## Forest is IDENTITY - its targets equal the source materials - so the
+## artist's own piece ships untouched.
+##
+## Desert's road is dark packed earth rather than the sheet's dirt, and that is
+## not a style preference. The sheet's dirt (168, 119, 55) and its sand ground
+## (170, 123, 62) are 15 units apart while the dirt's own shading spread is 18,
+## so a dirt road on sand is both unclassifiable by the recolour AND invisible
+## on screen. Darkening it restores 83 units of separation, matching forest's.
+##
+## Every pair below must stay farther apart than the source material's spread.
+## If a future palette narrows that gap, the recolour cannot tell the two
+## materials apart and the tile reads as one murky blob.
 const ROAD_PALETTES := {
-	&"forest": {"surround": Color8(88, 101, 14), "road": Color8(132, 103, 39)},
-	&"desert": {"surround": Color8(170, 123, 62), "road": Color8(132, 103, 39)},
+	&"forest": {"surround": Color8(58, 69, 16), "road": Color8(168, 119, 55)},
+	&"desert": {"surround": Color8(170, 123, 62), "road": Color8(105, 76, 42)},
 	&"ice": {"surround": Color8(91, 145, 190), "road": Color8(200, 220, 235)},
 }
 
-## The two materials in the grass row, measured by clustering a solid piece.
-const SOURCE_SURROUND := Vector3(53.2, 65.9, 14.4)
-const SOURCE_ROAD := Vector3(131.8, 102.8, 39.0)
+## The two materials in the path row, measured as the DOMINANT tone of each -
+## the mean of pixels classified by green dominance, not by a warm-pixel
+## filter. An earlier pair of values was 43 units low on the road because that
+## filter swept in the dirt's shadow and vein texture, which is exactly the
+## error that made desert unclassifiable.
+const SOURCE_SURROUND := Vector3(57.8, 68.7, 15.5)
+const SOURCE_ROAD := Vector3(168.5, 119.2, 55.4)
 
 ## Builds one mask by masking the cross's absent arms with adjacent corner
 ## material, then softening the paste seams.
