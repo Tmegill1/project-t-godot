@@ -1503,18 +1503,23 @@ func test_every_prop_is_a_sprite_rather_than_a_slab_of_fill() -> bool:
 func test_a_biome_s_four_slots_are_four_different_sprites() -> bool:
 	# An index typo in PROP_SLOTS that points two slots at the same decor
 	# piece is otherwise invisible: the duplicate passes every gate above.
+	#
+	# Compared as raw bytes, not as a digest of a decoded string: a PNG hits a
+	# zero byte inside its first header field, and PackedByteArray's
+	# string conversions stop there - every PNG in the project hashes to the
+	# same thing that way. PackedByteArray compares by value, so Array.has is
+	# the whole comparison.
 	for biome in _BIOMES:
-		var seen := {}
+		var seen := []
 		for slot in _SLOTS:
 			var bytes := FileAccess.get_file_as_bytes(
 				"res://assets/art/%s/%s.png" % [biome, slot])
 			assert_false(bytes.is_empty(), "%s/%s.png exists" % [biome, slot])
 			if bytes.is_empty():
 				continue
-			var digest := bytes.get_string_from_ascii().sha256_text()
-			assert_false(seen.has(digest),
+			assert_false(seen.has(bytes),
 				"%s's %s is not a copy of another slot" % [biome, slot])
-			seen[digest] = slot
+			seen.append(bytes)
 	return true
 
 func test_both_endpoints_decode_and_keep_a_clear_margin() -> bool:
