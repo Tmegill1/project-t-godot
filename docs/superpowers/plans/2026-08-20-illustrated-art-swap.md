@@ -2503,23 +2503,310 @@ git commit -m "Draw enemies as per-spawn variants with procedural motion"
 
 ---
 
-### Task 8: Retune the no-build corridor
+### Task 8: Close the tile seams
+
+**Files:**
+- Modify: `tools/bake_sheet.gd`
+- Modify: `assets/art/<biome>/road_*.png` (all 48, re-baked)
+- Modify: `game/map_renderer.gd`
+- Test: `test/test_road_pieces.gd`
+- Test: `test/test_map_renderer.gd`
+
+**Interfaces:**
+- Consumes: the road pieces from Task 2 and `_place_tile` from Task 6.
+- Produces: road pieces with no black slot in their interior, and a ground layer with no black gutter between cells.
+
+**This task exists because the board was rendered and looked at.** Composing the demo map from the committed tiles at the size the game draws them shows two separate defects, neither of which any existing gate can see, and both of which dominate the board's main surface.
+
+**Defect one: every tile is drawn with its card border, so the map reads as a grid of cards separated by black gutters.** The sheet's terrain tiles are cards with a painted dark scalloped edge. `_trim` keeps that edge and adds a 1px transparent pad, and `_place_tile` draws the whole texture into the cell — so every cell boundary carries the two adjacent borders back to back. Measured across all 66 ground and road PNGs in all three biomes, probing inward from each edge at six positions per tile and counting the run of near-black pixels: the border, including the pad, is **at most 5px** of a 66px tile. The spec called for the tiles to be "scaled to slightly overfill each cell" for exactly this reason; overfilling helps the ground but cannot help the road, because a road tile's leading border is then drawn over its neighbour's road. Cropping the border away removes it in both cases.
+
+**Defect two: every composed road piece has black slots cut into its interior.** `_patch_arm` fills an absent arm by copying an adjacent corner of the cross — and that corner region includes the card's outer border along its own outer edges. Copying it into the middle of the tile carries a near-black stripe into the interior. It is visible in every composed mask, and tiled up it reads as a black bar across the road at every cell boundary. The function's own doc comment says the patch is "mirrored so the grass edging runs the right way", and the code does not mirror — it clamps. Mirroring is the fix, because it makes the arm continue the corner from the corner's INNER edge outward, and never reaches the outer border at all.
+
+Both were prototyped against the real sheet and rendered before this task was written.
+
+- [ ] **Step 1: Write the failing tests**
+
+Add to `test/test_road_pieces.gd`:
+
+```gdscript
+func test_no_composed_piece_carries_a_black_slot_in_its_interior() -> bool:
+	# _patch_arm used to fill an absent arm by copying an adjacent corner of
+	# the cross, and that corner carries the card's own outer border on its
+	# outer edges - so the copy dragged a near-black stripe into the middle of
+	# the tile. Tiled up it read as a bar across the road at every cell
+	# boundary. Nothing else in this file could see it: the piece still had
+	# the right mask, the right palette and a clean margin.
+	#
+	# The interior is everything more than BORDER from an edge. The card's own
+	# border lives outside that and is left alone.
+	const _BORDER := 6
+	const _DARK := 45.0 / 255.0
+	for biome in Biomes.KINDS:
+		for mask in 16:
+			var bytes := FileAccess.get_file_as_bytes(
+				"res://assets/art/%s/road_%02d.png" % [biome, mask])
+			assert_false(bytes.is_empty(), "%s road %d exists" % [biome, mask])
+			if bytes.is_empty():
+				continue
+			var img := Image.new()
+			assert_eq(img.load_png_from_buffer(bytes), OK,
+				"%s road %d decodes" % [biome, mask])
+			var dark := 0
+			for y in range(_BORDER, img.get_height() - _BORDER):
+				for x in range(_BORDER, img.get_width() - _BORDER):
+					var c := img.get_pixel(x, y)
+					if c.a > 0.5 and c.r < _DARK and c.g < _DARK and c.b < _DARK:
+						dark += 1
+			assert_eq(dark, 0,
+				"%s road %d has %d near-black interior pixels" % [biome, mask, dark])
+	return true
+```
+
+Add to `test/test_map_renderer.gd`:
+
+```gdscript
+func test_tiles_are_drawn_without_their_card_border() -> bool:
+	# The sheet's terrain tiles are cards with a painted dark edge. Drawn
+	# whole, every cell boundary carries two of those edges back to back and
+	# the map reads as a grid of cards in black gutters. The renderer draws
+	# the interior of each tile instead.
+	var renderer := MapRenderer.new()
+	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
+	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
+	var checked := 0
+	for child in renderer.get_children():
+		if not (child is Sprite2D) or child.z_index != -1:
+			continue
+		var sprite: Sprite2D = child
+		assert_true(sprite.region_enabled, "a tile is drawn from a region")
+		var tex: Texture2D = sprite.texture
+		assert_eq(sprite.region_rect,
+			Rect2(MapRenderer.TILE_BLEED, MapRenderer.TILE_BLEED,
+				tex.get_width() - MapRenderer.TILE_BLEED * 2.0,
+				tex.get_height() - MapRenderer.TILE_BLEED * 2.0),
+			"the region is the tile's interior")
+		checked += 1
+	assert_true(checked > 0, "tiles were checked")
+	renderer.free()
+	return true
+
+func test_the_bleed_is_wide_enough_for_the_widest_card_border() -> bool:
+	# Measured: probing inward from each edge of all 66 ground and road PNGs
+	# in all three biomes, the run of near-black pixels - the card's border
+	# plus _trim's 1px pad - never exceeds 5. A bleed under that leaves a dark
+	# line; far over it eats art. This pins the measurement rather than the
+	# taste.
+	var worst := 0
+	for biome in Biomes.KINDS:
+		for i in Biomes.GROUND_VARIANTS:
+			worst = maxi(worst, _border_run(Biomes.ground_path(biome, i)))
+		for mask in 16:
+			worst = maxi(worst, _border_run(Biomes.road_path(biome, mask)))
+	assert_true(worst > 0, "the tiles do have a card border to crop")
+	assert_true(MapRenderer.TILE_BLEED > worst,
+		"the bleed %d clears the widest border %d" % [MapRenderer.TILE_BLEED, worst])
+	assert_true(MapRenderer.TILE_BLEED <= worst + 3,
+		"the bleed %d does not eat art beyond the border %d"
+			% [MapRenderer.TILE_BLEED, worst])
+	return true
+
+## Longest run of near-black pixels reaching in from any edge of a tile.
+func _border_run(path: String) -> int:
+	var bytes := FileAccess.get_file_as_bytes(path)
+	if bytes.is_empty():
+		return 0
+	var img := Image.new()
+	if img.load_png_from_buffer(bytes) != OK:
+		return 0
+	var w := img.get_width()
+	var h := img.get_height()
+	var worst := 0
+	for probe in [w / 4, w / 2, 3 * w / 4]:
+		worst = maxi(worst, _run_from(img, probe, 0, 0, 1))
+		worst = maxi(worst, _run_from(img, probe, h - 1, 0, -1))
+	for probe in [h / 4, h / 2, 3 * h / 4]:
+		worst = maxi(worst, _run_from(img, 0, probe, 1, 0))
+		worst = maxi(worst, _run_from(img, w - 1, probe, -1, 0))
+	return worst
+
+func _run_from(img: Image, x: int, y: int, dx: int, dy: int) -> int:
+	var n := 0
+	while x >= 0 and x < img.get_width() and y >= 0 and y < img.get_height():
+		var c := img.get_pixel(x, y)
+		var lum := (c.r + c.g + c.b) / 3.0 * c.a
+		if lum >= 45.0 / 255.0:
+			break
+		n += 1
+		x += dx
+		y += dy
+	return n
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `godot --headless --quit --script test/run_tests.gd`
+
+Expected: FAIL — the road pieces carry interior black slots, and `MapRenderer.TILE_BLEED` does not exist.
+
+- [ ] **Step 3: Mirror the arm patch**
+
+In `tools/bake_sheet.gd`, add the constant and rewrite `_patch_arm`, and pass each call its mirror axis:
+
+```gdscript
+## How far the card's painted border reaches in from a tile's edge.
+##
+## MEASURED across all 66 ground and road PNGs in all three biomes, probing
+## inward from each edge at six positions per tile: the run of near-black
+## pixels, including _trim's 1px pad, never exceeds 5.
+const CARD_BORDER := 5
+```
+
+```gdscript
+## Copies a corner of the cross over an absent arm, mirrored away from the
+## corner's own outer border.
+##
+## The mirror is the whole point and it used to be missing - the doc said
+## "mirrored" and the code clamped. Clamping walks from the corner's OUTER
+## edge inward, so the first thing it copies into the tile's interior is the
+## card's near-black border, and every composed piece carried a black slot
+## across it. Mirroring walks from the corner's INNER edge outward instead, so
+## the arm continues the corner it touches and the sampling never reaches the
+## border at all. The clamp at CARD_BORDER is what guarantees that: an arm is
+## a third of the tile and the corner's clean interior is a little narrower,
+## so the last few columns repeat one interior column rather than running off
+## the end.
+func _patch_arm(out: Image, cross: Image, into: Rect2i, from: Rect2i,
+		mirror_x: bool, mirror_y: bool) -> void:
+	for y in into.size.y:
+		for x in into.size.x:
+			var sx := maxi(CARD_BORDER, from.size.x - 1 - x) if mirror_x \
+				else mini(from.size.x - 1, x)
+			var sy := maxi(CARD_BORDER, from.size.y - 1 - y) if mirror_y \
+				else mini(from.size.y - 1, y)
+			out.set_pixel(into.position.x + x, into.position.y + y,
+				cross.get_pixel(from.position.x + sx, from.position.y + sy))
+```
+
+In `_compose_road`, mirror across the axis that runs from the corner into the arm — horizontally for the north and south arms, which sit beside their corner, and vertically for the west and east arms, which sit below theirs:
+
+```gdscript
+	if not mask & 1:
+		_patch_arm(out, cross, Rect2i(aw, 0, aw, ah), Rect2i(0, 0, aw, ah), true, false)
+	if not mask & 4:
+		_patch_arm(out, cross, Rect2i(aw, h - ah, aw, ah), Rect2i(0, h - ah, aw, ah),
+			true, false)
+	if not mask & 8:
+		_patch_arm(out, cross, Rect2i(0, ah, aw, ah), Rect2i(0, 0, aw, ah), false, true)
+	if not mask & 2:
+		_patch_arm(out, cross, Rect2i(w - aw, ah, aw, ah), Rect2i(w - aw, 0, aw, ah),
+			false, true)
+```
+
+- [ ] **Step 4: Re-bake and confirm only the roads moved**
+
+```bash
+godot --headless --script tools/bake_sheet.gd
+godot --headless --import
+git checkout -- project.godot
+git status --porcelain
+```
+
+Only `assets/art/<biome>/road_*.png` may appear. The ground tiles, the tower atlas, the enemy variants, the props and the endpoints all come out byte-identical — nothing but `_patch_arm` changed. If anything else is modified, stop and report.
+
+- [ ] **Step 5: Crop the card border at draw time**
+
+In `game/map_renderer.gd`, add the constant and take the region in `_place_tile`:
+
+```gdscript
+## How much of each tile's edge is the card's painted border rather than
+## terrain, and is therefore not drawn.
+##
+## The sheet's terrain tiles are cards with a dark scalloped edge and a drop
+## shadow. Drawn whole, every cell boundary carries two of those edges back to
+## back and the board reads as a grid of cards in black gutters - the single
+## most visible thing about the first map rendered from this art. The spec
+## called for tiles "scaled to slightly overfill each cell" to close them,
+## which works for the ground and cannot work for the road: a road tile's
+## leading border is then drawn over its neighbour's road instead of over its
+## grass. Cropping removes it in both cases.
+##
+## MEASURED at 5 - the widest near-black run reaching in from any edge across
+## all 66 ground and road PNGs in all three biomes - plus one.
+const TILE_BLEED := 6
+```
+
+```gdscript
+func _place_tile(texture: Texture2D, col: int, row: int) -> Sprite2D:
+	var s := Sprite2D.new()
+	s.texture = texture
+	s.centered = false
+	# The card's border is cropped rather than drawn - see TILE_BLEED.
+	s.region_enabled = true
+	s.region_rect = Rect2(TILE_BLEED, TILE_BLEED,
+		texture.get_width() - TILE_BLEED * 2.0,
+		texture.get_height() - TILE_BLEED * 2.0)
+	s.position = Vector2(col * Tiles.TILE_SIZE, row * Tiles.TILE_SIZE)
+	s.scale = Vector2(
+		float(Tiles.TILE_SIZE) / s.region_rect.size.x,
+		float(Tiles.TILE_SIZE) / s.region_rect.size.y)
+	# Same reasoning as _place: this art is painted, not pixel art, and every
+	# tile is minified from 66px into 48px.
+	s.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	s.z_index = _Z_GROUND
+	add_child(s)
+	return s
+```
+
+`test_ground_and_road_tiles_fill_their_cell_exactly` from Task 6 measures displayed size as `texture size × scale`. With a region that is no longer the whole texture, it must measure `region_rect.size × scale`. Update it; the property it asserts is unchanged.
+
+- [ ] **Step 6: Clear the two loose ends Task 6's review left**
+
+Both are one-liners in files this task is already changing.
+
+`Biomes.ROAD_MASKS := 16` is unused — nothing reads it, and `tools/bake_sheet.gd`'s own `ROAD_MASKS` array is a different thing with the same name. Delete the constant and fold what it documented into `road_path`'s comment, which is where a reader looking for "how many masks are there" actually arrives.
+
+`MapRenderer._place`'s docstring still ends by claiming a square source's zero slack "is what keeps the ground layer flush and seam-free". That stopped being true when the ground moved to `_place_tile` — and Task 6 deleted the test that verified it, for the same reason. Cut that sentence; `_place` is the prop path now, and its remaining paragraphs about uniform scaling and centring are still correct and still load-bearing for `prop_footprints`.
+
+- [ ] **Step 7: Run tests to verify they pass**
+
+Run: `godot --headless --quit --script test/run_tests.gd`
+
+Expected: PASS.
+
+- [ ] **Step 8: Look at the board**
+
+Render the forest, ice and desert maps and look at all three. Confirm the ground reads as one continuous surface rather than a grid of cards, that the road runs unbroken through every straight, corner and junction with no dark bar at a cell boundary, and that nothing at the map edge is clipped oddly by the crop.
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add tools/bake_sheet.gd assets/art data/biomes.gd game/map_renderer.gd test/test_road_pieces.gd test/test_map_renderer.gd
+git commit -m "Crop the card border and stop the arm patch dragging it inward"
+```
+
+---
+
+### Task 9: Retune the no-build corridor
 
 **Files:**
 - Modify: `sim/placement.gd`
 - Test: `test/test_road_width.gd`
 
 **Interfaces:**
-- Consumes: the road pieces from Task 2.
+- Consumes: the road pieces from Task 8 and `MapRenderer.TILE_BLEED` from Task 8.
 - Produces: `Placement.PATH_HALF_WIDTH` measured against the new road.
 
-`PATH_HALF_WIDTH` moved 26 → 14 during the Kenney swap because that road drew only 23px wide. These road cells are full-tile dirt, so the visible road returns to roughly 48px and the corridor follows it back up.
+`PATH_HALF_WIDTH` moved 26 → 14 during the Kenney swap because that road drew only 23px wide. **It goes down again, not up.** An earlier version of this task claimed these cells are full-tile dirt so the road returns to roughly 48px. That is false: the sheet's cross has arms about a third of its cell, so the drawn road is narrower than the Kenney one it replaces, not wider. Measured on the committed `road_05` in all three biomes, classifying each pixel to the nearer of the surround and road palettes and taking the longest contiguous run per row, the road is 22 source px of 66 — identically in forest, desert and ice, which is expected since they are one composition recoloured.
 
-**Measure, do not guess.** `test/test_road_width.gd` already derives the drawn road width from a committed tile and asserts the constant tracks it with two bounds — never narrower than the road's half-width, never more than 4px beyond it. Repoint it at `res://assets/art/forest/road_05.png` (the north-south straight), keep both bounds, and set `PATH_HALF_WIDTH` to whatever the measurement supports.
+**The conversion to world pixels is not the naïve one.** Task 8 crops `TILE_BLEED` from every edge before scaling, so a source pixel is worth `TILE_SIZE / (source_width - TILE_BLEED * 2)` world pixels, not `TILE_SIZE / source_width`. Deriving it any other way understates the road by about 12%.
+
+**Measure, do not guess.** `test/test_road_width.gd` already derives the drawn road width from a committed tile and asserts the constant tracks it with two bounds — never narrower than the road's half-width, never more than 4px beyond it. Both bounds stay.
 
 - [ ] **Step 1: Repoint the measurement**
 
-Change `test/test_road_width.gd`'s source path to the new straight, and update `_ROAD_RGB` to the dirt colour sampled from it. Keep `test_min_tower_spacing_was_not_disturbed` exactly as it is.
+Rewrite `test/test_road_width.gd` to measure `res://assets/art/forest/road_05.png`, the north-south straight, as the longest contiguous run per row of pixels nearer the road palette than the surround palette — a single hardcoded dirt RGB with a tolerance does not survive this art, which is painted and textured rather than flat. Take the median run across the rows, convert with Task 8's crop in the divisor, and keep both bounds. Keep `test_min_tower_spacing_was_not_disturbed` exactly as it is.
+
+`test_path_half_width_is_the_value_the_spec_amendment_names` hardcodes 14.0 and has to move to the new value with everything else — it is the test that pins the constant against a careless sweep, so it stays, holding the new number.
 
 - [ ] **Step 2: Run and read the failure**
 
@@ -2544,7 +2831,7 @@ git commit -m "Retune the no-build corridor to the illustrated road"
 
 ---
 
-### Task 9: Retire the Kenney art
+### Task 10: Retire the Kenney art
 
 **Files:**
 - Delete: `assets/kenney/`, `tools/bake_kenney.gd`, `test/test_blend_tiles.gd`, `test/test_asset_import.gd`, `test/test_endpoint_assets.gd`
