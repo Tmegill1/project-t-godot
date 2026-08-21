@@ -199,10 +199,23 @@ for the deferred enemy-variety feature, which needs its own stats, its own wave
 schedule and its own balance pass. Extracting them now costs nothing and means
 that feature starts with art in hand.
 
-**One frame per type, with motion synthesised in code.** The rows are not
-animation (§2). Each enemy draws a single sprite, flipped horizontally by travel
-direction, with a small sine bob and slight lean applied while moving so it
-reads as alive rather than sliding.
+**The rows are variants, and they are used as per-spawn variety.** They are
+not animation, and this was settled numerically rather than by eye: a real walk
+cycle shows periodic structure — the current ogre's frame-to-frame difference
+varies with lag and dips as the cycle returns to its start — while the sheet's
+rows are perfectly flat across every lag, which is the signature of independent
+variations. Consecutive frames also differ about four times less than a real
+cycle's do.
+
+So each enemy **picks one of its row's frames at random when it spawns**, drawn
+from the seeded `Rng` so a run stays reproducible. A wave of eight goblins shows
+eight subtly different goblins rather than eight identical ones. This uses what
+the sheet actually provides and is strictly better than one static sprite per
+type.
+
+**Motion is synthesised in code.** The chosen frame is flipped horizontally by
+travel direction, with a small sine bob and slight lean applied while moving so
+an enemy reads as alive rather than sliding.
 
 **Death becomes a tween.** `game/enemy.gd` currently plays `death_<facing>` and
 **awaits `animation_finished`** before despawning. With no death frames it
