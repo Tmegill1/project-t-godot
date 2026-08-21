@@ -1054,15 +1054,31 @@ git commit -m "Rebake the tower atlas from the illustrated sheet's sixteen level
 
 **The kinds and their stats do not change.** `data/waves.gd` schedules twenty waves by kind name, so introducing new kinds is balance work. The three existing kinds get new sprites, mapped by what each stat profile already is:
 
-| Kind | Profile | Sheet row | Row y |
-|---|---|---|---|
-| `slime` | 100 speed, 5 hp, common early spawn | Goblin | 216–288 |
-| `ogre` | 60 speed, 8 hp, slow and tanky | Ogre | 438–516 |
-| `bee` | 150 speed, 3 hp, fastest and frailest | Bat | 521–586 |
+| Kind | Profile | Sheet row | Band y | Content rows |
+|---|---|---|---|---|
+| `slime` | 100 speed, 5 hp, common early spawn | Goblin | 216–288 | 232–283 |
+| `ogre` | 60 speed, 8 hp, slow and tanky | Ogre | 438–516 | 439–512 |
+| `bee` | 150 speed, 3 hp, fastest and frailest | Bat | 521–586 | 529–581 |
 
-The Goblin Shaman and Troll rows are extracted to `assets/art/enemies/_unused/` for the deferred enemy-variety feature. They are not referenced by any code.
+The Goblin Shaman (293–361) and Troll (366–433) rows are extracted to `assets/art/enemies/_unused/` for the deferred enemy-variety feature. They are not referenced by any code.
 
 **The rows are variants, not animation.** Consecutive frames differ about four times less than a real walk cycle's do, and the difference is flat across every frame lag — no periodicity, which is what a cycle would show. Each is a usable alternate look, so an enemy picks one at spawn.
+
+**Two things about the enemy bands, both measured.** Unlike the tower band, no enemy band contains a vertical panel rule anywhere in the x range used here — the rules that broke Task 3's first two attempts stop above these rows. But the row's own LABEL ("GOBLIN", "OGRE", "BAT") runs from x 25 to about x 90, so the scan must start at **95**, not 60: at 60 the label is clipped rather than excluded and every row's first "variant" is a 21–30px fragment of text. The right-hand decor starts at x 1238 in every row, so 1228 is a correct upper bound.
+
+**The BAT row does not fully segment, and that is expected.** Its bats overlap wing-to-wing. Gap segmentation returns six spans of widths 263, 103, 92, 338, 133 and 102 — rendered and looked at, the 263 is three bats, the 338 is four, the 133 is two, and only 103, 92 and 102 are single bats. Projecting only the lower body rows gives more spans but at irregular spacing, so it splits bodies rather than separating them; no column-profile threshold separates them either. So the bake **rejects any span wider than 1.4× its row's narrowest span**, which keeps exactly the three single bats and every span in every other row. Measured counts after the filter:
+
+| Kind | Spans found | Kept | Trimmed sizes |
+|---|---|---|---|
+| `slime` | 15 | 15 | 54×50 to 69×54 |
+| `ogre` | 13 | 13 | 71×67 to 80×76 |
+| `bee` | 6 | 3 | 94×47, 104×41, 105×47 |
+| `_unused/shaman` | 15 | 14 | 52×51 to 63×65 |
+| `_unused/troll` | 13 | 13 | 70×58 to 84×66 |
+
+Three bat variants is the honest yield of that row, and three alternate looks is real variety for the fastest enemy. The test asserts the exact measured counts rather than a floor, so a regression in the segmentation shows up as a number rather than as silently fewer sprites.
+
+**For Task 7, which wires these up:** the bat variants are wide and short (about 105 × 45) where the goblin is 60 × 54 and the ogre 79 × 76. `data/enemies.gd`'s per-kind `sprite_scale` is tuned against the Kenney sprites and will need retuning against these.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1078,8 +1094,20 @@ extends TestCase
 # enemy picks one when it spawns.
 
 const _KINDS := ["slime", "ogre", "bee"]
-const _MIN_VARIANTS := 4
 const _MARGIN_ALPHA_MAX := 8
+
+## The exact yield of each row, measured. A floor would hide the thing most
+## likely to go wrong here: the bat row's sprites overlap wing-to-wing and only
+## three of its thirteen bats can be cut out cleanly, so the bake drops the
+## spans that hold more than one. If that filter ever stops working, slime and
+## ogre gain sprites and bee gains merged ones - a floor sees neither.
+const _EXPECTED_VARIANTS := {"slime": 15, "ogre": 13, "bee": 3}
+
+## No variant may be wider than this multiple of its kind's narrowest. Two
+## enemies cut into one PNG is the failure this catches, and it is invisible to
+## every other assertion in this file - a merged sprite is free-standing, has a
+## clean margin, and differs from its siblings.
+const _MAX_WIDTH_RATIO := 1.4
 
 func _variant(kind: String, index: int) -> Image:
 	var bytes := FileAccess.get_file_as_bytes(
@@ -1098,11 +1126,10 @@ func _count(kind: String) -> int:
 		n += 1
 	return n
 
-func test_every_kind_ships_several_variants() -> bool:
+func test_every_kind_ships_the_variants_its_row_yields() -> bool:
 	for kind in _KINDS:
-		var n := _count(kind)
-		assert_true(n >= _MIN_VARIANTS,
-			"%s has at least %d variants, found %d" % [kind, _MIN_VARIANTS, n])
+		assert_eq(_count(kind), int(_EXPECTED_VARIANTS[kind]),
+			"%s ships %d variants" % [kind, int(_EXPECTED_VARIANTS[kind])])
 	return true
 
 func test_variants_are_free_standing_with_a_clear_margin() -> bool:
@@ -1125,6 +1152,29 @@ func test_variants_are_free_standing_with_a_clear_margin() -> bool:
 					int(round(img.get_pixel(x, h - 1).a * 255.0))))
 			assert_true(peak <= _MARGIN_ALPHA_MAX,
 				"%s/variant_%d edge peak %d" % [kind, i, peak])
+	return true
+
+func test_no_variant_holds_more_than_one_creature() -> bool:
+	# The bat row's gap segmentation returns spans holding two, three and four
+	# bats. They are dropped in the bake; this is the gate that says so.
+	for kind in _KINDS:
+		var widths := []
+		for i in _count(kind):
+			var img := _variant(kind, i)
+			assert_true(img != null, "%s/variant_%d decodes" % [kind, i])
+			if img == null:
+				continue
+			widths.append(img.get_width())
+		assert_true(not widths.is_empty(), "%s has variants to measure" % kind)
+		if widths.is_empty():
+			continue
+		var narrowest: int = widths[0]
+		var widest: int = widths[0]
+		for w in widths:
+			narrowest = mini(narrowest, int(w))
+			widest = maxi(widest, int(w))
+		assert_true(float(widest) <= float(narrowest) * _MAX_WIDTH_RATIO,
+			"%s's widest variant is %d against a narrowest of %d" % [kind, widest, narrowest])
 	return true
 
 func test_variants_of_a_kind_are_actually_different() -> bool:
@@ -1164,7 +1214,7 @@ func test_the_three_kinds_are_different_creatures() -> bool:
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `godot --headless --quit --script test/run_tests.gd`
-Expected: FAIL — `assets/art/enemies/` does not exist.
+Expected: FAIL — `assets/art/enemies/` does not exist, so every count is 0.
 
 - [ ] **Step 3: Extend the bake tool**
 
@@ -1174,6 +1224,11 @@ Add to `tools/bake_sheet.gd`:
 ## kind -> the sheet row it is cut from. The three existing kinds keep their
 ## stats and wave schedules; only the art changes. Shaman and Troll are cut to
 ## _unused for the deferred enemy-variety feature and referenced by no code.
+##
+## MEASURED: each band's content occupies rows 232..283, 439..512, 529..581,
+## 294..357 and 369..432 respectively, so every band holds its row with margin.
+## Unlike the tower band these carry no vertical panel rules - the rules that
+## make a row's transparency unsearchable stop above these rows.
 const ENEMY_ROWS := {
 	&"slime": {"y0": 216, "y1": 288},
 	&"ogre": {"y0": 438, "y1": 516},
@@ -1181,9 +1236,25 @@ const ENEMY_ROWS := {
 	&"_unused/shaman": {"y0": 293, "y1": 361},
 	&"_unused/troll": {"y0": 366, "y1": 433},
 }
-const ENEMY_X0 := 60
+
+## The scan starts at 95 because the row's own label ("GOBLIN", "OGRE", "BAT")
+## runs x 25..~90 - at 60 it is clipped rather than excluded and arrives as a
+## 21-30px "variant" made of text. It ends at 1228 because the right-hand decor
+## starts at 1238 in every row.
+const ENEMY_X0 := 95
 const ENEMY_X1 := 1228
 const MIN_SPRITE_RUN := 20
+
+## Spans wider than this multiple of the row's narrowest hold more than one
+## creature and are dropped.
+##
+## The bat row overlaps wing-to-wing and does not segment: its six spans are
+## 263, 103, 92, 338, 133 and 102 wide, and rendering them shows three bats,
+## one, one, four, two and one. No projection threshold separates them, and
+## projecting the lower body rows splits bodies rather than dividing them. So
+## the row yields the three bats that stand alone and the rest are left on the
+## sheet. Every span in every other row passes this filter.
+const MAX_SPAN_RATIO := 1.4
 
 ## Whether a pixel belongs to a sprite rather than the sheet background.
 func _is_content(sheet: Image, x: int, y: int) -> bool:
@@ -1192,12 +1263,11 @@ func _is_content(sheet: Image, x: int, y: int) -> bool:
 		> KEY_TOLERANCE_SQ
 
 ## Splits a horizontal band into sprite spans on gaps in its column
-## projection.
+## projection, then drops the spans that hold more than one creature.
 ##
 ## Projection works here and flood fill does not: a tight fill fragments a
 ## sprite because its dark outlines sit near the background, and a loose one
-## merges neighbours. Verified on the enemy rows, returning 16/16/15/14 across
-## four of them.
+## merges neighbours.
 func _row_sprites(sheet: Image, y0: int, y1: int, x0: int, x1: int) -> Array:
 	var present := []
 	for x in range(x0, x1):
@@ -1207,17 +1277,26 @@ func _row_sprites(sheet: Image, y0: int, y1: int, x0: int, x1: int) -> Array:
 				any = true
 				break
 		present.append(any)
-	var out := []
+	var found := []
 	var start := -1
 	for i in present.size():
 		if present[i] and start < 0:
 			start = i
 		elif not present[i] and start >= 0:
 			if i - start >= MIN_SPRITE_RUN:
-				out.append(Vector2i(x0 + start, x0 + i))
+				found.append(Vector2i(x0 + start, x0 + i))
 			start = -1
 	if start >= 0 and present.size() - start >= MIN_SPRITE_RUN:
-		out.append(Vector2i(x0 + start, x0 + present.size()))
+		found.append(Vector2i(x0 + start, x0 + present.size()))
+	if found.is_empty():
+		return found
+	var narrowest: int = found[0].y - found[0].x
+	for span in found:
+		narrowest = mini(narrowest, span.y - span.x)
+	var out := []
+	for span in found:
+		if float(span.y - span.x) <= float(narrowest) * MAX_SPAN_RATIO:
+			out.append(span)
 	return out
 
 func _bake_enemies(sheet: Image) -> void:
@@ -1248,9 +1327,17 @@ git checkout -- project.godot
 godot --headless --quit --script test/run_tests.gd
 ```
 
-Expected: PASS. Report the variant count per kind — the goblin and ogre rows should yield well over the four-variant minimum.
+Expected: PASS. The bake should print 15 slime, 13 ogre, 3 bee, 14 shaman and 13 troll variants.
 
-- [ ] **Step 5: Commit**
+Confirm `assets/towers.png` and everything already under `assets/art/` came out byte-identical: `git status --porcelain -- assets/towers.png assets/art/ground assets/art/roads` must be empty.
+
+- [ ] **Step 5: Look at the variants**
+
+Contact-sheet every variant of every kind, including `_unused`, and look at it. Composite over an opaque background rather than dropping alpha — an RGBA→RGB conversion paints anti-aliased edge pixels at full strength and produces convincing false speckle.
+
+Confirm every PNG holds exactly one creature, cleanly cut, with nothing of a neighbour attached and no fragment of the row's label. The bat row is where a defect would land: it should ship three bats and no pair.
+
+- [ ] **Step 6: Commit**
 
 ```bash
 git add tools/bake_sheet.gd assets/art test/test_enemy_sprites.gd
