@@ -799,15 +799,74 @@ const ATLAS_INSET := 6
 const TOWER_BAND_Y := 40
 const TOWER_BAND_H := 165
 
-## kind -> the four level x offsets, in level order. The sheet's tower types
-## map onto the game's kinds by role: Archer is the cheap all-rounder, Cannon
-## the fast one, Mage the splash one, Barracks the long-range one.
+## kind -> {first level's x, pitch between levels}. Four levels per group.
+##
+## MEASURED, not read off the image. Each group's pitch was found by
+## autocorrelating its column profile and then verified by extracting all four
+## levels and looking at them - every cell shows its own LVL label and the four
+## escalate correctly. An earlier version of this table listed x offsets read
+## by eye, and half of them were extrapolated because the mage and barracks
+## towers touch and a gap-based segmentation found only 2 and 1 of them.
+##
+## The sheet's tower types map onto the game's kinds by role: Archer is the
+## cheap all-rounder, Cannon the fast one, Mage the splash one, Barracks the
+## long-range one.
 const TOWER_LEVELS := {
-	&"basic": [23, 114, 212, 309],
-	&"fast": [439, 532, 637, 739],
-	&"mortar": [880, 966, 1052, 1140],
-	&"long": [1247, 1318, 1389, 1460],
+	&"basic": {"x": 24, "pitch": 100},
+	&"fast": {"x": 440, "pitch": 106},
+	&"mortar": {"x": 881, "pitch": 89},
+	&"long": {"x": 1238, "pitch": 71},
 }
+
+## Clears anything separated from the cell's centre by a fully transparent
+## column or row.
+##
+## The towers nearly touch in their groups, so a cell cut on the pitch can
+## catch a sliver of its neighbour. That matters because _trim takes the alpha
+## bounding box of ALL content - one stray sliver at the edge stretches the box
+## and the sprite lands wrong in its frame. Walking out from the centre to the
+## first empty line keeps only the tower this cell is about.
+func _isolate_centre(img: Image) -> Image:
+	var w := img.get_width()
+	var h := img.get_height()
+	var out := img.duplicate()
+	var cx := w / 2
+	var cy := h / 2
+	var empty_col := func(x: int) -> bool:
+		for y in h:
+			if img.get_pixel(x, y).a > 8.0 / 255.0:
+				return false
+		return true
+	var empty_row := func(y: int) -> bool:
+		for x in w:
+			if img.get_pixel(x, y).a > 8.0 / 255.0:
+				return false
+		return true
+	var left := 0
+	for x in range(cx, -1, -1):
+		if empty_col.call(x):
+			left = x
+			break
+	var right := w - 1
+	for x in range(cx, w):
+		if empty_col.call(x):
+			right = x
+			break
+	var top := 0
+	for y in range(cy, -1, -1):
+		if empty_row.call(y):
+			top = y
+			break
+	var bottom := h - 1
+	for y in range(cy, h):
+		if empty_row.call(y):
+			bottom = y
+			break
+	for y in h:
+		for x in w:
+			if x < left or x > right or y < top or y > bottom:
+				out.set_pixel(x, y, Color(0, 0, 0, 0))
+	return out
 
 func _bake_tower_atlas(sheet: Image) -> void:
 	var out := Image.create_empty(
@@ -815,20 +874,17 @@ func _bake_tower_atlas(sheet: Image) -> void:
 	out.fill(Color(0, 0, 0, 0))
 	for kind in TOWER_LEVELS:
 		var frames: Array = Towers.DEFS[kind]["upgrade_frames"]
-		var xs: Array = TOWER_LEVELS[kind]
-		for level in xs.size():
-			# The last level in a group has no following offset to measure
-			# against, so it falls back to 96 - clamped to the sheet's right
-			# edge, because the barracks group's last level starts at 1460 and
-			# 1460 + 96 would read past the 1536-wide sheet.
-			var width: int = 96
-			if level + 1 < xs.size():
-				width = int(xs[level + 1]) - int(xs[level])
-			width = mini(width, sheet.get_width() - int(xs[level]))
+		var group: Dictionary = TOWER_LEVELS[kind]
+		for level in 4:
+			# Clamped to the sheet's right edge: the barracks group's last
+			# level starts at 1238 + 71*3 = 1451 and a full pitch past it
+			# would read beyond the 1536-wide sheet.
+			var x: int = int(group["x"]) + int(group["pitch"]) * level
+			var width: int = mini(int(group["pitch"]), sheet.get_width() - x)
 			var region := Image.create_empty(width, TOWER_BAND_H, false, Image.FORMAT_RGBA8)
-			region.blit_rect(sheet, Rect2i(int(xs[level]), TOWER_BAND_Y, width, TOWER_BAND_H),
+			region.blit_rect(sheet, Rect2i(x, TOWER_BAND_Y, width, TOWER_BAND_H),
 				Vector2i.ZERO)
-			var sprite := _trim(_key(region))
+			var sprite := _trim(_isolate_centre(_key(region)))
 			# Fit inside the frame preserving aspect, inset so no art touches
 			# a frame edge - an AtlasTexture sampling a frame would otherwise
 			# pull in its neighbour.
