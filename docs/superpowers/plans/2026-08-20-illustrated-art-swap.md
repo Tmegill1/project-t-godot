@@ -1910,6 +1910,7 @@ func test_spawn_and_goal_count_as_road() -> bool:
 	renderer.render(tiles, Rng.new(1), &"forest")
 	assert_eq(renderer.edge_mask(1, 0), 2 | 8,
 		"spawn to the west and goal to the east both count")
+	renderer.free()
 	return true
 
 func test_every_road_cell_draws_the_piece_its_mask_names() -> bool:
