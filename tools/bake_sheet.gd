@@ -69,6 +69,7 @@ func _init() -> void:
 	_bake_ground(sheet)
 	_bake_roads(sheet)
 	_bake_tower_atlas(sheet)
+	_bake_enemies(sheet)
 	print("bake_sheet: done")
 	quit()
 
@@ -415,3 +416,97 @@ func _bake_tower_atlas(sheet: Image) -> void:
 			out.blend_rect(sprite, Rect2i(Vector2i.ZERO, sprite.get_size()), at)
 	out.save_png("res://assets/towers.png")
 	print("bake_sheet: tower atlas")
+
+## kind -> the sheet row it is cut from. The three existing kinds keep their
+## stats and wave schedules; only the art changes. Shaman and Troll are cut to
+## _unused for the deferred enemy-variety feature and referenced by no code.
+##
+## MEASURED: each band's content occupies rows 232..283, 439..512, 529..581,
+## 294..357 and 369..432 respectively, so every band holds its row with margin.
+## Unlike the tower band these carry no vertical panel rules - the rules that
+## make a row's transparency unsearchable stop above these rows.
+const ENEMY_ROWS := {
+	&"slime": {"y0": 216, "y1": 288},
+	&"ogre": {"y0": 438, "y1": 516},
+	&"bee": {"y0": 521, "y1": 586},
+	&"_unused/shaman": {"y0": 293, "y1": 361},
+	&"_unused/troll": {"y0": 366, "y1": 433},
+}
+
+## The scan starts at 95 because the row's own label ("GOBLIN", "OGRE", "BAT")
+## runs x 25..~90 - at 60 it is clipped rather than excluded and arrives as a
+## 21-30px "variant" made of text. It ends at 1228 because the right-hand decor
+## starts at 1238 in every row.
+const ENEMY_X0 := 95
+const ENEMY_X1 := 1228
+const MIN_SPRITE_RUN := 20
+
+## Spans wider than this multiple of the row's narrowest hold more than one
+## creature and are dropped.
+##
+## The bat row overlaps wing-to-wing and does not segment: its six spans are
+## 263, 103, 92, 338, 133 and 102 wide, and rendering them shows three bats,
+## one, one, four, two and one. No projection threshold separates them, and
+## projecting the lower body rows splits bodies rather than dividing them. So
+## the row yields the three bats that stand alone and the rest are left on the
+## sheet. Every span in every other row passes this filter.
+const MAX_SPAN_RATIO := 1.4
+
+## Whether a pixel belongs to a sprite rather than the sheet background.
+func _is_content(sheet: Image, x: int, y: int) -> bool:
+	var c := sheet.get_pixel(x, y)
+	return Vector3(c.r, c.g, c.b).distance_squared_to(BACKGROUND / 255.0) * 65025.0 \
+		> KEY_TOLERANCE_SQ
+
+## Splits a horizontal band into sprite spans on gaps in its column
+## projection, then drops the spans that hold more than one creature.
+##
+## Projection works here and flood fill does not: a tight fill fragments a
+## sprite because its dark outlines sit near the background, and a loose one
+## merges neighbours.
+func _row_sprites(sheet: Image, y0: int, y1: int, x0: int, x1: int) -> Array:
+	var present := []
+	for x in range(x0, x1):
+		var any := false
+		for y in range(y0, y1):
+			if _is_content(sheet, x, y):
+				any = true
+				break
+		present.append(any)
+	var found := []
+	var start := -1
+	for i in present.size():
+		if present[i] and start < 0:
+			start = i
+		elif not present[i] and start >= 0:
+			if i - start >= MIN_SPRITE_RUN:
+				found.append(Vector2i(x0 + start, x0 + i))
+			start = -1
+	if start >= 0 and present.size() - start >= MIN_SPRITE_RUN:
+		found.append(Vector2i(x0 + start, x0 + present.size()))
+	if found.is_empty():
+		return found
+	var narrowest: int = found[0].y - found[0].x
+	for span in found:
+		narrowest = mini(narrowest, span.y - span.x)
+	var out := []
+	for span in found:
+		if float(span.y - span.x) <= float(narrowest) * MAX_SPAN_RATIO:
+			out.append(span)
+	return out
+
+func _bake_enemies(sheet: Image) -> void:
+	for kind in ENEMY_ROWS:
+		var row: Dictionary = ENEMY_ROWS[kind]
+		var dir := "res://assets/art/enemies/%s" % kind
+		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(dir))
+		var spans := _row_sprites(sheet, int(row["y0"]), int(row["y1"]),
+			ENEMY_X0, ENEMY_X1)
+		for i in spans.size():
+			var span: Vector2i = spans[i]
+			var h: int = int(row["y1"]) - int(row["y0"])
+			var cut := Image.create_empty(span.y - span.x, h, false, Image.FORMAT_RGBA8)
+			cut.blit_rect(sheet, Rect2i(span.x, int(row["y0"]), span.y - span.x, h),
+				Vector2i.ZERO)
+			_trim(_key(cut)).save_png("%s/variant_%d.png" % [dir, i])
+		print("bake_sheet: %s x%d variants" % [kind, spans.size()])
