@@ -1354,45 +1354,211 @@ git commit -m "Cut enemy sprites as per-spawn variants for the three kinds"
 - Test: `test/test_prop_assets.gd`
 
 **Interfaces:**
-- Consumes: `_key`, `_trim`, `_row_sprites` from earlier tasks.
+- Consumes: `_key`, `_trim` from Task 1, `_tower_sprite` from Task 3.
 - Produces: four props per biome plus two shared endpoints, all trimmed with a 1px pad.
 
-**The four prop slot names do not change** — `tree`, `stone`, `spike`, `fire` — because `MapRenderer`'s scatter rules are written in those terms and none of those rules change. Props come from the Extras/Decor column at `x 1237–1524`, below the tower band.
+**The four prop slot names do not change** — `tree`, `stone`, `spike`, `fire` — because `MapRenderer`'s scatter rules are written in those terms and none of those rules change. Props come from the EXTRAS / DECOR column at `x 1237–1524`, `y 216–740`.
 
-**Endpoints are composed from decor**, as the Kenney ones were, because the sheet ships no castle or cave. Keeping flat vector markers on an illustrated board is the style clash this swap exists to avoid.
+**The decor column is segmented by connected components, not by rows.** An earlier version of this task scanned for horizontal bands of content and split each with `_row_sprites`. Measured, that returns **four** things for the whole column: the two words of the "EXTRAS / DECOR" heading, one 283×411 blob holding every decor sprite at once, and the rule below them. The column's objects are staggered, so no row inside it is ever empty and no band scan can divide them. `_row_sprites` is also wrong here for a second reason — Task 4 gave it a filter that drops any span wider than 1.4× its row's narrowest, which is right for a row of same-sized enemies and destroys a column whose objects run from a 35×31 skull to a 96×61 boulder cluster.
+
+Connected-component labelling divides it exactly: 42 raw components, 29 of them above the size floor, and every one is a single decor object. The 13 below the floor are the heading's letters. Each sprite is cut from **its own component's mask**, not its bounding rectangle — a neighbouring object that overlaps the rectangle would otherwise ride along, which is the same defect the tower cells hit in Task 3.
+
+**The 29 components in reading order**, which is what `PROP_SLOTS` and the endpoint tables index:
+
+| | | | | |
+|---|---|---|---|---|
+| 0 signpost | 1 pine | 2 flat stump | 3 leafy tree | 4 banner |
+| 5 crates | 6 rock pair | 7 fallen log | 8 boulder cluster | 9 mossy stump |
+| 10 bush | 11 stone spire | 12 mushrooms | 13 grey rock | 14 berry plant |
+| 15 handcart | 16 planks | 17 barrel | 18 white flowers | 19 campfire |
+| 20 mossy stump | 21 spike fence | 22 wooden cross | 23 skull and crossbones | 24 orange flowers |
+| 25 rock outcrop | 26 mossy stump | 27 stump | 28 small skull | |
+
+**Endpoints are composed**, as the Kenney ones were, because the sheet ships no castle and no cave. Keeping flat vector markers on an illustrated board is the style clash this swap exists to avoid.
+
+The castle is the **Barracks tower's top level** with banners and crates flanking it. The decor column ships nothing castle-like, and the sheet's own keep is the right marker for the player's base — it is already in the atlas at frame 19, and `_tower_sprite(sheet, &"long", 3)` cuts it again here.
+
+The cave is a dark ellipse with three rocks around its **rim**, leaving the middle dark. That is the arrangement the Kenney cave used and it is the only one that reads: rocks stacked *over* the mouth make a rock pile, and a mouth wider than the rocks makes a black blob. Both were tried and rendered before this one was chosen.
 
 - [ ] **Step 1: Write the failing test**
 
-Rewrite `test/test_prop_assets.gd` to read from `res://assets/art/<biome>/` instead of `res://assets/kenney/<biome>/`, keeping every existing assertion — the transparent-margin gate, the tight-trim gate, and the "trimming actually shrank the source" gate — and change `_BIOMES` to `["forest", "desert", "ice"]`. Add:
+Rewrite `test/test_prop_assets.gd`:
 
 ```gdscript
+extends TestCase
+
+# Props are free-standing sprites, so each needs a transparent margin all
+# round - an opaque edge means the subject is clipped.
+#
+# The tight-bbox gate is the one that matters for gameplay.
+# MapRenderer.prop_footprints() derives a tower-blocking radius from the
+# texture's full dimensions, so transparent padding becomes invisible wall.
+# The bake cuts each prop from its own connected component and pads back
+# exactly 1px, which is what makes "radius from displayed size" true rather
+# than merely conservative. See spec section 6.
+
+const _BIOMES := ["forest", "ice", "desert"]
+const _SLOTS := ["tree", "stone", "spike", "fire"]
+const _ENDPOINTS := ["castle", "cave"]
+const _MARGIN_ALPHA_MAX := 8
+
+# After a 1px pad, the subject must fill everything else. Allowing a little
+# slack for antialiasing at the extremes rather than demanding exactly 1px.
+const _MAX_TRANSPARENT_BORDER := 3
+
+# No free-standing object fills its own bounding box. Measured, the twelve
+# props run from 0.35 to 0.62 opaque; a tiling fill or a crop taken from the
+# middle of a larger drawing would sit near 1.0. This is the gate that
+# replaces the Kenney-era "trimming shrank the 128px canvas" check, which
+# only meant anything when every source shared one canvas size.
+const _MAX_FILL := 0.85
+
+func _image(path: String) -> Image:
+	var bytes := FileAccess.get_file_as_bytes(path)
+	if bytes.is_empty():
+		return null
+	var img := Image.new()
+	if img.load_png_from_buffer(bytes) != OK:
+		return null
+	return img
+
+func _prop_image(biome: String, slot: String) -> Image:
+	return _image("res://assets/art/%s/%s.png" % [biome, slot])
+
+func _alpha8(img: Image, x: int, y: int) -> int:
+	return int(round(img.get_pixel(x, y).a * 255.0))
+
+func test_every_prop_keeps_a_transparent_margin_on_all_four_edges() -> bool:
+	for biome in _BIOMES:
+		for slot in _SLOTS:
+			var img := _prop_image(biome, slot)
+			assert_true(img != null, "%s/%s.png decodes" % [biome, slot])
+			if img == null:
+				continue
+			var w := img.get_width()
+			var h := img.get_height()
+			var peak := 0
+			for y in h:
+				peak = maxi(peak, maxi(_alpha8(img, 0, y), _alpha8(img, w - 1, y)))
+			for x in w:
+				peak = maxi(peak, maxi(_alpha8(img, x, 0), _alpha8(img, x, h - 1)))
+			assert_true(peak <= _MARGIN_ALPHA_MAX,
+				"%s/%s edge peak alpha %d is a transparent margin" % [biome, slot, peak])
+	return true
+
+func test_every_prop_is_trimmed_tight_so_its_footprint_is_honest() -> bool:
+	for biome in _BIOMES:
+		for slot in _SLOTS:
+			var img := _prop_image(biome, slot)
+			assert_true(img != null, "%s/%s.png decodes" % [biome, slot])
+			if img == null:
+				continue
+			var w := img.get_width()
+			var h := img.get_height()
+			var min_x := w
+			var min_y := h
+			var max_x := -1
+			var max_y := -1
+			for y in h:
+				for x in w:
+					if _alpha8(img, x, y) > _MARGIN_ALPHA_MAX:
+						min_x = mini(min_x, x)
+						min_y = mini(min_y, y)
+						max_x = maxi(max_x, x)
+						max_y = maxi(max_y, y)
+			assert_true(max_x >= 0, "%s/%s has visible pixels" % [biome, slot])
+			if max_x < 0:
+				continue
+			assert_true(min_x <= _MAX_TRANSPARENT_BORDER,
+				"%s/%s left border %d is tight" % [biome, slot, min_x])
+			assert_true(min_y <= _MAX_TRANSPARENT_BORDER,
+				"%s/%s top border %d is tight" % [biome, slot, min_y])
+			assert_true(w - 1 - max_x <= _MAX_TRANSPARENT_BORDER,
+				"%s/%s right border %d is tight" % [biome, slot, w - 1 - max_x])
+			assert_true(h - 1 - max_y <= _MAX_TRANSPARENT_BORDER,
+				"%s/%s bottom border %d is tight" % [biome, slot, h - 1 - max_y])
+	return true
+
+func test_every_prop_is_a_sprite_rather_than_a_slab_of_fill() -> bool:
+	# The gate that catches a slot pointed at a tiling texture or at a crop
+	# taken from the middle of a larger drawing. Both pass the margin and
+	# tight-trim gates - the 1px pad manufactures a clean border around any
+	# crop at all.
+	for biome in _BIOMES:
+		for slot in _SLOTS:
+			var img := _prop_image(biome, slot)
+			assert_true(img != null, "%s/%s.png decodes" % [biome, slot])
+			if img == null:
+				continue
+			var opaque := 0
+			for y in img.get_height():
+				for x in img.get_width():
+					if _alpha8(img, x, y) > _MARGIN_ALPHA_MAX:
+						opaque += 1
+			var fill := float(opaque) / float(img.get_width() * img.get_height())
+			assert_true(fill <= _MAX_FILL,
+				"%s/%s is %.2f opaque" % [biome, slot, fill])
+	return true
+
+func test_a_biome_s_four_slots_are_four_different_sprites() -> bool:
+	# An index typo in PROP_SLOTS that points two slots at the same decor
+	# piece is otherwise invisible: the duplicate passes every gate above.
+	for biome in _BIOMES:
+		var seen := {}
+		for slot in _SLOTS:
+			var bytes := FileAccess.get_file_as_bytes(
+				"res://assets/art/%s/%s.png" % [biome, slot])
+			assert_false(bytes.is_empty(), "%s/%s.png exists" % [biome, slot])
+			if bytes.is_empty():
+				continue
+			var digest := bytes.get_string_from_ascii().sha256_text()
+			assert_false(seen.has(digest),
+				"%s's %s is not a copy of another slot" % [biome, slot])
+			seen[digest] = slot
+	return true
+
 func test_both_endpoints_decode_and_keep_a_clear_margin() -> bool:
-	for name in ["castle", "cave"]:
-		var bytes := FileAccess.get_file_as_bytes("res://assets/art/%s.png" % name)
-		assert_false(bytes.is_empty(), "%s.png exists" % name)
-		if bytes.is_empty():
+	for name in _ENDPOINTS:
+		var img := _image("res://assets/art/%s.png" % name)
+		assert_true(img != null, "%s.png decodes" % name)
+		if img == null:
 			continue
-		var img := Image.new()
-		assert_eq(img.load_png_from_buffer(bytes), OK, "%s.png decodes" % name)
 		var w := img.get_width()
 		var h := img.get_height()
 		var peak := 0
 		for y in h:
-			peak = maxi(peak, maxi(
-				int(round(img.get_pixel(0, y).a * 255.0)),
-				int(round(img.get_pixel(w - 1, y).a * 255.0))))
+			peak = maxi(peak, maxi(_alpha8(img, 0, y), _alpha8(img, w - 1, y)))
 		for x in w:
-			peak = maxi(peak, maxi(
-				int(round(img.get_pixel(x, 0).a * 255.0)),
-				int(round(img.get_pixel(x, h - 1).a * 255.0))))
-		assert_true(peak <= 8, "%s.png edge peak %d" % [name, peak])
+			peak = maxi(peak, maxi(_alpha8(img, x, 0), _alpha8(img, x, h - 1)))
+		assert_true(peak <= _MARGIN_ALPHA_MAX, "%s.png edge peak %d" % [name, peak])
+	return true
+
+func test_the_cave_keeps_a_dark_mouth() -> bool:
+	# The cave is a dark ellipse with rocks around its rim. Rocks stacked over
+	# the mouth read as a rock pile instead - and that failure is invisible to
+	# every other gate here, because a rock pile is free-standing, tightly
+	# trimmed and not a slab of fill. So assert the mouth is still there: a
+	# tenth of the sprite is near-black.
+	var img := _image("res://assets/art/cave.png")
+	assert_true(img != null, "cave.png decodes")
+	if img == null:
+		return true
+	var dark := 0
+	for y in img.get_height():
+		for x in img.get_width():
+			var c := img.get_pixel(x, y)
+			if c.a > 0.5 and c.r < 0.12 and c.g < 0.12 and c.b < 0.14:
+				dark += 1
+	var share := float(dark) / float(img.get_width() * img.get_height())
+	assert_true(share >= 0.10, "the cave's mouth covers %.2f of its sprite" % share)
 	return true
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `godot --headless --quit --script test/run_tests.gd`
-Expected: FAIL — nothing exists under `assets/art/<biome>/tree.png` and no endpoints.
+
+Expected: FAIL — nothing exists under `assets/art/<biome>/tree.png` and no endpoints. The old test read from `res://assets/kenney/<biome>/` and passed; it is the path change that turns it red.
 
 - [ ] **Step 3: Extend the bake tool**
 
@@ -1400,72 +1566,161 @@ Add to `tools/bake_sheet.gd`:
 
 ```gdscript
 const DECOR_X0 := 1237
-const DECOR_X1 := 1524
+const DECOR_X1 := 1525
 const DECOR_Y0 := 216
 const DECOR_Y1 := 740
 
-## Which decor sprite fills which prop slot, per biome, as an index into the
-## decor column in reading order. The slot NAMES are fixed by MapRenderer's
+## The floor a connected component has to clear to be a decor sprite rather
+## than a letter of the "EXTRAS / DECOR" heading. MEASURED: the column holds 42
+## components, the 29 above this floor are exactly the 29 decor objects and the
+## 13 below it are exactly the heading's letters.
+const DECOR_MIN_W := 18
+const DECOR_MIN_H := 18
+const DECOR_MIN_AREA := 250
+
+const _NEIGHBOURS: Array[Vector2i] = [
+	Vector2i(-1, -1), Vector2i(0, -1), Vector2i(1, -1),
+	Vector2i(-1, 0), Vector2i(1, 0),
+	Vector2i(-1, 1), Vector2i(0, 1), Vector2i(1, 1),
+]
+
+## Which decor sprite fills which prop slot, per biome, as an index into
+## _decor_sprites' reading order. The slot NAMES are fixed by MapRenderer's
 ## scatter rules and do not change; only what sits behind each one is
 ## per-biome.
+##
+## The indices in reading order are: 0 signpost, 1 pine, 2 flat stump, 3 leafy
+## tree, 4 banner, 5 crates, 6 rock pair, 7 fallen log, 8 boulder cluster,
+## 9 mossy stump, 10 bush, 11 stone spire, 12 mushrooms, 13 grey rock,
+## 14 berry plant, 15 handcart, 16 planks, 17 barrel, 18 white flowers,
+## 19 campfire, 20 mossy stump, 21 spike fence, 22 wooden cross, 23 skull and
+## crossbones, 24 orange flowers, 25 rock outcrop, 26 mossy stump, 27 stump,
+## 28 small skull. Every one of the twelve below was rendered at the 48px the
+## renderer draws it into and checked by eye; the sheet has no cactus, so
+## desert's tree is a dead stump and its spike is bones.
 const PROP_SLOTS := {
-	&"forest": {&"tree": 0, &"stone": 5, &"spike": 2, &"fire": 9},
-	&"desert": {&"tree": 3, &"stone": 6, &"spike": 4, &"fire": 9},
-	&"ice": {&"tree": 1, &"stone": 7, &"spike": 8, &"fire": 9},
+	&"forest": {&"tree": 3, &"stone": 8, &"spike": 21, &"fire": 19},
+	&"ice": {&"tree": 1, &"stone": 6, &"spike": 11, &"fire": 19},
+	&"desert": {&"tree": 2, &"stone": 25, &"spike": 23, &"fire": 19},
 }
 
-## Endpoints are composed on a clear canvas from decor indices, because the
-## sheet ships no castle and no cave. {index, offset, size}.
 const ENDPOINT_CANVAS := 256
-const ENDPOINTS := {
-	"castle": [
-		{"decor": 11, "at": Vector2i(56, 92), "px": 144},
-		{"decor": 12, "at": Vector2i(20, 130), "px": 96},
-		{"decor": 12, "at": Vector2i(140, 130), "px": 96},
-	],
-	"cave": [
-		{"decor": 5, "at": Vector2i(8, 84), "px": 128},
-		{"decor": 6, "at": Vector2i(132, 88), "px": 120},
-		{"decor": 7, "at": Vector2i(84, 40), "px": 104},
-	],
-}
+
+## The keep, and the banners and crates flanking it. Pieces are placed by
+## CENTRE rather than by top-left so a one-pixel change in a source's trimmed
+## size does not walk the composition sideways. {decor, px, centre, flip}.
+const CASTLE_KEEP_PX := 180
+const CASTLE_KEEP_CENTRE := Vector2i(127, 120)
+const CASTLE_PIECES := [
+	{"decor": 4, "px": 70, "centre": Vector2i(36, 155), "flip": false},
+	{"decor": 4, "px": 70, "centre": Vector2i(219, 155), "flip": true},
+	{"decor": 5, "px": 56, "centre": Vector2i(58, 216), "flip": false},
+	{"decor": 5, "px": 56, "centre": Vector2i(198, 216), "flip": true},
+]
+
+## The mouth, then three rocks around its RIM - not over it. Stacking rocks on
+## top of the mouth makes a rock pile and a mouth wider than the rocks makes a
+## black blob; both were composed and rendered before this arrangement.
+const CAVE_MOUTH := Rect2i(50, 78, 156, 124)
+const CAVE_MOUTH_COLOUR := Color8(11, 13, 17)
+const CAVE_PIECES := [
+	{"decor": 25, "px": 96, "centre": Vector2i(128, 80), "flip": false},
+	{"decor": 13, "px": 72, "centre": Vector2i(62, 128), "flip": false},
+	{"decor": 6, "px": 84, "centre": Vector2i(198, 132), "flip": true},
+]
 
 ## Every decor sprite in the column, in reading order: rows top to bottom,
 ## sprites left to right within a row.
 ##
-## The column is a loose grid rather than a fixed pitch, so rows are found by
-## scanning for bands that contain content and each band is then split with
-## the same projection helper the enemy rows use.
+## Connected components, not a band scan. The column's objects are staggered,
+## so no row inside it is ever empty - a band scan returns the whole column as
+## one 283x411 blob. Each sprite is cut from its own component's MASK rather
+## than its bounding rectangle, so a neighbour overlapping the rectangle does
+## not ride along, and gets the same 1px transparent pad _trim gives everything
+## else.
 func _decor_sprites(sheet: Image) -> Array:
+	var w := DECOR_X1 - DECOR_X0
+	var h := DECOR_Y1 - DECOR_Y0
+	var region := Image.create_empty(w, h, false, Image.FORMAT_RGBA8)
+	region.blit_rect(sheet, Rect2i(DECOR_X0, DECOR_Y0, w, h), Vector2i.ZERO)
+	region = _key(region)
+	var solid := []
+	solid.resize(w * h)
+	for y in h:
+		for x in w:
+			solid[y * w + x] = region.get_pixel(x, y).a > 8.0 / 255.0
+	var labels := PackedInt32Array()
+	labels.resize(w * h)
+	var found := []
+	var next_label := 0
+	for sy in h:
+		for sx in w:
+			var seed := sy * w + sx
+			if not solid[seed] or labels[seed] != 0:
+				continue
+			next_label += 1
+			labels[seed] = next_label
+			var stack := [seed]
+			var min_x := sx
+			var max_x := sx
+			var min_y := sy
+			var max_y := sy
+			var area := 0
+			while not stack.is_empty():
+				var i: int = stack.pop_back()
+				area += 1
+				var cy := i / w
+				var cx := i % w
+				min_x = mini(min_x, cx)
+				max_x = maxi(max_x, cx)
+				min_y = mini(min_y, cy)
+				max_y = maxi(max_y, cy)
+				for step in _NEIGHBOURS:
+					var ny := cy + step.y
+					var nx := cx + step.x
+					if ny < 0 or ny >= h or nx < 0 or nx >= w:
+						continue
+					var j := ny * w + nx
+					if solid[j] and labels[j] == 0:
+						labels[j] = next_label
+						stack.push_back(j)
+			if max_x - min_x + 1 < DECOR_MIN_W or max_y - min_y + 1 < DECOR_MIN_H \
+					or area < DECOR_MIN_AREA:
+				continue
+			found.append({"id": next_label, "x0": min_x, "y0": min_y,
+				"x1": max_x, "y1": max_y})
+	found.sort_custom(func(a, b):
+		if int(a["y0"]) != int(b["y0"]):
+			return int(a["y0"]) < int(b["y0"])
+		return int(a["x0"]) < int(b["x0"]))
 	var out := []
-	var y := DECOR_Y0
-	while y < DECOR_Y1:
-		var has_content := false
-		for x in range(DECOR_X0, DECOR_X1):
-			if _is_content(sheet, x, y):
-				has_content = true
-				break
-		if not has_content:
-			y += 1
-			continue
-		var y_end := y
-		while y_end < DECOR_Y1:
-			var any := false
-			for x in range(DECOR_X0, DECOR_X1):
-				if _is_content(sheet, x, y_end):
-					any = true
-					break
-			if not any:
-				break
-			y_end += 1
-		for span in _row_sprites(sheet, y, y_end, DECOR_X0, DECOR_X1):
-			var cut := Image.create_empty(span.y - span.x, y_end - y, false,
-				Image.FORMAT_RGBA8)
-			cut.blit_rect(sheet, Rect2i(span.x, y, span.y - span.x, y_end - y),
-				Vector2i.ZERO)
-			out.append(_trim(_key(cut)))
-		y = y_end + 1
+	for item in found:
+		var bx: int = int(item["x0"])
+		var by: int = int(item["y0"])
+		var bw: int = int(item["x1"]) - bx + 1
+		var bh: int = int(item["y1"]) - by + 1
+		var id: int = int(item["id"])
+		var sprite := Image.create_empty(bw + 2, bh + 2, false, Image.FORMAT_RGBA8)
+		sprite.fill(Color(0, 0, 0, 0))
+		for y in bh:
+			for x in bw:
+				if labels[(by + y) * w + bx + x] == id:
+					sprite.set_pixel(x + 1, y + 1, region.get_pixel(bx + x, by + y))
+		out.append(sprite)
 	return out
+
+## Scales a sprite to fit a px box preserving aspect, then blends it onto the
+## canvas centred on `centre`.
+func _place_piece(canvas: Image, src: Image, px: int, centre: Vector2i,
+		flip: bool) -> void:
+	var piece: Image = src.duplicate()
+	var factor := float(px) / float(maxi(piece.get_width(), piece.get_height()))
+	piece.resize(maxi(1, int(piece.get_width() * factor)),
+		maxi(1, int(piece.get_height() * factor)), Image.INTERPOLATE_LANCZOS)
+	if flip:
+		piece.flip_x()
+	canvas.blend_rect(piece, Rect2i(Vector2i.ZERO, piece.get_size()),
+		centre - piece.get_size() / 2)
 
 func _bake_props(decor: Array) -> void:
 	for biome in PROP_SLOTS:
@@ -1477,19 +1732,45 @@ func _bake_props(decor: Array) -> void:
 			(decor[index] as Image).save_png("%s/%s.png" % [dir, slot])
 		print("bake_sheet: %s props" % biome)
 
-func _bake_endpoints(decor: Array) -> void:
-	for name in ENDPOINTS:
-		var canvas := Image.create_empty(
-			ENDPOINT_CANVAS, ENDPOINT_CANVAS, false, Image.FORMAT_RGBA8)
-		canvas.fill(Color(0, 0, 0, 0))
-		for piece in ENDPOINTS[name]:
-			var spec: Dictionary = piece
-			var index: int = int(spec["decor"])
-			assert(index < decor.size(), "decor index %d is past the column" % index)
-			var src: Image = (decor[index] as Image).duplicate()
-			src.resize(int(spec["px"]), int(spec["px"]), Image.INTERPOLATE_LANCZOS)
-			canvas.blend_rect(src, Rect2i(Vector2i.ZERO, src.get_size()), spec["at"])
-		_trim(canvas).save_png("res://assets/art/%s.png" % name)
+func _bake_endpoints(sheet: Image, decor: Array) -> void:
+	var castle := Image.create_empty(
+		ENDPOINT_CANVAS, ENDPOINT_CANVAS, false, Image.FORMAT_RGBA8)
+	castle.fill(Color(0, 0, 0, 0))
+	_place_piece(castle, _tower_sprite(sheet, &"long", 3), CASTLE_KEEP_PX,
+		CASTLE_KEEP_CENTRE, false)
+	for piece in CASTLE_PIECES:
+		var spec: Dictionary = piece
+		var index: int = int(spec["decor"])
+		assert(index < decor.size(), "decor index %d is past the column" % index)
+		_place_piece(castle, decor[index], int(spec["px"]), spec["centre"],
+			bool(spec["flip"]))
+	_trim(castle).save_png("res://assets/art/castle.png")
+
+	var cave := Image.create_empty(
+		ENDPOINT_CANVAS, ENDPOINT_CANVAS, false, Image.FORMAT_RGBA8)
+	cave.fill(Color(0, 0, 0, 0))
+	# An ellipse inscribed in CAVE_MOUTH, drawn by hand because Image has no
+	# shape drawing.
+	var rx := float(CAVE_MOUTH.size.x) / 2.0
+	var ry := float(CAVE_MOUTH.size.y) / 2.0
+	var cx := float(CAVE_MOUTH.position.x) + rx
+	var cy := float(CAVE_MOUTH.position.y) + ry
+	for y in CAVE_MOUTH.size.y:
+		for x in CAVE_MOUTH.size.x:
+			var px := float(CAVE_MOUTH.position.x + x) + 0.5
+			var py := float(CAVE_MOUTH.position.y + y) + 0.5
+			var dx := (px - cx) / rx
+			var dy := (py - cy) / ry
+			if dx * dx + dy * dy <= 1.0:
+				cave.set_pixel(CAVE_MOUTH.position.x + x, CAVE_MOUTH.position.y + y,
+					CAVE_MOUTH_COLOUR)
+	for piece in CAVE_PIECES:
+		var spec: Dictionary = piece
+		var index: int = int(spec["decor"])
+		assert(index < decor.size(), "decor index %d is past the column" % index)
+		_place_piece(cave, decor[index], int(spec["px"]), spec["centre"],
+			bool(spec["flip"]))
+	_trim(cave).save_png("res://assets/art/cave.png")
 	print("bake_sheet: endpoints")
 ```
 
@@ -1499,10 +1780,8 @@ Call both from `_init` after `_bake_enemies(sheet)`, sharing one segmentation pa
 	var decor := _decor_sprites(sheet)
 	print("bake_sheet: %d decor sprites found" % decor.size())
 	_bake_props(decor)
-	_bake_endpoints(decor)
+	_bake_endpoints(sheet, decor)
 ```
-
-**The decor indices are the one thing here that cannot be derived.** `PROP_SLOTS` and `ENDPOINTS` name sprites by their position in the column, and only looking tells you whether index 5 is a rock or a barrel. Task 5's Step 4 prints the decor count and Step 5 is where you check the choices by eye — the gates prove each prop is a clean free-standing sprite, not that it is the *right* sprite.
 
 - [ ] **Step 4: Run the bake, import, and test**
 
@@ -1513,9 +1792,18 @@ git checkout -- project.godot
 godot --headless --quit --script test/run_tests.gd
 ```
 
-Expected: PASS. If a `PROP_SLOTS` index lands on the wrong sprite, the gates will still pass — verify by eye which decor piece each slot got, and adjust the indices.
+Expected: PASS, and `bake_sheet: 29 decor sprites found`. A different count means the size floor or the region bounds moved and every index in `PROP_SLOTS`, `CASTLE_PIECES` and `CAVE_PIECES` is now pointing at the wrong sprite — stop and report rather than adjusting indices to match.
 
-- [ ] **Step 5: Commit**
+Confirm nothing already committed changed: `git status --porcelain -- assets/towers.png assets/art/enemies` must be empty, and the only modified files under `assets/art/forest`, `assets/art/ice` and `assets/art/desert` must be the four new prop PNGs in each.
+
+- [ ] **Step 5: Look at what came out**
+
+Two contact sheets, both composited over an opaque background rather than converting RGBA to RGB — dropping alpha paints anti-aliased edge pixels at full strength and produces convincing false speckle.
+
+1. All 29 decor sprites with their indices overlaid. Confirm each is a single object and that index 3 is the leafy tree, 8 the boulder cluster, 21 the spike fence and 19 the campfire — if the numbering has shifted, everything below is wrong.
+2. The twelve props at **48px**, the size `MapRenderer` draws them into, and the two endpoints at **96px**. Confirm each prop still reads at that size, that the castle reads as a keep, and that the cave reads as a dark mouth ringed by rock rather than as a rock pile or a black blob.
+
+- [ ] **Step 6: Commit**
 
 ```bash
 git add tools/bake_sheet.gd assets/art test/test_prop_assets.gd
