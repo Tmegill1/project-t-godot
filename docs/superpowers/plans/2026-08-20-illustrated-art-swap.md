@@ -2150,32 +2150,46 @@ git commit -m "Draw the road from an edge mask and drop the corner lattice"
 **Files:**
 - Modify: `game/enemy.gd`
 - Modify: `game/enemy.tscn`
+- Modify: `game/game_board.gd`
 - Modify: `data/enemies.gd`
+- Modify: `data/seeds.gd`
 - Test: `test/test_enemy.gd`
 
 **Interfaces:**
 - Consumes: the variant sprites from Task 4.
-- Produces: `Enemy` draws a `Sprite2D` rather than an `AnimatedSprite2D`.
+- Produces: `Enemy` draws a `Sprite2D` rather than an `AnimatedSprite2D`; `Enemy.setup` takes an optional `Rng`; `Enemies.variant_count(kind) -> int`.
 
-**What is removed:** `_facing`, `_set_facing`, the `walk_<facing>` and `death_<facing>` animations, and `_build_frames`. `game/enemy.tscn`'s `AnimatedSprite2D` becomes a `Sprite2D`, keeping `texture_filter = 1` — these sprites are still minified and want the same filtering the enemies already use.
+**What is removed:** `_facing`, `_set_facing`, `_play_walk`, `_build_frames`, the `FRAME_SIZE`/`FRAMES_PER_SHEET`/`WALK_FPS`/`DEATH_FPS` constants and every `_sprite.play(...)` call. `game/enemy.tscn`'s `AnimatedSprite2D` becomes a `Sprite2D`, keeping `texture_filter = 1` — these sprites are still minified and want the same filtering.
 
-**What replaces it:** one variant chosen at spawn from the seeded `Rng`, flipped horizontally by travel direction, with a sine bob while moving. Death becomes a fade-and-shrink tween.
+**What replaces it:** one variant chosen at spawn from a seeded `Rng`, flipped horizontally by travel direction, with a sine bob while moving. Death becomes a fade-and-shrink tween.
 
-**`_die` currently awaits `animation_finished` before despawning**, so despawn timing is whatever the death animation's length was. It becomes `DEATH_TWEEN_MS`, a constant this file owns. Tests pinning the old sequence change with it.
+**`Enemy.setup` has no `Rng` today and `GameBoard` has none either.** Variant choice has to be reproducible — the whole harness rests on that — so the parameter is added with a default, matching `MapRenderer.render`'s existing shape, and the board gains a spawn `Rng` reset at each wave start. The default keeps every existing `setup(kind, path, wave)` call site working unchanged.
 
-`Enemies.DEFS`'s `flip_horizontally` per-kind override survives — the new sprites also face one way by default. `texture_key` is replaced by `variant_count`, since variants live in a directory named for the kind and what the code needs from the table is how many there are to choose from.
+**`sprite_scale` becomes `sprite_px`, a displayed HEIGHT.** A fixed scale factor only made sense against Kenney's uniform 48 × 48 animation frames. The variants are not uniform — measured, the goblins run 54–69 × 50–54, the ogres 71–80 × 67–76 and the bats 94–105 × 41–47 — so a fixed factor draws the same kind at different sizes from one spawn to the next, and draws all three at the wrong absolute size. Deriving the scale from the chosen variant's height fixes both. The values below preserve today's on-screen sizes: the Kenney frame was 48px at 0.7, 1.2 and 0.7, giving 33.6, 57.6 and 33.6.
+
+**All three kinds' art faces right**, checked at 4×, so `flip_horizontally` is `false` for all of them — including the ogre, which was `true` against the Kenney art.
+
+**Death cannot create a tween in the test harness.** Every enemy the suite builds is outside the scene tree — `test/test_enemy.gd`'s header explains why at length — and `Node.create_tween()` requires a tree. `_die` therefore returns after emitting when it is off-tree. That is exactly today's observable behaviour: today `_die` awaits `animation_finished`, which off-tree never fires, so everything after the await already never runs in tests.
 
 - [ ] **Step 1: Write the failing tests**
 
-Add to `test/test_enemy.gd`, and delete the tests that assert `walk_*`/`death_*` animations exist:
+In `test/test_enemy.gd`, delete `test_die_plays_the_death_animation_for_the_enemys_current_facing` and every other test asserting `_facing`, `_sprite.animation`, or the `walk_*`/`death_*` animations. Add a seeded builder beside `_ready_enemy`, and these tests:
 
 ```gdscript
+## The same enemy _ready_enemy builds, set up with a seeded Rng so the variant
+## it picks is pinned rather than incidental.
+func _ready_enemy_with_seed(seed_value: int) -> Enemy:
+	var e := _ready_enemy()
+	e.setup(&"slime", _straight_path(), 1, Rng.new(seed_value))
+	return e
+
 func test_an_enemy_draws_one_of_its_kind_s_variants() -> bool:
 	var e := _ready_enemy()
+	e.setup(&"slime", _straight_path(), 1)
 	var sprite: Sprite2D = e.get_node("Sprite")
 	assert_true(sprite.texture != null, "a variant was chosen")
-	assert_true(sprite.texture.resource_path.contains("/enemies/"),
-		"and it came from the enemy art")
+	assert_true(sprite.texture.resource_path.contains("/art/enemies/slime/"),
+		"and it came from this kind's art directory")
 	e.free()
 	return true
 
@@ -2190,8 +2204,51 @@ func test_the_variant_choice_is_reproducible_from_the_seed() -> bool:
 	b.free()
 	return true
 
+func test_different_seeds_reach_more_than_one_variant() -> bool:
+	# Otherwise "pick a variant" could be a constant and every test above
+	# would still pass.
+	var seen := {}
+	for s in 40:
+		var e := _ready_enemy_with_seed(s + 1)
+		seen[e.get_node("Sprite").texture.resource_path] = true
+		e.free()
+	assert_true(seen.size() > 1, "%d distinct variants over 40 seeds" % seen.size())
+	return true
+
+func test_an_enemy_is_drawn_at_its_kind_s_declared_height() -> bool:
+	# The scale is derived from the chosen variant rather than fixed, because
+	# the variants are not a uniform size - a fixed factor would draw the same
+	# kind at a different size from one spawn to the next.
+	for kind in Enemies.KINDS:
+		var e := _ready_enemy()
+		e.setup(kind, _straight_path(), 1)
+		var sprite: Sprite2D = e.get_node("Sprite")
+		var drawn := float(sprite.texture.get_height()) * sprite.scale.y
+		assert_almost_eq(drawn, float(Enemies.DEFS[kind]["sprite_px"]), 0.01,
+			"%s draws at its declared height" % kind)
+		assert_almost_eq(sprite.scale.x, sprite.scale.y, 0.0001,
+			"%s is scaled uniformly, not stretched" % kind)
+		e.free()
+	return true
+
+func test_every_variant_of_a_kind_draws_at_the_same_height() -> bool:
+	# The defect a fixed scale factor would leave: same kind, different size.
+	for kind in Enemies.KINDS:
+		for i in Enemies.variant_count(kind):
+			var e := _ready_enemy()
+			e.setup(kind, _straight_path(), 1)
+			var sprite: Sprite2D = e.get_node("Sprite")
+			sprite.texture = load("res://assets/art/enemies/%s/variant_%d.png" % [kind, i])
+			e.apply_sprite_height()
+			var drawn := float(sprite.texture.get_height()) * sprite.scale.y
+			assert_almost_eq(drawn, float(Enemies.DEFS[kind]["sprite_px"]), 0.01,
+				"%s variant %d draws at the declared height" % [kind, i])
+			e.free()
+	return true
+
 func test_an_enemy_faces_the_way_it_travels() -> bool:
 	var e := _ready_enemy()
+	e.setup(&"slime", _straight_path(), 1)
 	var sprite: Sprite2D = e.get_node("Sprite")
 	e.set_facing_from_travel(true)
 	var left := sprite.flip_h
@@ -2215,26 +2272,99 @@ func test_the_declared_variant_count_matches_what_was_baked() -> bool:
 	return true
 
 func test_death_despawns_after_the_tween_rather_than_an_animation() -> bool:
-	var e := _ready_enemy()
 	assert_true(Enemy.DEATH_TWEEN_MS > 0.0, "the death tween has a duration")
 	assert_true(Enemy.DEATH_TWEEN_MS < 1000.0,
 		"and it is short enough not to hold a kill on screen")
+	return true
+
+func test_a_lethal_hit_off_the_tree_still_pays_and_hides_the_bar() -> bool:
+	# Every enemy this suite builds is outside the scene tree (see this file's
+	# header), and create_tween() requires one. _die must reach everything the
+	# sim observes before it gives up on the presentation.
+	var e := _ready_enemy()
+	e.setup(&"slime", _straight_path(), 1)
+	var captured := {"count": 0}
+	e.died.connect(func(_v, _k): captured["count"] += 1)
+	e.take_damage({"damage": 999.0})
+	assert_eq(captured["count"], 1, "died fired on the lethal hit")
+	assert_true(e.sim["dying"], "the enemy is marked dying")
+	assert_false(e.sim["alive"], "and no longer alive")
+	assert_false(e._health_bar.visible, "the health bar is hidden")
 	e.free()
 	return true
 ```
 
-`_ready_enemy_with_seed` is a new helper in this file: build an enemy the way `_ready_enemy` does but pass an `Rng` seeded with the given value.
-
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `godot --headless --quit --script test/run_tests.gd`
-Expected: FAIL — the scene still holds an `AnimatedSprite2D` and none of the new methods exist.
 
-- [ ] **Step 3: Rewrite the enemy view**
+Expected: FAIL — the scene still holds an `AnimatedSprite2D`, `setup` takes three arguments, and none of `variant_count`, `sprite_px`, `set_facing_from_travel`, `apply_sprite_height` or `DEATH_TWEEN_MS` exist.
 
-In `game/enemy.tscn`, change the `Sprite` node's type from `AnimatedSprite2D` to `Sprite2D`, keeping `texture_filter = 1` — these sprites are still minified into the board and want the same filtering.
+- [ ] **Step 3: Rewrite the data tables**
 
-In `game/enemy.gd`, delete `_facing`, `_set_facing`, `_build_frames`, the `WALK_FPS`/`DEATH_FPS` constants and every `_sprite.play(...)` call, then add:
+In `data/enemies.gd`, replace each kind's `texture_key` and `sprite_scale` with `variant_count` and `sprite_px`, set every `flip_horizontally` to `false`, and leave every stat untouched:
+
+```gdscript
+const DEFS := {
+	&"slime": {
+		"label": "Slime", "base_speed": 100.0, "base_health": 5, "reward": 5,
+		"life_loss": 1, "variant_count": 15, "sprite_px": 34.0,
+		"flip_horizontally": false,
+	},
+	&"ogre": {
+		"label": "Ogre", "base_speed": 60.0, "base_health": 8, "reward": 20,
+		"life_loss": 5, "variant_count": 13, "sprite_px": 58.0,
+		"flip_horizontally": false,
+	},
+	&"bee": {
+		"label": "Bee", "base_speed": 150.0, "base_health": 3, "reward": 10,
+		"life_loss": 2, "variant_count": 3, "sprite_px": 28.0,
+		"flip_horizontally": false,
+	},
+}
+```
+
+Add the accessor:
+
+```gdscript
+## How many per-spawn variants this kind's art directory holds. Baked by
+## tools/bake_sheet.gd; pinned by test_enemy.gd against the files on disk, so a
+## re-bake that produces a different number cannot silently leave this table
+## pointing at a variant that is not there.
+static func variant_count(kind: StringName) -> int:
+	return int(DEFS[kind]["variant_count"])
+```
+
+Document the two replaced keys where the table sits:
+
+```gdscript
+## sprite_px is a displayed HEIGHT, not a scale factor. It replaced
+## sprite_scale, which only made sense against Kenney's uniform 48x48
+## animation frames: the illustrated variants are not a uniform size (goblins
+## 54-69 x 50-54, ogres 71-80 x 67-76, bats 94-105 x 41-47), so a fixed factor
+## drew the same kind at a different size from one spawn to the next. The
+## values preserve the sizes the Kenney art drew at - 33.6, 57.6 and 33.6px -
+## except the bat, which is naturally wide and is given a little less height
+## so it does not out-mass the tanky kind.
+##
+## flip_horizontally is false for all three because all three faces on this
+## sheet point right. It stays in the table because it is a property of the
+## ART, and the next sheet may not agree with this one.
+```
+
+Add to `data/seeds.gd`:
+
+```gdscript
+## Which variant each spawn draws. Separate from the decoration seed so enemy
+## variety does not move when scenery does.
+const DEFAULT_SPAWN_SEED := 20260822
+```
+
+- [ ] **Step 4: Rewrite the enemy view**
+
+In `game/enemy.tscn`, change the `Sprite` node's type from `AnimatedSprite2D` to `Sprite2D`, keeping `texture_filter = 1`.
+
+In `game/enemy.gd`, delete `_facing`, `_set_facing`, `_play_walk`, `_build_frames`, and the `FRAME_SIZE`, `FRAMES_PER_SHEET`, `WALK_FPS` and `DEATH_FPS` constants. Update the class docstring's "owns an animated sprite" to "owns a sprite". Then add:
 
 ```gdscript
 ## How long a kill takes to leave the screen.
@@ -2253,23 +2383,37 @@ const DEATH_TWEEN_MS := 250.0
 const BOB_PIXELS := 2.0
 const BOB_HZ := 5.0
 
-var _variant: Texture2D = null
 var _bob_clock := 0.0
 var _flip := false
 ```
 
-In `setup`, pick the variant from the passed `Rng` so a run stays reproducible:
+Change `setup`'s signature to `func setup(enemy_kind: StringName, path: PackedVector2Array, wave: int, rng: Rng = null) -> void`, and replace the two `_sprite` lines at its end with:
 
 ```gdscript
 	# One of this kind's variants, chosen per spawn. A wave of eight shows
-	# eight subtly different creatures rather than eight identical ones.
-	var count := Enemies.variant_count(kind)
-	_variant = load("res://assets/art/enemies/%s/variant_%d.png"
-		% [kind, rng.int_range(0, count - 1)])
-	_sprite.texture = _variant
+	# eight subtly different creatures rather than eight identical ones. The
+	# default keeps the three-argument call sites working and keeps a spawn
+	# reproducible either way.
+	if rng == null:
+		rng = Rng.new(Seeds.DEFAULT_SPAWN_SEED)
+	_sprite.texture = load("res://assets/art/enemies/%s/variant_%d.png"
+		% [kind, rng.int_range(0, Enemies.variant_count(kind) - 1)])
+	apply_sprite_height()
 ```
 
-Replace `_set_facing` with a flip that honours the existing per-kind override:
+```gdscript
+## Scales the current variant to the kind's declared displayed height.
+##
+## Derived per sprite rather than fixed, because the variants are not a
+## uniform size - see data/enemies.gd's note on sprite_px. Uniform on both
+## axes: these are creatures, and a stretched one reads as a bug.
+func apply_sprite_height() -> void:
+	var factor := float(Enemies.DEFS[kind]["sprite_px"]) \
+		/ float(_sprite.texture.get_height())
+	_sprite.scale = Vector2.ONE * factor
+```
+
+Replace `_set_facing` with:
 
 ```gdscript
 ## Faces the way the enemy is travelling. Up and down both draw the side pose -
@@ -2284,23 +2428,33 @@ func set_facing_from_travel(moving_left: bool) -> void:
 	_sprite.flip_h = flip
 ```
 
-In `_physics_process`, after movement resolves, drive the bob and the facing:
+In `_physics_process`, keep the existing `advanced_waypoint` guard exactly where it is — a tick that advanced a waypoint covered no distance, so its reported direction comes from a sub-pixel delta and would make the sprite jitter — and drive the bob outside it:
 
 ```gdscript
-	set_facing_from_travel(bool(result["moving_left"]))
+	if not result["advanced_waypoint"]:
+		set_facing_from_travel(bool(result["moving_left"]))
+
 	_bob_clock += delta
 	_sprite.position.y = -absf(sin(_bob_clock * BOB_HZ * TAU)) * BOB_PIXELS
 ```
 
-Rewrite `_die` so the reward still fires exactly where it fires now — before anything visual — and only the despawn changes:
+Rewrite `_die` so everything the sim observes happens exactly where it happens now, and only the despawn changes:
 
 ```gdscript
 func _die(source: Dictionary) -> void:
 	sim["dying"] = true
 	sim["alive"] = false
-	# Emitted before the tween, unchanged: economy timing must not move
-	# because the death presentation changed.
+	# Emitted before the presentation, unchanged: economy timing must not move
+	# because the death animation became a tween.
 	died.emit(EconomySim.kill_reward(int(Enemies.DEFS[kind]["reward"]), source), kind)
+	_health_bar.visible = false
+	# Every enemy the test harness builds is outside the scene tree (see the
+	# header of test/test_enemy.gd) and create_tween() requires one. This is
+	# not a new limitation: today's `await _sprite.animation_finished` never
+	# resolves off-tree either, so nothing past this point has ever run in a
+	# test. Returning says so instead of parking a coroutine forever.
+	if not is_inside_tree():
+		return
 	var tween := create_tween()
 	tween.set_parallel(true)
 	tween.tween_property(self, "scale", Vector2.ONE * 0.6, DEATH_TWEEN_MS / 1000.0)
@@ -2309,25 +2463,41 @@ func _die(source: Dictionary) -> void:
 	queue_free()
 ```
 
-In `data/enemies.gd`, replace each kind's `texture_key` with `variant_count`, leaving every stat untouched, and add the accessor:
+- [ ] **Step 5: Give the board a spawn Rng**
+
+In `game/game_board.gd`, add the field and reset it where `_spawned` is reset at wave start:
 
 ```gdscript
-## How many per-spawn variants this kind's art directory holds. Baked by
-## tools/bake_sheet.gd; pinned by test_enemy_sprites.gd so a re-bake that
-## produces fewer cannot silently narrow the variety.
-static func variant_count(kind: StringName) -> int:
-	return int(DEFS[kind]["variant_count"])
+## Which variant each spawn draws. Reset per wave so replaying a wave shows
+## the same creatures, and separate from every other random system so enemy
+## variety does not move when they do.
+var _spawn_rng := Rng.new(Seeds.DEFAULT_SPAWN_SEED)
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+```gdscript
+	_spawn_rng = Rng.new(Seeds.DEFAULT_SPAWN_SEED)
+```
+
+and pass it in `_spawn`:
+
+```gdscript
+	enemy.setup(kind, _paths[0], _wave, _spawn_rng)
+```
+
+- [ ] **Step 6: Run tests to verify they pass**
 
 Run: `godot --headless --quit --script test/run_tests.gd`
-Expected: PASS. `test/test_harness.gd` and the wave tests must stay green — the sim never knew about animations, so nothing there should move.
 
-- [ ] **Step 5: Commit**
+Expected: PASS. `test/test_harness.gd` and the wave tests must stay green — the sim never knew about animations, so nothing there should move. `test/test_game_board.gd` deals a lethal hit to an off-tree enemy; that path is covered by `_die`'s tree guard.
+
+- [ ] **Step 7: Look at a wave**
+
+Run the project and watch a wave. Confirm the enemies face the way they travel, that a wave shows visibly different creatures rather than one repeated, that the bob reads as motion rather than vibration, and that a kill fades out rather than vanishing. Note the on-screen sizes against each other — `sprite_px` is the one value here chosen to preserve a previous look rather than measured from the art, and this is where it gets judged.
+
+- [ ] **Step 8: Commit**
 
 ```bash
-git add game/enemy.gd game/enemy.tscn data/enemies.gd test/test_enemy.gd
+git add game/enemy.gd game/enemy.tscn game/game_board.gd data/enemies.gd data/seeds.gd test/test_enemy.gd
 git commit -m "Draw enemies as per-spawn variants with procedural motion"
 ```
 
