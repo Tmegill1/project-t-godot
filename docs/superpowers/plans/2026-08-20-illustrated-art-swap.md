@@ -1825,13 +1825,7 @@ git commit -m "Cut props per biome and compose the endpoint markers"
 - Test: `test/test_map_renderer.gd`
 - Test: `test/test_biomes.gd`
 
-**Repoint the endpoint preloads in this task.** `game/map_renderer.gd:9-10`
-preloads `_CASTLE` and `_CAVE` from `res://assets/kenney/`. Task 5 wrote the
-replacements to `res://assets/art/`, and Task 9 deletes the Kenney directory —
-so leaving these would turn a `preload` into a parse error and take the whole
-suite down as a load failure rather than a test failure. Change both constants
-to `res://assets/art/castle.png` and `res://assets/art/cave.png`;
-`_draw_endpoints`'s body does not change.
+**Repoint the endpoint preloads in this task.** `game/map_renderer.gd:9-10` preloads `_CASTLE` and `_CAVE` from `res://assets/kenney/`. Task 5 wrote the replacements to `res://assets/art/`, and Task 9 deletes the Kenney directory — so leaving these would turn a `preload` into a parse error and take the whole suite down as a load failure rather than a test failure. Change both constants to `res://assets/art/castle.png` and `res://assets/art/cave.png`; `_draw_endpoints`'s body does not change.
 
 **Interfaces:**
 - Consumes: the ground and road assets from Tasks 1 and 2.
@@ -1839,13 +1833,22 @@ to `res://assets/art/castle.png` and `res://assets/art/cave.png`;
 
 **This deletes the corner-mask lattice.** `MapRenderer._draw_ground` currently samples terrain at tile centres over a `(cols + 1) × (rows + 1)` grid offset by half a tile, and `corner_mask` supports it. Both go. The replacement draws **one sprite per tile on the tile grid** — no offset, no extra row or column.
 
-**The mask is edges, not corners.** For each cell, which of its four orthogonal neighbours is road: `N=1, E=2, S=4, W=8`. Out of bounds is not road.
+**The mask is edges, not corners.** For each cell, which of its four orthogonal neighbours is road: `N=1, E=2, S=4, W=8`. Out of bounds is not road. `MapRenderer._is_road` already has exactly these semantics and does not change.
 
-**Rotation covers the pieces the sheet does not ship.** Only masks 0, 3, 5, 7 and 15 exist as files; the rest are those five rotated. `rotate_mask(m, k) = ((m << k) | (m >> (4 - k))) & 15`.
+**All sixteen road masks exist as files, so there is no rotation.** An earlier version of this task loaded one of five base pieces and rotated it onto the cell's mask. That was written before Task 2's ruling to compose every mask from the cross, and it is not merely redundant now — it is wrong twice over:
+
+- Rotating `{0, 3, 5, 7, 15}` reaches only twelve of the sixteen masks. The four dead ends — 1, 2, 4 and 8 — are unreachable, because a single-bit mask has no rotation from a two-, three- or four-bit one. **The demo map contains masks 2 and 8**, at the spawn and the goal, where the road enters from exactly one side. Both cells would have fallen through to the `push_error` and drawn nothing.
+- The pieces are 66 × 63, not square, so a 90° rotation would not fit the cell it was drawn into.
+
+The road piece for a cell is `road_%02d.png` for that cell's mask. Measured, the demo map uses masks 2, 3, 5, 6, 8, 9, 10 and 12.
+
+**Ground and road tiles are STRETCHED to the tile, not aspect-fitted.** `_place` fits a source inside a square box preserving aspect and centres it in the slack — which is right for props and wrong for tiles. The road pieces are 66 × 63 and `ground_5` is 65 × 66, so aspect-fitting leaves a 2.2px transparent gap under every road tile and a hairline beside that one ground tile: seams, in the layer whose whole job is to have none. A tile is a cell of a grid and has to fill its cell exactly. The distortion is 4.7% on the roads and under 2% on the ground, and it is what the Phaser reference did for every sprite.
+
+Props keep `_place`. `prop_footprints` derives a blocking radius from displayed size and its doc comment says in as many words that this only measures correctly because `_place` scales uniformly — so the new path must be a separate function, not a flag on that one.
 
 - [ ] **Step 1: Write the failing tests**
 
-In `test/test_map_renderer.gd`, delete every test that references `corner_mask` or the half-tile lattice, change the four prop path constants to `res://assets/art/forest/*.png`, and add:
+In `test/test_map_renderer.gd`, delete the tests that describe the lattice — `test_ground_layer_has_one_sprite_per_lattice_point`, `test_ground_sprites_are_offset_half_a_tile_so_roads_sit_on_tile_centres`, `test_the_corner_mask_reads_road_from_the_four_surrounding_tile_centres`, `test_spawn_and_goal_tiles_count_as_road_for_the_lattice`, `test_the_demo_map_never_needs_a_diagonal_blend_tile`, `test_every_ground_sprite_uses_the_texture_its_mask_names` and `test_square_ground_tiles_take_zero_slack_from_the_tile_box` — change the four prop path constants to `res://assets/art/forest/*.png`, and add:
 
 ```gdscript
 func test_the_ground_layer_has_one_sprite_per_tile() -> bool:
@@ -1880,6 +1883,14 @@ func test_the_edge_mask_reads_the_four_orthogonal_neighbours() -> bool:
 	tiles[1][2] = Tiles.PATH
 	renderer.render(tiles, Rng.new(1), &"forest")
 	assert_eq(renderer.edge_mask(1, 1), 2, "a road neighbour to the east sets bit 2")
+	tiles[1][2] = Tiles.BUILDABLE
+	tiles[2][1] = Tiles.PATH
+	renderer.render(tiles, Rng.new(1), &"forest")
+	assert_eq(renderer.edge_mask(1, 1), 4, "a road neighbour to the south sets bit 4")
+	tiles[2][1] = Tiles.BUILDABLE
+	tiles[1][0] = Tiles.PATH
+	renderer.render(tiles, Rng.new(1), &"forest")
+	assert_eq(renderer.edge_mask(1, 1), 8, "a road neighbour to the west sets bit 8")
 	renderer.free()
 	return true
 
@@ -1897,11 +1908,11 @@ func test_spawn_and_goal_count_as_road() -> bool:
 	var renderer := MapRenderer.new()
 	var tiles: Array = [[Tiles.SPAWN, Tiles.PATH, Tiles.GOAL]]
 	renderer.render(tiles, Rng.new(1), &"forest")
-	assert_eq(renderer.edge_mask(1, 0), 2 | 8, "spawn to the west and goal to the east both count")
-	renderer.free()
+	assert_eq(renderer.edge_mask(1, 0), 2 | 8,
+		"spawn to the west and goal to the east both count")
 	return true
 
-func test_every_road_cell_draws_a_piece_whose_mask_matches_after_rotation() -> bool:
+func test_every_road_cell_draws_the_piece_its_mask_names() -> bool:
 	var renderer := MapRenderer.new()
 	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
 	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
@@ -1914,15 +1925,72 @@ func test_every_road_cell_draws_a_piece_whose_mask_matches_after_rotation() -> b
 			continue
 		var c := int(sprite.position.x / Tiles.TILE_SIZE)
 		var r := int(sprite.position.y / Tiles.TILE_SIZE)
-		var wanted := renderer.edge_mask(c, r)
-		var base := int(sprite.texture.resource_path.get_file().get_basename().split("_")[1])
-		var turns := int(round(sprite.rotation / (PI / 2.0))) % 4
-		var rotated := ((base << turns) | (base >> (4 - turns))) & 15
-		assert_eq(rotated, wanted,
-			"the piece at (%d, %d) rotates onto its cell's mask" % [c, r])
+		var named := int(sprite.texture.resource_path.get_file().get_basename().split("_")[1])
+		assert_eq(named, renderer.edge_mask(c, r),
+			"the piece at (%d, %d) is the one its mask names" % [c, r])
 		checked += 1
 	assert_true(checked > 0, "road cells were checked")
 	renderer.free()
+	return true
+
+func test_the_demo_map_needs_the_dead_end_pieces() -> bool:
+	# The reason there is no rotation. Rotating the five pieces the sheet
+	# itself draws reaches twelve of the sixteen masks; the four dead ends
+	# (1, 2, 4, 8) are unreachable from them, and the demo map has two - the
+	# spawn and the goal, where the road enters from one side only. This test
+	# fails the day someone reintroduces a rotation scheme.
+	var renderer := MapRenderer.new()
+	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
+	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
+	var dead_ends := 0
+	for r in DemoMap.GRID_ROWS:
+		for c in DemoMap.GRID_COLS:
+			if tiles[r][c] in Tiles.WALKABLE and renderer.edge_mask(c, r) in [1, 2, 4, 8]:
+				dead_ends += 1
+	assert_eq(dead_ends, 2, "the demo map's road has two dead ends")
+	renderer.free()
+	return true
+
+func test_ground_and_road_tiles_fill_their_cell_exactly() -> bool:
+	# Replaces test_square_ground_tiles_take_zero_slack_from_the_tile_box,
+	# whose premise was that every ground source is square. The illustrated
+	# road pieces are 66x63, so aspect-fitting them leaves a 2.2px transparent
+	# gap under every road tile - seams, in the layer whose whole job is to
+	# have none. The property worth keeping is unchanged and is stated more
+	# directly here: a tile lands on its cell's origin and covers the cell.
+	var renderer := MapRenderer.new()
+	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
+	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
+	var box := float(Tiles.TILE_SIZE)
+	var checked := 0
+	for child in renderer.get_children():
+		if not (child is Sprite2D) or child.z_index != -1:
+			continue
+		var sprite: Sprite2D = child
+		var tex: Texture2D = sprite.texture
+		var display := Vector2(tex.get_width(), tex.get_height()) * sprite.scale
+		assert_almost_eq(display.x, box, 0.01, "a tile is exactly one cell wide")
+		assert_almost_eq(display.y, box, 0.01, "a tile is exactly one cell tall")
+		var c := int(round(sprite.position.x / box))
+		var r := int(round(sprite.position.y / box))
+		assert_eq(sprite.position, Vector2(c * box, r * box),
+			"a tile lands on its cell's origin")
+		checked += 1
+	assert_true(checked > 0, "tiles were checked")
+	renderer.free()
+	return true
+
+func test_a_non_square_tile_source_is_the_case_this_covers() -> bool:
+	# The precondition the test above rests on. If every source were square,
+	# stretching and aspect-fitting would be the same thing and the seam this
+	# task fixes could not occur.
+	var bytes := FileAccess.get_file_as_bytes("res://assets/art/forest/road_10.png")
+	assert_false(bytes.is_empty(), "a road piece exists to measure")
+	var img := Image.new()
+	assert_eq(img.load_png_from_buffer(bytes), OK, "the road piece decodes")
+	assert_false(img.get_width() == img.get_height(),
+		"the road pieces are genuinely non-square (%dx%d)"
+			% [img.get_width(), img.get_height()])
 	return true
 ```
 
@@ -1931,10 +1999,10 @@ In `test/test_biomes.gd`, replace the blend-mask test with:
 ```gdscript
 func test_every_biome_resolves_its_ground_and_road_pieces() -> bool:
 	for biome in Biomes.KINDS:
-		for i in 6:
+		for i in Biomes.GROUND_VARIANTS:
 			assert_true(ResourceLoader.exists(Biomes.ground_path(biome, i)),
 				"%s ground %d resolves" % [biome, i])
-		for mask in [0, 3, 5, 7, 15]:
+		for mask in 16:
 			assert_true(ResourceLoader.exists(Biomes.road_path(biome, mask)),
 				"%s road %d resolves" % [biome, mask])
 	return true
@@ -1943,28 +2011,34 @@ func test_every_biome_resolves_its_ground_and_road_pieces() -> bool:
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `godot --headless --quit --script test/run_tests.gd`
+
 Expected: FAIL — `edge_mask`, `ground_path` and `road_path` do not exist.
 
 - [ ] **Step 3: Rewrite the biome accessors**
 
-In `data/biomes.gd`, replace `blend_path` with:
+In `data/biomes.gd`, point each biome's `dir` at `res://assets/art/<biome>`, delete `blend_path`, `DIAGONAL_MASKS` and `DIAGONAL_FALLBACK`, and add:
 
 ```gdscript
 ## Returns a path, never a loaded resource. data/ is held engine-free by
-## test/test_sim_purity.gd; the render layer loads.
+## test/test_sim_purity.gd, whose docstring explains that resource loading
+## breaks the headless claim the whole harness rests on. The render layer
+## loads; this module only names.
 static func ground_path(biome: StringName, index: int) -> String:
 	return "%s/ground_%d.png" % [DEFS[biome]["dir"], index]
 
 static func road_path(biome: StringName, mask: int) -> String:
 	return "%s/road_%02d.png" % [DEFS[biome]["dir"], mask]
 
-## The five masks the sheet ships as files. Every other mask is one of these
-## rotated - see MapRenderer._draw_ground.
-const ROAD_BASE_MASKS: Array[int] = [0, 3, 5, 7, 15]
+## Ground variants per biome, and every one of the sixteen edge masks as a
+## road piece. There is no fallback and no rotation: the bake composes all
+## sixteen from the sheet's cross, so every mask a map can produce has a file
+## - including the four dead ends, which no rotation of the pieces the sheet
+## itself draws can reach.
 const GROUND_VARIANTS := 6
+const ROAD_MASKS := 16
 ```
 
-Point each biome's `dir` at `res://assets/art/<biome>`.
+Delete the `DIAGONAL_MASKS` comment block with it: it described a Kenney blob tileset that omitted the diagonal-only pairing, and neither the tileset nor the omission survives this swap.
 
 - [ ] **Step 4: Rewrite the ground layer**
 
@@ -1978,18 +2052,28 @@ In `game/map_renderer.gd`, delete `corner_mask` and rewrite `_draw_ground`:
 ## previous art blended between terrains; this art does not - its cells are
 ## discrete cards and its road pieces are shapes. An edge mask over orthogonal
 ## neighbours is the simpler thing that this art actually wants.
+##
+## Ground variety is drawn from its own Rng rather than the decoration one.
+## Which of the six ground cards a tile gets is cosmetic and should not move
+## when the decoration seed changes; drawing from the passed rng here would
+## also shift the whole decoration stream, since _draw_ground runs first.
 func _draw_ground() -> void:
+	var variants := Rng.new(Seeds.DEFAULT_GROUND_SEED)
 	for r in _rows:
 		for c in _cols:
+			# load() rather than a texture from Biomes: data/ is held
+			# engine-free by test_sim_purity.gd, so the render layer is where
+			# a path becomes a resource. Godot's ResourceLoader caches by
+			# path, so the repeated calls are dictionary hits.
 			if _is_road(c, r):
-				_place_road(c, r)
+				_place_tile(load(Biomes.road_path(_biome, edge_mask(c, r))), c, r)
 			else:
-				var variant := _ground_rng.int_range(0, Biomes.GROUND_VARIANTS - 1)
-				_place(load(Biomes.ground_path(_biome, variant)), c, r,
-					Tiles.TILE_SIZE, _Z_GROUND)
+				_place_tile(load(Biomes.ground_path(
+					_biome, variants.int_range(0, Biomes.GROUND_VARIANTS - 1))), c, r)
 
 ## The four orthogonal neighbours of a cell that are road, as a bitmask.
 ## Bit order is fixed: N=1, E=2, S=4, W=8. Out of bounds is not road.
+## Public so tests can assert the mask without inspecting sprites.
 func edge_mask(c: int, r: int) -> int:
 	var mask := 0
 	if _is_road(c, r - 1):
@@ -2002,44 +2086,59 @@ func edge_mask(c: int, r: int) -> int:
 		mask |= 8
 	return mask
 
-func _is_road(c: int, r: int) -> bool:
-	if r < 0 or r >= _rows or c < 0 or c >= _cols:
-		return false
-	return _tiles[r][c] in Tiles.WALKABLE
-
-## Places the road piece for a cell, rotating a base piece onto its mask.
+## Draws a ground or road tile STRETCHED to fill its cell exactly.
 ##
-## The sheet ships only five of the sixteen masks; the rest are those rotated,
-## which is why the piece is chosen by search rather than by table. Rotating a
-## 4-bit ring is a shift with wraparound.
-func _place_road(c: int, r: int) -> void:
-	var wanted := edge_mask(c, r)
-	for base in Biomes.ROAD_BASE_MASKS:
-		for turns in 4:
-			if ((base << turns) | (base >> (4 - turns))) & 15 == wanted:
-				var sprite := _place(load(Biomes.road_path(_biome, base)), c, r,
-					Tiles.TILE_SIZE, _Z_GROUND)
-				# Rotate about the cell's centre: _place anchors top-left.
-				sprite.offset = -Vector2(sprite.texture.get_width(),
-					sprite.texture.get_height()) / 2.0
-				sprite.position += Vector2(Tiles.TILE_SIZE, Tiles.TILE_SIZE) / 2.0
-				sprite.rotation = float(turns) * PI / 2.0
-				return
-	# Unreachable: masks 0, 3, 5, 7 and 15 rotate onto all sixteen.
-	push_error("no road piece rotates onto mask %d" % wanted)
+## Deliberately not _place. A tile is a cell of a grid and has to cover its
+## cell; _place fits a source inside the box preserving aspect and centres it
+## in the slack, which is right for a prop and opens seams here - the road
+## pieces are 66x63, so aspect-fitting leaves 2.2px of transparency under
+## every one of them. The distortion this trades for is 4.7% on the roads and
+## under 2% on the ground.
+##
+## prop_footprints reads displayed size to derive a blocking radius and its
+## doc comment says that only measures correctly because _place scales
+## uniformly. That stays true: props still go through _place, and nothing
+## drawn here is ever recorded as a prop.
+func _place_tile(texture: Texture2D, col: int, row: int) -> Sprite2D:
+	var s := Sprite2D.new()
+	s.texture = texture
+	s.centered = false
+	s.position = Vector2(col * Tiles.TILE_SIZE, row * Tiles.TILE_SIZE)
+	s.scale = Vector2(
+		float(Tiles.TILE_SIZE) / float(texture.get_width()),
+		float(Tiles.TILE_SIZE) / float(texture.get_height()))
+	# Same reasoning as _place: this art is painted, not pixel art, and every
+	# tile is minified from 66px into 48px.
+	s.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	s.z_index = _Z_GROUND
+	add_child(s)
+	return s
 ```
 
-Add a `_ground_rng` field seeded in `render` from the passed `Rng`, so ground variant choice is reproducible.
+`_is_road` stays exactly as it is — its semantics already match, and its doc comment ("out of bounds reads as ground") is still true. Replace only the sentence about closing the lattice.
+
+Add to `data/seeds.gd`:
+
+```gdscript
+## Which of the six ground cards each tile gets. Separate from the decoration
+## seed so ground variety does not move when decoration does.
+const DEFAULT_GROUND_SEED := 20260821
+```
 
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `godot --headless --quit --script test/run_tests.gd`
-Expected: PASS.
 
-- [ ] **Step 6: Commit**
+Expected: PASS. Other tests in `test/test_map_renderer.gd` count sprites or read positions and may need their expectations updated for the new grid — that is in scope for this task. Do not weaken an assertion to make it pass; if one cannot be updated truthfully, stop and report.
+
+- [ ] **Step 6: Look at the map**
+
+Render the forest map and look at it: `godot --headless` cannot screenshot, so run the project through the Godot MCP (`run_project`, then `game_screenshot`) or open it directly. Confirm the road is continuous with no transparent seams between tiles, that the spawn and goal cells draw a road piece rather than nothing, and that the ground cards tile without visible gaps.
+
+- [ ] **Step 7: Commit**
 
 ```bash
-git add game/map_renderer.gd data/biomes.gd test/test_map_renderer.gd test/test_biomes.gd
+git add game/map_renderer.gd data/biomes.gd data/seeds.gd test/test_map_renderer.gd test/test_biomes.gd
 git commit -m "Draw the road from an edge mask and drop the corner lattice"
 ```
 
