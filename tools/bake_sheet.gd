@@ -68,6 +68,7 @@ func _init() -> void:
 	sheet.convert(Image.FORMAT_RGBA8)
 	_bake_ground(sheet)
 	_bake_roads(sheet)
+	_bake_tower_atlas(sheet)
 	print("bake_sheet: done")
 	quit()
 
@@ -270,3 +271,147 @@ func _bake_roads(sheet: Image) -> void:
 			_recolour_road(piece, ROAD_PALETTES[biome]).save_png(
 				"%s/road_%02d.png" % [dir, int(mask)])
 		print("bake_sheet: %s roads x%d" % [biome, ROAD_MASKS.size()])
+
+const ATLAS_COLUMNS := 5
+const ATLAS_ROWS := 4
+const ATLAS_FRAME := 96
+const ATLAS_INSET := 6
+
+## The rows the tower art occupies, below the "LVL n" captions and above the
+## rule that closes the panel.
+##
+## MEASURED. Every tower panel's row profile is the same four runs: a rule at
+## 8..10, the panel heading at 19..34, the captions at 46..60, and the art at
+## 63..211. An earlier version of this pair started the band at 40 and ran 165
+## rows, which swallowed the captions and left _isolate_centre to strip them.
+## It cannot: the vertical rules dividing the panels (x = 8..10, 429..430,
+## 862..864, 1233..1235, 1526..1527) are opaque at every row of the band, so
+## in any crop that touches one, no row is ever fully transparent and the
+## search for a separator under the caption never terminates anywhere useful.
+## Two of the sixteen frames baked their "LVL 4" caption into the sprite.
+const TOWER_BAND_Y := 63
+const TOWER_BAND_H := 149
+
+## kind -> the five x boundaries cutting its panel into four level cells.
+##
+## MEASURED from the captions, not read off the image. The caption row
+## segments cleanly into four runs in every panel and each caption is centred
+## over its tower; the tower art does not segment, because the Mage and
+## Barracks towers touch. So the cuts are the midpoints between consecutive
+## caption centres, bounded by the panel's own vertical rules. Two earlier
+## versions of this table listed x offsets read by eye and both were wrong -
+## the first by up to 19px, and both misplaced the Archer panel by about 15px.
+##
+## The sheet's tower types map onto the game's kinds by role: Archer is the
+## cheap all-rounder, Cannon the fast one, Mage the splash one, Barracks the
+## long-range one.
+const TOWER_CELLS := {
+	&"basic": [11, 108, 208, 308, 428],
+	&"fast": [431, 541, 644, 747, 861],
+	&"mortar": [865, 964, 1054, 1142, 1232],
+	&"long": [1236, 1310, 1378, 1451, 1524],
+}
+
+## Clears anything separated from the cell's centre by a fully transparent
+## column or row.
+##
+## Even cut on the caption midpoints, a cell can catch a disconnected sliver of
+## its neighbour - the Cannon panel's first three levels each do. That matters
+## because _trim takes the alpha bounding box of ALL content, so one stray
+## sliver at the edge stretches the box and the sprite lands wrong in its
+## frame. Walking out from the centre to the first empty line keeps only the
+## tower this cell is about.
+##
+## This works here and did not before only because TOWER_BAND_Y now starts
+## below the captions: the crop no longer contains a panel rule, so its rows
+## can actually be empty.
+func _isolate_centre(img: Image) -> Image:
+	var w := img.get_width()
+	var h := img.get_height()
+	var out: Image = img.duplicate()
+	var cx := w / 2
+	var cy := h / 2
+	var empty_col := func(x: int) -> bool:
+		for y in h:
+			if img.get_pixel(x, y).a > 8.0 / 255.0:
+				return false
+		return true
+	var empty_row := func(y: int) -> bool:
+		for x in w:
+			if img.get_pixel(x, y).a > 8.0 / 255.0:
+				return false
+		return true
+	var left := 0
+	for x in range(cx, -1, -1):
+		if empty_col.call(x):
+			left = x
+			break
+	var right := w - 1
+	for x in range(cx, w):
+		if empty_col.call(x):
+			right = x
+			break
+	var top := 0
+	for y in range(cy, -1, -1):
+		if empty_row.call(y):
+			top = y
+			break
+	var bottom := h - 1
+	for y in range(cy, h):
+		if empty_row.call(y):
+			bottom = y
+			break
+	for y in h:
+		for x in w:
+			if x < left or x > right or y < top or y > bottom:
+				out.set_pixel(x, y, Color(0, 0, 0, 0))
+	return out
+
+## One level cut from its panel, keyed, isolated and trimmed.
+func _tower_sprite(sheet: Image, kind: StringName, level: int) -> Image:
+	var cuts: Array = TOWER_CELLS[kind]
+	var x: int = int(cuts[level])
+	var width: int = int(cuts[level + 1]) - x
+	var region := Image.create_empty(width, TOWER_BAND_H, false, Image.FORMAT_RGBA8)
+	region.blit_rect(sheet, Rect2i(x, TOWER_BAND_Y, width, TOWER_BAND_H), Vector2i.ZERO)
+	return _trim(_isolate_centre(_key(region)))
+
+func _bake_tower_atlas(sheet: Image) -> void:
+	# Cut all sixteen before resizing any of them: they share one scale factor,
+	# so the largest has to be known first.
+	var sprites := {}
+	var largest := 1
+	for kind in TOWER_CELLS:
+		var levels: Array[Image] = []
+		for level in 4:
+			var sprite := _tower_sprite(sheet, kind, level)
+			levels.append(sprite)
+			largest = maxi(largest, maxi(sprite.get_width(), sprite.get_height()))
+		sprites[kind] = levels
+	# One factor across all sixteen rather than one per sprite. Fitting each
+	# sprite to the frame on its own longest dimension throws away the upgrade
+	# read: a level that grows taller faster than it grows wider absorbs the
+	# extra height into a smaller scale and lands *smaller* than the level
+	# below it. The four kinds' own fit factors land between 0.60 and 0.66 -
+	# the sheet already draws every tower at one world scale.
+	#
+	# The inset is what keeps the largest sprite off its frame's edges; every
+	# other sprite clears them by more.
+	var factor := float(ATLAS_FRAME - ATLAS_INSET * 2) / float(largest)
+	var out := Image.create_empty(
+		ATLAS_COLUMNS * ATLAS_FRAME, ATLAS_ROWS * ATLAS_FRAME, false, Image.FORMAT_RGBA8)
+	out.fill(Color(0, 0, 0, 0))
+	for kind in TOWER_CELLS:
+		var frames: Array = Towers.DEFS[kind]["upgrade_frames"]
+		for level in 4:
+			var sprite: Image = sprites[kind][level]
+			sprite.resize(maxi(1, int(sprite.get_width() * factor)),
+				maxi(1, int(sprite.get_height() * factor)), Image.INTERPOLATE_LANCZOS)
+			var frame: int = int(frames[level])
+			var ox := (frame % ATLAS_COLUMNS) * ATLAS_FRAME
+			var oy := (frame / ATLAS_COLUMNS) * ATLAS_FRAME
+			var at := Vector2i(ox + (ATLAS_FRAME - sprite.get_width()) / 2,
+				oy + (ATLAS_FRAME - sprite.get_height()) / 2)
+			out.blend_rect(sprite, Rect2i(Vector2i.ZERO, sprite.get_size()), at)
+	out.save_png("res://assets/towers.png")
+	print("bake_sheet: tower atlas")
