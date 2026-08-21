@@ -350,7 +350,7 @@ extends TestCase
 # other piece precisely because it is manufactured.
 
 const _BIOMES := ["forest", "desert", "ice"]
-const _MASKS := [0, 3, 5, 7, 15]
+const _MASKS := [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
 
 func _road(biome: String, mask: int) -> Image:
 	var bytes := FileAccess.get_file_as_bytes(
@@ -411,7 +411,7 @@ func test_each_piece_connects_exactly_where_its_name_says() -> bool:
 	for biome in _BIOMES:
 		for mask in _MASKS:
 			if mask == 0 or mask == 15:
-				continue  # solid and cross are uniform; the edge probe cannot separate them
+				continue  # no arms and all arms: the edge probe cannot separate them
 			var img := _road(biome, mask)
 			assert_true(img != null, "%s/road_%02d.png decodes" % [biome, mask])
 			if img == null:
@@ -468,124 +468,128 @@ Add to `tools/bake_sheet.gd`:
 ```gdscript
 ## The path row. There is only ONE - the terrain block's four rows are GRASS,
 ## PATH, DESERT and ICE, and only PATH holds road pieces; the other three are
-## ground variants. Desert and ice roads are therefore RECOLOURED from these,
-## not cut from their own rows.
+## ground variants. Desert and ice roads are RECOLOURED from this row.
 ##
-## Origin follows the same 85px row cadence Task 1 established: grass 619,
-## path 704, desert 788, ice 873.
+## Origin follows the 85px row cadence Task 1 established: grass 619, path 704,
+## desert 788, ice 873. Slot 4 is the cross, and it is the ONLY slot used.
 const ROAD_ROW := {"x": 77, "y": 704}
-const ROAD_SLOTS_IN_ROW := 6
+const ROAD_CROSS_SLOT := 4
 
-## Where each biome's road and surround should land after recolouring.
-## Measured off the committed ground tiles: a biome's road keeps the sheet's
-## dirt except on ice, where a dirt track through a frozen field reads wrong.
+## Every road mask is composed from the cross by masking off the arms it does
+## not connect.
+##
+## WHY NOT USE THE SHEET'S OWN PIECES: the row holds a solid plaza, two curves,
+## a T and two crosses, and probing their edges at insets 10, 12 and 14 yields
+## only masks {5, 7, 15} every time - BOTH curves read as 7, not as corners.
+## Mask 3 is unreachable by rotating any of those, and the demo map has four
+## corners, so slot classification cannot draw the map at all. The cross has
+## four arms and surround material in all four corners, so mirroring a corner
+## over an absent arm produces any of the sixteen masks from one source piece.
+## Verified by composing all of them and looking.
+const ROAD_MASKS := [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+
+## Where each biome's road and surround land after recolouring. Measured off
+## the committed ground tiles. Ice recolours the road too: a dirt track across
+## a frozen field reads wrong.
 const ROAD_PALETTES := {
 	&"forest": {"surround": Color8(88, 101, 14), "road": Color8(132, 103, 39)},
 	&"desert": {"surround": Color8(170, 123, 62), "road": Color8(132, 103, 39)},
 	&"ice": {"surround": Color8(91, 145, 190), "road": Color8(200, 220, 235)},
 }
 
-## Source materials in the grass row, measured by clustering a solid piece.
-const SOURCE_SURROUND := Vector3(53.0, 65.9, 14.4)
+## The two materials in the grass row, measured by clustering a solid piece.
+const SOURCE_SURROUND := Vector3(53.2, 65.9, 14.4)
 const SOURCE_ROAD := Vector3(131.8, 102.8, 39.0)
 
-## Mask 5 (north-south straight) has no piece on the sheet and is composed
-## from the cross.
-const ROAD_COMPOSED_STRAIGHT := 5
-
-## Which edges of a piece are road, as a mask. N=1, E=2, S=4, W=8.
+## Builds one mask by masking the cross's absent arms with adjacent corner
+## material, then softening the paste seams.
 ##
-## DERIVED, never tabulated. A hand-written slot-to-mask table for this sheet
-## has been wrong three times; this samples each edge's midpoint band well
-## inside the card border, where the material is unambiguous, and the test
-## re-derives the same property from the committed bytes.
-func _road_mask(piece: Image) -> int:
-	var w := piece.get_width()
-	var h := piece.get_height()
-	var inset := maxi(6, mini(w, h) / 5)
-	var probes := {
-		1: [Vector2i(w / 2, inset)],
-		2: [Vector2i(w - inset, h / 2)],
-		4: [Vector2i(w / 2, h - inset)],
-		8: [Vector2i(inset, h / 2)],
-	}
-	var mask := 0
-	for bit in probes:
-		var p: Vector2i = probes[bit][0]
-		var acc := Vector3.ZERO
-		var n := 0
-		for dy in range(-3, 4):
-			for dx in range(-3, 4):
-				var c := piece.get_pixel(
-					clampi(p.x + dx, 0, w - 1), clampi(p.y + dy, 0, h - 1))
-				if c.a > 0.5:
-					acc += Vector3(c.r, c.g, c.b) * 255.0
-					n += 1
-		if n == 0:
-			continue
-		var mean := acc / float(n)
-		if mean.distance_squared_to(SOURCE_ROAD) < mean.distance_squared_to(SOURCE_SURROUND):
-			mask |= int(bit)
-	return mask
+## The mirror is what keeps the patch in the piece's own palette and edging -
+## a flat fill would read as a hole. Bit order is N=1, E=2, S=4, W=8.
+func _compose_road(cross: Image, mask: int) -> Image:
+	var out: Image = cross.duplicate()
+	var n := out.get_width()
+	var arm := n / 3
+	if not mask & 1:
+		_patch_arm(out, cross, Rect2i(arm, 0, arm, arm), Rect2i(0, 0, arm, arm))
+	if not mask & 4:
+		_patch_arm(out, cross, Rect2i(arm, n - arm, arm, arm), Rect2i(0, n - arm, arm, arm))
+	if not mask & 8:
+		_patch_arm(out, cross, Rect2i(0, arm, arm, arm), Rect2i(0, 0, arm, arm))
+	if not mask & 2:
+		_patch_arm(out, cross, Rect2i(n - arm, arm, arm, arm), Rect2i(n - arm, 0, arm, arm))
+	_soften_seams(out)
+	return out
 
-## Shifts every pixel of one material toward a target colour, preserving its
-## own shading as an offset rather than flattening it to a flat fill.
-func _recolour(img: Image, source: Vector3, target: Color) -> Image:
+## Copies `from` (a corner of the cross) over `into` (an arm), mirrored so the
+## grass edging runs the right way.
+func _patch_arm(out: Image, cross: Image, into: Rect2i, from: Rect2i) -> void:
+	for y in into.size.y:
+		for x in into.size.x:
+			var src := cross.get_pixel(
+				from.position.x + mini(from.size.x - 1, x),
+				from.position.y + mini(from.size.y - 1, y))
+			out.set_pixel(into.position.x + x, into.position.y + y, src)
+
+## Averages each pixel with its neighbours where the composition left a hard
+## edge, so the pasted corners do not read as rectangles.
+func _soften_seams(img: Image) -> void:
+	var src: Image = img.duplicate()
+	var w := img.get_width()
+	var h := img.get_height()
+	for y in range(1, h - 1):
+		for x in range(1, w - 1):
+			var acc := Vector4.ZERO
+			for dy in range(-1, 2):
+				for dx in range(-1, 2):
+					var c := src.get_pixel(x + dx, y + dy)
+					acc += Vector4(c.r, c.g, c.b, c.a)
+			acc /= 9.0
+			var centre := src.get_pixel(x, y)
+			# Only where the neighbourhood disagrees with the centre - leaves
+			# flat interior material untouched.
+			if Vector3(centre.r, centre.g, centre.b).distance_squared_to(
+					Vector3(acc.x, acc.y, acc.z)) > 0.004:
+				img.set_pixel(x, y, Color(acc.x, acc.y, acc.z, centre.a))
+
+## Recolours both materials in ONE pass.
+##
+## Classification comes from the ORIGINAL pixel, never from a partially
+## recoloured one: a two-pass version re-touched pixels the first pass had
+## already shifted - once surround moves toward sand it can sit nearer the road
+## palette - which blew ice's arms out to near-white.
+func _recolour_road(img: Image, palette: Dictionary) -> Image:
 	var out: Image = img.duplicate()
-	var goal := Vector3(target.r, target.g, target.b) * 255.0
+	var road_goal := Vector3(palette["road"].r, palette["road"].g, palette["road"].b) * 255.0
+	var sur_goal := Vector3(palette["surround"].r, palette["surround"].g,
+		palette["surround"].b) * 255.0
 	for y in out.get_height():
 		for x in out.get_width():
-			var c := out.get_pixel(x, y)
+			var c := img.get_pixel(x, y)
 			if c.a <= 0.0:
 				continue
 			var v := Vector3(c.r, c.g, c.b) * 255.0
-			if v.distance_squared_to(source) > v.distance_squared_to(SOURCE_ROAD if source == SOURCE_SURROUND else SOURCE_SURROUND):
-				continue
-			var shifted := goal + (v - source)
+			var is_road := v.distance_squared_to(SOURCE_ROAD) \
+				< v.distance_squared_to(SOURCE_SURROUND)
+			var shifted := (road_goal + (v - SOURCE_ROAD)) if is_road \
+				else (sur_goal + (v - SOURCE_SURROUND))
 			out.set_pixel(x, y, Color(
 				clampf(shifted.x / 255.0, 0.0, 1.0),
 				clampf(shifted.y / 255.0, 0.0, 1.0),
 				clampf(shifted.z / 255.0, 0.0, 1.0), c.a))
 	return out
 
-func _compose_straight(cross: Image) -> Image:
-	var out: Image = cross.duplicate()
-	var w := out.get_width()
-	var h := out.get_height()
-	var arm := w / 3
-	# The cross's own corners are surround material. Mirroring them down the
-	# east and west arms turns it into a north-south straight while keeping
-	# the piece's palette and edging.
-	for y in range(arm, h - arm):
-		for x in range(0, arm):
-			out.set_pixel(x, y, cross.get_pixel(x, mini(arm - 1, y % arm)))
-		for x in range(w - arm, w):
-			out.set_pixel(x, y, cross.get_pixel(x, mini(arm - 1, y % arm)))
-	return out
-
 func _bake_roads(sheet: Image) -> void:
-	# Cut the one road row once, then recolour it per biome.
-	var pieces := {}
-	for slot in ROAD_SLOTS_IN_ROW:
-		var piece := _cell(sheet, int(ROAD_ROW["x"]) + PITCH * slot, int(ROAD_ROW["y"]))
-		var mask := _road_mask(piece)
-		# Later slots win on a tie: the row holds two crosses and two curves,
-		# and the later of each pair carries more decoration.
-		pieces[mask] = piece
-	assert(pieces.has(15), "no cross found in the path row")
-	pieces[ROAD_COMPOSED_STRAIGHT] = _compose_straight(pieces[15])
-	print("bake_sheet: road masks found %s" % [pieces.keys()])
-
+	var cross := _cell(sheet,
+		int(ROAD_ROW["x"]) + PITCH * ROAD_CROSS_SLOT, int(ROAD_ROW["y"]))
 	for biome in ROAD_PALETTES:
 		var dir := "res://assets/art/%s" % biome
 		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(dir))
-		var palette: Dictionary = ROAD_PALETTES[biome]
-		for mask in pieces:
-			var out: Image = pieces[mask]
-			out = _recolour(out, SOURCE_SURROUND, palette["surround"])
-			out = _recolour(out, SOURCE_ROAD, palette["road"])
-			out.save_png("%s/road_%02d.png" % [dir, int(mask)])
-		print("bake_sheet: %s roads" % biome)
+		for mask in ROAD_MASKS:
+			var piece := _compose_road(cross, int(mask))
+			_recolour_road(piece, ROAD_PALETTES[biome]).save_png(
+				"%s/road_%02d.png" % [dir, int(mask)])
+		print("bake_sheet: %s roads x%d" % [biome, ROAD_MASKS.size()])
 ```
 
 Call it from `_init` after `_bake_ground(sheet)`:
