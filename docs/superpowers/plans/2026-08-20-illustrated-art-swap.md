@@ -663,14 +663,22 @@ git commit -m "Cut the road pieces and compose the straight the sheet lacks"
 
 **Nothing outside the bake tool changes.** `Tower.frame_region`, `data/towers.gd`'s `sprite_frame` and `upgrade_frames`, `UpgradesSim.sprite_frame_for` and `ui/tower_panel.gd` all keep working, because the atlas keeps its geometry and its frame numbering. Each kind's four `upgrade_frames` receive that tower type's four levels in order.
 
-**Sheet positions**, all in the tower band at `y = 40`, height 165:
+**How the sheet lays the towers out**, all measured against the vendored `sheet.png` (1536 × 1024):
 
-| Kind | Type | Level x offsets |
-|---|---|---|
-| `basic` | Archer | 23, 114, 212, 309 |
-| `fast` | Cannon | 439, 532, 637, 739 |
-| `mortar` | Mage | 880, 966, 1052, 1140 |
-| `long` | Barracks | 1247, 1318, 1389, 1460 |
+The tower band is divided into four panels by vertical rules that are opaque at *every* row of the band — at x = 8–10, 429–430, 862–864, 1233–1235 and 1526–1527. The four panels between them are Archer, Cannon, Mage and Barracks. Each panel stacks four row runs: a horizontal rule at y = 8–10, the panel heading ("TOWER 1 – ARCHER TOWER") at y = 19–34, the per-level captions ("LVL 1" … "LVL 4") at y = 46–60, and the tower art at y = 63–211.
+
+Those vertical rules are why the tower band must not include the caption rows and why no crop can be cleaned up after the fact: a rule is opaque at every row, so inside any crop that touches one, no row is ever fully transparent and no row-based separator search can find the gap under the caption.
+
+The captions are what makes the levels separable. Each "LVL n" is centred over its tower, and the caption row segments cleanly into exactly four runs in every panel — while the tower art does not, because the Mage and Barracks towers touch. Cutting each panel at the midpoints between consecutive caption centres, bounded by the panel's own rules, puts exactly one tower in each cell:
+
+| Kind | Type | Caption centres | Cell boundaries |
+|---|---|---|---|
+| `basic` | Archer | 58.5, 158, 257, 359.5 | 11, 108, 208, 308, 428 |
+| `fast` | Cannon | 489, 593, 695, 798.5 | 431, 541, 644, 747, 861 |
+| `mortar` | Mage | 917.5, 1010, 1098, 1187 | 865, 964, 1054, 1142, 1232 |
+| `long` | Barracks | 1275, 1344, 1413, 1489.5 | 1236, 1310, 1378, 1451, 1524 |
+
+**The sixteen levels share one scale factor.** Fitting each sprite to the frame on its own longest dimension erases the thing this swap is for: a level that grows taller faster than it grows wider absorbs the extra height into a smaller scale and comes out *smaller* on screen than the level below it. Measured trimmed extents rise from 79×108 (Archer L1) to 97×139 (Archer L4) and the per-kind fit factors land between 0.60 and 0.66 — the sheet already draws every tower at one world scale, so a single factor derived from the largest of the sixteen is both simpler and truer to the art. With it, the sampled opaque-pixel count rises across every kind: basic 498 → 817, fast 549 → 896, mortar 503 → 757, long 441 → 582.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -746,6 +754,11 @@ func test_a_kind_s_levels_grow_across_its_upgrade_frames() -> bool:
 	# The upgrade read this swap buys: four hand-drawn states per tower, each
 	# more substantial than the last. A bake that wrote the same level into
 	# every frame would pass every other assertion here.
+	#
+	# First against last, not each against the one before it: a level's
+	# silhouette can widen and shorten between two steps (the Mage's crystals
+	# spread further at L3 than they do at L4) without the level being any
+	# less of an upgrade.
 	var img := _atlas()
 	assert_true(img != null, "towers.png decodes")
 	if img == null:
@@ -779,12 +792,69 @@ func test_every_referenced_frame_keeps_a_transparent_margin() -> bool:
 			assert_true(peak <= 8.0 / 255.0,
 				"%s frame %d keeps a transparent margin" % [kind, n])
 	return true
+
+func test_no_referenced_frame_carries_a_detached_fragment() -> bool:
+	# The gate for everything the cut can drag in with the tower: the "LVL 4"
+	# caption printed above it, or a sliver of the neighbouring level. Both
+	# arrive separated from the tower by a band of transparency, so a frame
+	# whose content spans an empty row or column has caught something.
+	#
+	# Every tower on the sheet is solid between its extremes - measured, not
+	# assumed: all sixteen come out with zero interior empty rows and zero
+	# interior empty columns. The flags and floating crystals stay attached to
+	# their poles and rings.
+	#
+	# Full stride, not every other pixel: a one-row gap is exactly what a
+	# caption leaves behind, and a stride of two can step over it.
+	var img := _atlas()
+	assert_true(img != null, "towers.png decodes")
+	if img == null:
+		return true
+	for kind in Towers.KINDS:
+		for frame in Towers.get_def(kind)["upgrade_frames"]:
+			var n := int(frame)
+			var ox := (n % _COLUMNS) * _FRAME
+			var oy := (n / _COLUMNS) * _FRAME
+			var rows := []
+			var cols := []
+			rows.resize(_FRAME)
+			cols.resize(_FRAME)
+			rows.fill(false)
+			cols.fill(false)
+			for y in _FRAME:
+				for x in _FRAME:
+					if img.get_pixel(ox + x, oy + y).a > 8.0 / 255.0:
+						rows[y] = true
+						cols[x] = true
+			assert_eq(_interior_gaps(rows), 0,
+				"%s frame %d spans no empty row" % [kind, n])
+			assert_eq(_interior_gaps(cols), 0,
+				"%s frame %d spans no empty column" % [kind, n])
+	return true
+
+## Empty entries lying between the first and last true entry.
+func _interior_gaps(occupied: Array) -> int:
+	var first := -1
+	var last := -1
+	for i in occupied.size():
+		if bool(occupied[i]):
+			if first < 0:
+				first = i
+			last = i
+	if first < 0:
+		return 0
+	var gaps := 0
+	for i in range(first, last + 1):
+		if not bool(occupied[i]):
+			gaps += 1
+	return gaps
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `godot --headless --quit --script test/run_tests.gd`
-Expected: FAIL — `test_a_kind_s_levels_grow_across_its_upgrade_frames` fails against the Kenney atlas, whose frames do not grow monotonically.
+
+Expected: FAIL — `test_a_kind_s_levels_grow_across_its_upgrade_frames` fails against the Kenney atlas, whose frames do not grow monotonically (`basic` 544 vs 617, `fast` 544 vs 633, `long` 613 vs 617; `mortar` passes it by coincidence). The other four tests pass against the Kenney atlas, which is the point of them — they are the geometry contract this bake must not break.
 
 - [ ] **Step 3: Extend the bake tool**
 
@@ -796,40 +866,58 @@ const ATLAS_ROWS := 4
 const ATLAS_FRAME := 96
 const ATLAS_INSET := 6
 
-const TOWER_BAND_Y := 40
-const TOWER_BAND_H := 165
-
-## kind -> {first level's x, pitch between levels}. Four levels per group.
+## The rows the tower art occupies, below the "LVL n" captions and above the
+## rule that closes the panel.
 ##
-## MEASURED, not read off the image. Each group's pitch was found by
-## autocorrelating its column profile and then verified by extracting all four
-## levels and looking at them - every cell shows its own LVL label and the four
-## escalate correctly. An earlier version of this table listed x offsets read
-## by eye, and half of them were extrapolated because the mage and barracks
-## towers touch and a gap-based segmentation found only 2 and 1 of them.
+## MEASURED. Every tower panel's row profile is the same four runs: a rule at
+## 8..10, the panel heading at 19..34, the captions at 46..60, and the art at
+## 63..211. An earlier version of this pair started the band at 40 and ran 165
+## rows, which swallowed the captions and left _isolate_centre to strip them.
+## It cannot: the vertical rules dividing the panels (x = 8..10, 429..430,
+## 862..864, 1233..1235, 1526..1527) are opaque at every row of the band, so
+## in any crop that touches one, no row is ever fully transparent and the
+## search for a separator under the caption never terminates anywhere useful.
+## Two of the sixteen frames baked their "LVL 4" caption into the sprite.
+const TOWER_BAND_Y := 63
+const TOWER_BAND_H := 149
+
+## kind -> the five x boundaries cutting its panel into four level cells.
+##
+## MEASURED from the captions, not read off the image. The caption row
+## segments cleanly into four runs in every panel and each caption is centred
+## over its tower; the tower art does not segment, because the Mage and
+## Barracks towers touch. So the cuts are the midpoints between consecutive
+## caption centres, bounded by the panel's own vertical rules. Two earlier
+## versions of this table listed x offsets read by eye and both were wrong -
+## the first by up to 19px, and both misplaced the Archer panel by about 15px.
 ##
 ## The sheet's tower types map onto the game's kinds by role: Archer is the
 ## cheap all-rounder, Cannon the fast one, Mage the splash one, Barracks the
 ## long-range one.
-const TOWER_LEVELS := {
-	&"basic": {"x": 24, "pitch": 100},
-	&"fast": {"x": 440, "pitch": 106},
-	&"mortar": {"x": 881, "pitch": 89},
-	&"long": {"x": 1238, "pitch": 71},
+const TOWER_CELLS := {
+	&"basic": [11, 108, 208, 308, 428],
+	&"fast": [431, 541, 644, 747, 861],
+	&"mortar": [865, 964, 1054, 1142, 1232],
+	&"long": [1236, 1310, 1378, 1451, 1524],
 }
 
 ## Clears anything separated from the cell's centre by a fully transparent
 ## column or row.
 ##
-## The towers nearly touch in their groups, so a cell cut on the pitch can
-## catch a sliver of its neighbour. That matters because _trim takes the alpha
-## bounding box of ALL content - one stray sliver at the edge stretches the box
-## and the sprite lands wrong in its frame. Walking out from the centre to the
-## first empty line keeps only the tower this cell is about.
+## Even cut on the caption midpoints, a cell can catch a disconnected sliver of
+## its neighbour - the Cannon panel's first three levels each do. That matters
+## because _trim takes the alpha bounding box of ALL content, so one stray
+## sliver at the edge stretches the box and the sprite lands wrong in its
+## frame. Walking out from the centre to the first empty line keeps only the
+## tower this cell is about.
+##
+## This works here and did not before only because TOWER_BAND_Y now starts
+## below the captions: the crop no longer contains a panel rule, so its rows
+## can actually be empty.
 func _isolate_centre(img: Image) -> Image:
 	var w := img.get_width()
 	var h := img.get_height()
-	var out := img.duplicate()
+	var out: Image = img.duplicate()
 	var cx := w / 2
 	var cy := h / 2
 	var empty_col := func(x: int) -> bool:
@@ -868,28 +956,44 @@ func _isolate_centre(img: Image) -> Image:
 				out.set_pixel(x, y, Color(0, 0, 0, 0))
 	return out
 
+## One level cut from its panel, keyed, isolated and trimmed.
+func _tower_sprite(sheet: Image, kind: StringName, level: int) -> Image:
+	var cuts: Array = TOWER_CELLS[kind]
+	var x: int = int(cuts[level])
+	var width: int = int(cuts[level + 1]) - x
+	var region := Image.create_empty(width, TOWER_BAND_H, false, Image.FORMAT_RGBA8)
+	region.blit_rect(sheet, Rect2i(x, TOWER_BAND_Y, width, TOWER_BAND_H), Vector2i.ZERO)
+	return _trim(_isolate_centre(_key(region)))
+
 func _bake_tower_atlas(sheet: Image) -> void:
+	# Cut all sixteen before resizing any of them: they share one scale factor,
+	# so the largest has to be known first.
+	var sprites := {}
+	var largest := 1
+	for kind in TOWER_CELLS:
+		var levels: Array[Image] = []
+		for level in 4:
+			var sprite := _tower_sprite(sheet, kind, level)
+			levels.append(sprite)
+			largest = maxi(largest, maxi(sprite.get_width(), sprite.get_height()))
+		sprites[kind] = levels
+	# One factor across all sixteen rather than one per sprite. Fitting each
+	# sprite to the frame on its own longest dimension throws away the upgrade
+	# read: a level that grows taller faster than it grows wider absorbs the
+	# extra height into a smaller scale and lands *smaller* than the level
+	# below it. The four kinds' own fit factors land between 0.60 and 0.66 -
+	# the sheet already draws every tower at one world scale.
+	#
+	# The inset is what keeps the largest sprite off its frame's edges; every
+	# other sprite clears them by more.
+	var factor := float(ATLAS_FRAME - ATLAS_INSET * 2) / float(largest)
 	var out := Image.create_empty(
 		ATLAS_COLUMNS * ATLAS_FRAME, ATLAS_ROWS * ATLAS_FRAME, false, Image.FORMAT_RGBA8)
 	out.fill(Color(0, 0, 0, 0))
-	for kind in TOWER_LEVELS:
+	for kind in TOWER_CELLS:
 		var frames: Array = Towers.DEFS[kind]["upgrade_frames"]
-		var group: Dictionary = TOWER_LEVELS[kind]
 		for level in 4:
-			# Clamped to the sheet's right edge: the barracks group's last
-			# level starts at 1238 + 71*3 = 1451 and a full pitch past it
-			# would read beyond the 1536-wide sheet.
-			var x: int = int(group["x"]) + int(group["pitch"]) * level
-			var width: int = mini(int(group["pitch"]), sheet.get_width() - x)
-			var region := Image.create_empty(width, TOWER_BAND_H, false, Image.FORMAT_RGBA8)
-			region.blit_rect(sheet, Rect2i(x, TOWER_BAND_Y, width, TOWER_BAND_H),
-				Vector2i.ZERO)
-			var sprite := _trim(_isolate_centre(_key(region)))
-			# Fit inside the frame preserving aspect, inset so no art touches
-			# a frame edge - an AtlasTexture sampling a frame would otherwise
-			# pull in its neighbour.
-			var box := ATLAS_FRAME - ATLAS_INSET * 2
-			var factor := float(box) / float(maxi(sprite.get_width(), sprite.get_height()))
+			var sprite: Image = sprites[kind][level]
 			sprite.resize(maxi(1, int(sprite.get_width() * factor)),
 				maxi(1, int(sprite.get_height() * factor)), Image.INTERPOLATE_LANCZOS)
 			var frame: int = int(frames[level])
@@ -917,7 +1021,16 @@ Expected: PASS.
 
 - [ ] **Step 5: Look at the atlas**
 
-Render `assets/towers.png` at 2× with frame numbers overlaid and confirm each kind's four frames show that tower type's four levels in ascending order, and that frames 3, 4, 14 and 15 are empty. A wrong `TOWER_LEVELS` offset shows immediately as a clipped or duplicated tower.
+Render `assets/towers.png` at 3× with frame numbers overlaid and look at it. **Composite it over an opaque background rather than dropping the alpha channel** — an RGBA-to-RGB conversion that discards alpha paints every anti-aliased edge pixel at full strength, and the atlas comes out looking like it is covered in coloured speckle that is not in the file.
+
+Confirm frames 3, 4, 14 and 15 are empty, and that each kind's four frames hold that tower type's four levels in order:
+
+| Kind | Sheet type | Frames, L1 → L4 |
+|---|---|---|
+| `basic` | Archer | 8, 9, 11, 17 |
+| `fast` | Cannon | 1, 0, 7, 16 |
+| `mortar` | Mage | 5, 6, 12, 13 |
+| `long` | Barracks | 2, 10, 18, 19 |
 
 - [ ] **Step 6: Commit**
 
