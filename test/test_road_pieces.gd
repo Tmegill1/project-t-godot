@@ -160,3 +160,55 @@ func test_no_composed_piece_carries_a_black_slot_in_its_interior() -> bool:
 			assert_eq(dark, 0,
 				"%s road %d has %d near-black interior pixels" % [biome, mask, dark])
 	return true
+
+func test_a_biome_s_road_belongs_to_the_same_world_as_its_ground() -> bool:
+	# The recolour preserves each pixel's offset from its source material so
+	# shading and texture survive - but an offset carries HUE as well as
+	# brightness, and the source verge is GRASS. Undamped, that grass arrives
+	# in the desert as green speckles and in the ice as a green band down both
+	# sides of a snow road, on an all-blue board. Measured before the fix: the
+	# ice road pieces reached a green dominance of +41 and the desert's +39.
+	#
+	# Nothing else here could see it. Every other gate in this file asks about
+	# the road-versus-surround SEPARATION, which green pixels answer correctly -
+	# they are still unambiguously surround. The question no gate asked was
+	# whether the surround looks like the ground it abuts.
+	#
+	# So the bound is the biome's own ground tiles, not a constant: whatever
+	# green the artist put in a biome's terrain is allowed in its road, and
+	# nothing beyond it is. That keeps forest honest (its grass is green in
+	# both) and desert honest (its cacti are green in both) without either
+	# needing a hand-picked number.
+	for biome in Biomes.KINDS:
+		var ground_peak := -255
+		for i in Biomes.GROUND_VARIANTS:
+			ground_peak = maxi(ground_peak, _green_dominance(Biomes.ground_path(biome, i)))
+		var road_peak := -255
+		for mask in 16:
+			road_peak = maxi(road_peak, _green_dominance(Biomes.road_path(biome, mask)))
+		assert_true(ground_peak > -255, "%s ground tiles decode" % biome)
+		assert_true(road_peak > -255, "%s road pieces decode" % biome)
+		assert_true(road_peak <= ground_peak,
+			"%s road peaks at %d green dominance against its ground's %d"
+				% [biome, road_peak, ground_peak])
+	return true
+
+## The greenest any opaque pixel gets, as green minus the larger of red and
+## blue. Negative everywhere means nothing in the image reads as vegetation.
+func _green_dominance(path: String) -> int:
+	var bytes := FileAccess.get_file_as_bytes(path)
+	if bytes.is_empty():
+		return -255
+	var img := Image.new()
+	if img.load_png_from_buffer(bytes) != OK:
+		return -255
+	var peak := -255
+	for y in img.get_height():
+		for x in img.get_width():
+			var c := img.get_pixel(x, y)
+			if c.a <= 0.5:
+				continue
+			var g := int(round(c.g * 255.0))
+			var rb := maxi(int(round(c.r * 255.0)), int(round(c.b * 255.0)))
+			peak = maxi(peak, g - rb)
+	return peak

@@ -168,10 +168,33 @@ const ROAD_MASKS := [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
 ## Every pair below must stay farther apart than the source material's spread.
 ## If a future palette narrows that gap, the recolour cannot tell the two
 ## materials apart and the tile reads as one murky blob.
+##
+## chroma_keep is how much of a pixel's colour offset from its source material
+## survives the shift. The recolour preserves each pixel's offset so shading
+## and texture come through, but an offset carries HUE as well as brightness -
+## so at 1.0 the sheet's grass verge arrives in the desert as green speckles
+## and in the ice as a green band down both sides of a snow road, on an
+## all-blue board. Measured: at 1.0 the ice road pieces reach a green
+## dominance of +41 where ice's own ground tiles never exceed +3, and the
+## desert's reach +39 against a ground maximum of +25 that is cacti. Keeping
+## a quarter of the offset holds the shading and drops both to 0.
+##
+## Forest keeps 1.0 and must: its palette is identity, so at 1.0 the shift is
+## exactly the artist's own pixel and the forest pieces come out byte-for-byte
+## unchanged. Any other value there would repaint art that needs no repainting.
 const ROAD_PALETTES := {
-	&"forest": {"surround": Color8(58, 69, 16), "road": Color8(168, 119, 55)},
-	&"desert": {"surround": Color8(170, 123, 62), "road": Color8(105, 76, 42)},
-	&"ice": {"surround": Color8(91, 145, 190), "road": Color8(200, 220, 235)},
+	&"forest": {
+		"surround": Color8(58, 69, 16), "road": Color8(168, 119, 55),
+		"chroma_keep": 1.0,
+	},
+	&"desert": {
+		"surround": Color8(170, 123, 62), "road": Color8(105, 76, 42),
+		"chroma_keep": 0.25,
+	},
+	&"ice": {
+		"surround": Color8(91, 145, 190), "road": Color8(200, 220, 235),
+		"chroma_keep": 0.25,
+	},
 }
 
 ## The two materials in the path row, measured as the DOMINANT tone of each -
@@ -272,6 +295,7 @@ func _recolour_road(img: Image, palette: Dictionary) -> Image:
 	var road_goal := Vector3(palette["road"].r, palette["road"].g, palette["road"].b) * 255.0
 	var sur_goal := Vector3(palette["surround"].r, palette["surround"].g,
 		palette["surround"].b) * 255.0
+	var keep := float(palette["chroma_keep"])
 	for y in out.get_height():
 		for x in out.get_width():
 			var c := img.get_pixel(x, y)
@@ -280,8 +304,15 @@ func _recolour_road(img: Image, palette: Dictionary) -> Image:
 			var v := Vector3(c.r, c.g, c.b) * 255.0
 			var is_road := v.distance_squared_to(SOURCE_ROAD) \
 				< v.distance_squared_to(SOURCE_SURROUND)
-			var shifted := (road_goal + (v - SOURCE_ROAD)) if is_road \
-				else (sur_goal + (v - SOURCE_SURROUND))
+			# The offset is split so the brightness half survives whole and
+			# the colour half can be damped - see ROAD_PALETTES on chroma_keep.
+			# At keep 1.0 the two halves recombine to the original offset
+			# exactly, which is what keeps forest byte-identical.
+			var offset := (v - SOURCE_ROAD) if is_road else (v - SOURCE_SURROUND)
+			var brightness := (offset.x + offset.y + offset.z) / 3.0
+			var colour := offset - Vector3.ONE * brightness
+			var goal := road_goal if is_road else sur_goal
+			var shifted := goal + Vector3.ONE * brightness + colour * keep
 			out.set_pixel(x, y, Color(
 				clampf(shifted.x / 255.0, 0.0, 1.0),
 				clampf(shifted.y / 255.0, 0.0, 1.0),
