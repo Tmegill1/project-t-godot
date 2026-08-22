@@ -87,11 +87,12 @@ func test_tower_cosmetic_and_progression_fields_match_the_phaser_build() -> bool
 ## sprite_px have no Phaser counterpart at all: they were introduced by this
 ## port when the enemy art became per-spawn illustrated variants.
 ##
-## label, variant_count, sprite_px and flip_horizontally pick which sprite
-## directory an enemy draws from and how it is sized/mirrored. variant_count
-## and sprite_px replaced texture_key and sprite_scale when the enemy sheets
-## became per-spawn illustrated variants rather than a single uniform
-## animation sheet per kind (see data/enemies.gd's own doc comment); every
+## label, walk_frames, death_frames, sprite_px and flip_horizontally pick which
+## sprite directory an enemy draws from and how it is sized/mirrored.
+## walk_frames and death_frames replaced variant_count when the art went from
+## per-spawn variants back to drawn animation - the bat's seven is its eighth
+## walk frame coming off the sheet as an orphaned wing (see data/enemies.gd's
+## own doc comment); every
 ## kind's flip_horizontally is false because all three kinds' art on this
 ## sheet faces right, including the ogre, which faced left on the old sheet.
 ## stride_px joined the same table for a different reason - not sizing or
@@ -101,9 +102,9 @@ func test_tower_cosmetic_and_progression_fields_match_the_phaser_build() -> bool
 ## number.
 func test_enemy_cosmetic_fields_are_the_ones_this_port_draws_from() -> bool:
 	var expected := {
-		&"slime": {"label": "Slime", "variant_count": 15, "sprite_px": 34.0, "stride_px": 30.0, "flip_horizontally": false},
-		&"ogre":  {"label": "Ogre",  "variant_count": 13, "sprite_px": 58.0, "stride_px": 46.0, "flip_horizontally": false},
-		&"bee":   {"label": "Bee",   "variant_count": 3,  "sprite_px": 28.0, "stride_px": 32.0, "flip_horizontally": false},
+		&"slime": {"label": "Slime", "walk_frames": 8, "death_frames": 4, "sprite_px": 34.0, "stride_px": 30.0, "flip_horizontally": false},
+		&"ogre":  {"label": "Ogre",  "walk_frames": 8, "death_frames": 4, "sprite_px": 58.0, "stride_px": 46.0, "flip_horizontally": false},
+		&"bee":   {"label": "Bee",   "walk_frames": 7, "death_frames": 4, "sprite_px": 28.0, "stride_px": 32.0, "flip_horizontally": false},
 	}
 	for kind in expected.keys():
 		var def: Dictionary = Enemies.DEFS[kind]

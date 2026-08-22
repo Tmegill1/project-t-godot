@@ -19,12 +19,6 @@ func _ready_enemy() -> Enemy:
 	e.notification(Node.NOTIFICATION_READY)
 	return e
 
-## The same enemy _ready_enemy builds, set up with a seeded Rng so the variant
-## it picks is pinned rather than incidental.
-func _ready_enemy_with_seed(seed_value: int) -> Enemy:
-	var e := _ready_enemy()
-	e.setup(&"slime", _straight_path(), 1, Rng.new(seed_value))
-	return e
 
 func _straight_path() -> PackedVector2Array:
 	return PackedVector2Array([Vector2(0, 0), Vector2(100, 0), Vector2(100, 100)])
@@ -248,37 +242,8 @@ func test_take_damage_emits_died_exactly_once_on_the_lethal_hit_and_not_before()
 # variant selection, sizing, facing
 # --------------------------------------------------------------------------
 
-func test_an_enemy_draws_one_of_its_kind_s_variants() -> bool:
-	var e := _ready_enemy()
-	e.setup(&"slime", _straight_path(), 1)
-	var sprite: Sprite2D = e.get_node("Sprite")
-	assert_true(sprite.texture != null, "a variant was chosen")
-	assert_true(sprite.texture.resource_path.contains("/art/enemies/slime/"),
-		"and it came from this kind's art directory")
-	e.free()
-	return true
 
-func test_the_variant_choice_is_reproducible_from_the_seed() -> bool:
-	# Runs must stay reproducible - the whole harness depends on it.
-	var a := _ready_enemy_with_seed(1234)
-	var b := _ready_enemy_with_seed(1234)
-	assert_eq(a.get_node("Sprite").texture.resource_path,
-		b.get_node("Sprite").texture.resource_path,
-		"the same seed picks the same variant")
-	a.free()
-	b.free()
-	return true
 
-func test_different_seeds_reach_more_than_one_variant() -> bool:
-	# Otherwise "pick a variant" could be a constant and every test above
-	# would still pass.
-	var seen := {}
-	for s in 40:
-		var e := _ready_enemy_with_seed(s + 1)
-		seen[e.get_node("Sprite").texture.resource_path] = true
-		e.free()
-	assert_true(seen.size() > 1, "%d distinct variants over 40 seeds" % seen.size())
-	return true
 
 func test_an_enemy_is_drawn_at_its_kind_s_declared_height() -> bool:
 	# The scale is derived from the chosen variant rather than fixed, because
@@ -296,20 +261,6 @@ func test_an_enemy_is_drawn_at_its_kind_s_declared_height() -> bool:
 		e.free()
 	return true
 
-func test_every_variant_of_a_kind_draws_at_the_same_height() -> bool:
-	# The defect a fixed scale factor would leave: same kind, different size.
-	for kind in Enemies.KINDS:
-		for i in Enemies.variant_count(kind):
-			var e := _ready_enemy()
-			e.setup(kind, _straight_path(), 1)
-			var sprite: Sprite2D = e.get_node("Sprite")
-			sprite.texture = load("res://assets/art/enemies/%s/variant_%d.png" % [kind, i])
-			e.apply_sprite_height()
-			var drawn := float(sprite.texture.get_height()) * sprite.scale.y
-			assert_almost_eq(drawn, float(Enemies.DEFS[kind]["sprite_px"]), 0.01,
-				"%s variant %d draws at the declared height" % [kind, i])
-			e.free()
-	return true
 
 func test_an_enemy_faces_the_way_it_travels() -> bool:
 	var e := _ready_enemy()
@@ -322,19 +273,6 @@ func test_an_enemy_faces_the_way_it_travels() -> bool:
 	e.free()
 	return true
 
-func test_the_declared_variant_count_matches_what_was_baked() -> bool:
-	# The count is hand-written in data/enemies.gd while the bake decides the
-	# real number. A count that is too high makes the spawn pick a file that
-	# does not exist - a crash on a path only a live wave reaches.
-	for kind in Enemies.KINDS:
-		var on_disk := 0
-		while FileAccess.file_exists(
-				"res://assets/art/enemies/%s/variant_%d.png" % [kind, on_disk]):
-			on_disk += 1
-		assert_eq(Enemies.variant_count(kind), on_disk,
-			"%s declares %d variants and %d are baked"
-				% [kind, Enemies.variant_count(kind), on_disk])
-	return true
 
 # --------------------------------------------------------------------------
 # death: a tween replaces the death animation
@@ -627,124 +565,11 @@ func test_a_plain_hit_leaves_no_residue_for_a_later_slow_to_inherit() -> bool:
 # look slow and a fast enemy look fast, and that makes a stopped enemy stop.
 # --------------------------------------------------------------------------
 
-func test_the_stride_advances_with_distance_not_with_time() -> bool:
-	# The whole point. A slow enemy and a fast one must not cycle at the same
-	# rate, or neither looks like it is moving under its own power.
-	var slow := _ready_enemy()
-	slow.setup(&"ogre", _straight_path(), 1)
-	var fast := _ready_enemy()
-	fast.setup(&"bee", _straight_path(), 1)
-	assert_true(Enemies.DEFS[&"bee"]["base_speed"] > Enemies.DEFS[&"ogre"]["base_speed"],
-		"precondition: the bat is faster than the ogre")
 
-	for i in 10:
-		slow._physics_process(0.05)
-		fast._physics_process(0.05)
 
-	assert_true(fast.stride_phase() > slow.stride_phase(),
-		"over the same elapsed time the faster enemy is further through its stride (%f vs %f)"
-			% [fast.stride_phase(), slow.stride_phase()])
-	slow.free()
-	fast.free()
-	return true
 
-func test_a_stationary_enemy_does_not_cycle() -> bool:
-	# A timed cycle keeps running when the enemy is held up. A travelled one
-	# cannot.
-	var e := _ready_enemy()
-	e.setup(&"slime", _straight_path(), 1)
-	e._physics_process(0.05)
-	var moving := e.stride_phase()
-	assert_true(moving > 0.0, "precondition: it cycled while it was moving")
 
-	e.sim["speed"] = 0.0
-	for i in 10:
-		e._physics_process(0.05)
-	assert_almost_eq(e.stride_phase(), moving, 0.0001,
-		"a stopped enemy holds its phase instead of running on the spot")
-	e.free()
-	return true
 
-func test_a_slowed_enemy_cycles_more_slowly() -> bool:
-	var normal := _ready_enemy()
-	normal.setup(&"slime", _straight_path(), 1)
-	var slowed := _ready_enemy()
-	slowed.setup(&"slime", _straight_path(), 1)
-	slowed.sim["slow"] = Slow.apply(Slow.none(), 0.5, 5000.0)
-
-	for i in 8:
-		normal._physics_process(0.05)
-		slowed._physics_process(0.05)
-
-	assert_true(slowed.stride_phase() < normal.stride_phase(),
-		"a slowed enemy is less far through its stride (%f vs %f)"
-			% [slowed.stride_phase(), normal.stride_phase()])
-	normal.free()
-	slowed.free()
-	return true
-
-func test_the_stride_squashes_and_stretches_the_sprite() -> bool:
-	# A rigid sprite moved up and down still reads as a cut-out. The
-	# compression at footfall is what makes it read as weight.
-	var e := _ready_enemy()
-	e.setup(&"slime", _straight_path(), 1)
-	var sprite: Sprite2D = e.get_node("Sprite")
-	var seen_squashed := false
-	var seen_neutral := false
-	var base := sprite.scale.y
-	for i in 40:
-		e._physics_process(0.02)
-		if sprite.scale.y < base * 0.995:
-			seen_squashed = true
-		if absf(sprite.scale.y - base) < base * 0.005:
-			seen_neutral = true
-		assert_true(sprite.scale.y <= base + 0.0001,
-			"the stride never stretches past the sprite's declared height")
-	assert_true(seen_squashed, "the sprite compresses somewhere in the stride")
-	assert_true(seen_neutral, "and returns to its declared height somewhere in it")
-	e.free()
-	return true
-
-func test_the_stride_leans_the_sprite_into_its_travel() -> bool:
-	# Spec section 6 asked for this and the art swap dropped it without ruling
-	# on it.
-	#
-	# A manual set_facing_from_travel() call ahead of a tick does NOT
-	# exercise this: _physics_process re-derives facing from the REAL travel
-	# direction on every tick that does not arrive at a waypoint (see
-	# test_physics_process_does_not_flip_the_sprite_on_a_waypoint_arrival_tick
-	# above), so a manual override is clobbered on the very next tick before
-	# _apply_stride ever reads it - confirmed by running the straight-path,
-	# manual-override version of this test and watching the second assertion
-	# fail because the tick silently put facing back the way it was. A path
-	# that genuinely turns the enemy around is what actually exercises the
-	# lean's sign. Sampling across many ticks (rather than pinning two exact
-	# ones) keeps the test from depending on the precise tick where arrival
-	# consumes a whole step and travels zero distance.
-	var e := _ready_enemy()
-	var path := PackedVector2Array([Vector2(0, 0), Vector2(30, 0), Vector2(-500, 0)])
-	e.setup(&"slime", path, 1)
-	var sprite: Sprite2D = e.get_node("Sprite")
-
-	var right_lean := 0.0
-	var left_lean := 0.0
-	for i in 20:
-		e._physics_process(0.05)
-		if sprite.rotation < -0.01:
-			right_lean = sprite.rotation
-		elif sprite.rotation > 0.01:
-			left_lean = sprite.rotation
-
-	assert_true(right_lean < 0.0, "the enemy leans one way while heading toward path[1] (%f)" % right_lean)
-	assert_true(left_lean > 0.0, "and the other way once it turns around toward path[2] (%f)" % left_lean)
-	e.free()
-	return true
-
-func test_every_kind_declares_a_stride() -> bool:
-	for kind in Enemies.KINDS:
-		assert_true(float(Enemies.DEFS[kind]["stride_px"]) > 0.0,
-			"%s declares a stride length" % kind)
-	return true
 
 # --------------------------------------------------------------------------
 # Sprite filtering
@@ -780,4 +605,114 @@ func test_enemy_sprites_use_a_linear_mipmap_filter_for_the_minified_painted_art(
 		"the filter is stated on the sprite itself, not inherited from a parent that may not set one")
 
 	e.free()
+	return true
+
+## A path long enough to walk several cycles without reaching the goal.
+func _long_path() -> PackedVector2Array:
+	return PackedVector2Array([Vector2(0, 0), Vector2(4000, 0)])
+
+func test_the_walk_frame_advances_with_distance_not_with_time() -> bool:
+	# The property the synthesised stride was rewritten for, kept now that the
+	# frames are real. A timed cycle would move a 60px/s ogre's legs at the
+	# same rate as a 150px/s bat's.
+	var slow := _ready_enemy()
+	slow.setup(&"ogre", _straight_path(), 1)
+	var fast := _ready_enemy()
+	fast.setup(&"bee", _straight_path(), 1)
+	assert_true(Enemies.DEFS[&"bee"]["base_speed"] > Enemies.DEFS[&"ogre"]["base_speed"],
+		"precondition: the bat is faster than the ogre")
+
+	# Count CYCLES completed, not distinct frames seen: the bat's cycle is
+	# seven frames where the ogre's is eight, so a distinct-frame count
+	# saturates at the shorter cycle and would compare nothing.
+	var slow_steps := 0
+	var fast_steps := 0
+	var slow_last := slow.walk_frame()
+	var fast_last := fast.walk_frame()
+	for i in 60:
+		slow._physics_process(1.0 / 60.0)
+		fast._physics_process(1.0 / 60.0)
+		if slow.walk_frame() != slow_last:
+			slow_steps += 1
+			slow_last = slow.walk_frame()
+		if fast.walk_frame() != fast_last:
+			fast_steps += 1
+			fast_last = fast.walk_frame()
+
+	assert_true(fast_steps > slow_steps,
+		"over the same time the faster enemy steps through more frames (%d against %d)"
+			% [fast_steps, slow_steps])
+	slow.free()
+	fast.free()
+	return true
+
+func test_a_stationary_enemy_holds_its_frame() -> bool:
+	var e := _ready_enemy()
+	e.setup(&"slime", _straight_path(), 1)
+	for i in 4:
+		e._physics_process(0.05)
+	var held := e.walk_frame()
+	e.sim["speed"] = 0.0
+	for i in 20:
+		e._physics_process(0.05)
+	assert_eq(e.walk_frame(), held, "a stopped enemy does not walk on the spot")
+	e.free()
+	return true
+
+func test_the_walk_frame_wraps_and_never_leaves_the_cycle() -> bool:
+	for kind in Enemies.KINDS:
+		var e := _ready_enemy()
+		e.setup(kind, _long_path(), 1)
+		var n := Enemies.walk_frames(kind)
+		var seen := {}
+		# The game's own tick, not a coarser one: at 0.05s a 100px/s enemy
+		# covers 5px, which is more than one frame's worth of a 30px stride,
+		# so the test would step over frames the game never skips.
+		#
+		# 200 ticks is several full cycles for every kind - eleven for the
+		# goblin, four for the ogre, fifteen for the bat - which is what makes
+		# "reaches every frame" a fair thing to ask.
+		for i in 200:
+			e._physics_process(1.0 / 60.0)
+			var f := e.walk_frame()
+			assert_true(f >= 0 and f < n,
+				"%s frame %d is inside its %d-frame cycle" % [kind, f, n])
+			seen[f] = true
+		assert_eq(seen.size(), n, "%s reaches every one of its %d frames" % [kind, n])
+		e.free()
+	return true
+
+func test_the_sprite_shows_the_frame_the_cycle_names() -> bool:
+	var e := _ready_enemy()
+	e.setup(&"slime", _long_path(), 1)
+	var sprite: Sprite2D = e.get_node("Sprite")
+	for i in 120:
+		e._physics_process(1.0 / 60.0)
+		assert_true(sprite.texture.resource_path.ends_with(
+			"walk_%d.png" % e.walk_frame()),
+			"the sprite draws walk_%d" % e.walk_frame())
+	e.free()
+	return true
+
+func test_the_bat_has_a_shorter_cycle_than_the_others() -> bool:
+	# Its eighth frame is broken art the bake drops. Pinned here so a
+	# regenerated sheet that fixes it shows up as a failing number rather than
+	# as nothing.
+	assert_eq(Enemies.walk_frames(&"bee"), 7, "the bat walks on seven frames")
+	assert_eq(Enemies.walk_frames(&"slime"), 8, "the goblin walks on eight")
+	assert_eq(Enemies.walk_frames(&"ogre"), 8, "the ogre walks on eight")
+	return true
+
+func test_the_declared_frame_counts_match_what_was_baked() -> bool:
+	for kind in Enemies.KINDS:
+		var walk := 0
+		while FileAccess.file_exists(
+				"res://assets/art/enemies/%s/walk_%d.png" % [kind, walk]):
+			walk += 1
+		var death := 0
+		while FileAccess.file_exists(
+				"res://assets/art/enemies/%s/death_%d.png" % [kind, death]):
+			death += 1
+		assert_eq(Enemies.walk_frames(kind), walk, "%s declares its walk frames" % kind)
+		assert_eq(Enemies.death_frames(kind), death, "%s declares its death frames" % kind)
 	return true

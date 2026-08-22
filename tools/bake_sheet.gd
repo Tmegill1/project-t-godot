@@ -69,7 +69,7 @@ func _init() -> void:
 	_bake_ground(sheet)
 	_bake_roads(sheet)
 	_bake_tower_atlas(sheet)
-	_bake_enemies(sheet)
+	_bake_walk_frames()
 	var decor := _decor_sprites(sheet)
 	print("bake_sheet: %d decor sprites found" % decor.size())
 	_bake_props(decor)
@@ -78,13 +78,19 @@ func _init() -> void:
 	quit()
 
 ## Replaces the opaque navy background with transparency.
-func _key(img: Image) -> Image:
+## Clears every pixel within KEY_TOLERANCE_SQ of `background` to transparent.
+##
+## The background is a parameter because the project keeps two sheets and they
+## do not agree: the first is (9, 22, 28) and the walk-and-death sheet is
+## (6.5, 21.5, 30.0). Close enough to look identical, far enough apart that
+## keying one with the other's value leaves a halo.
+func _key(img: Image, background: Vector3) -> Image:
 	var out: Image = img.duplicate()
 	for y in out.get_height():
 		for x in out.get_width():
 			var c := out.get_pixel(x, y)
 			var d := Vector3(c.r, c.g, c.b) * 255.0
-			if d.distance_squared_to(BACKGROUND) <= KEY_TOLERANCE_SQ:
+			if d.distance_squared_to(background) <= KEY_TOLERANCE_SQ:
 				out.set_pixel(x, y, Color(0, 0, 0, 0))
 	return out
 
@@ -119,7 +125,7 @@ func _trim(img: Image) -> Image:
 func _cell(sheet: Image, x: int, y: int) -> Image:
 	var cell := Image.create_empty(TILE, TILE, false, Image.FORMAT_RGBA8)
 	cell.blit_rect(sheet, Rect2i(x, y, TILE, TILE), Vector2i.ZERO)
-	return _trim(_key(cell))
+	return _trim(_key(cell, BACKGROUND))
 
 func _bake_ground(sheet: Image) -> void:
 	for biome in GROUND_ROWS:
@@ -433,7 +439,7 @@ func _tower_sprite(sheet: Image, kind: StringName, level: int) -> Image:
 	var width: int = int(cuts[level + 1]) - x
 	var region := Image.create_empty(width, TOWER_BAND_H, false, Image.FORMAT_RGBA8)
 	region.blit_rect(sheet, Rect2i(x, TOWER_BAND_Y, width, TOWER_BAND_H), Vector2i.ZERO)
-	return _trim(_isolate_centre(_key(region)))
+	return _trim(_isolate_centre(_key(region, BACKGROUND)))
 
 func _bake_tower_atlas(sheet: Image) -> void:
 	# Cut all sixteen before resizing any of them: they share one scale factor,
@@ -475,99 +481,140 @@ func _bake_tower_atlas(sheet: Image) -> void:
 	out.save_png("res://assets/towers.png")
 	print("bake_sheet: tower atlas")
 
-## kind -> the sheet row it is cut from. The three existing kinds keep their
-## stats and wave schedules; only the art changes. Shaman and Troll are cut to
-## _unused for the deferred enemy-variety feature and referenced by no code.
+const WALK_SHEET := "res://reference/illustrated-sheet/walk-and-death.png"
+const WALK_BACKGROUND := Vector3(6.5, 21.5, 30.0)
+
+## kind -> the sprite band its frames are cut from. MEASURED: each creature is
+## a name label above a band of twelve frames, and the bands do not touch.
 ##
-## MEASURED: each band's content occupies rows 232..283, 439..512, 529..581,
-## 294..357 and 369..432 respectively, so every band holds its row with margin.
-## Unlike the tower band these carry no vertical panel rules - the rules that
-## make a row's transparency unsearchable stop above these rows.
-const ENEMY_ROWS := {
-	&"slime": {"y0": 216, "y1": 288},
-	&"ogre": {"y0": 438, "y1": 516},
-	&"bee": {"y0": 521, "y1": 586},
-	&"_unused/shaman": {"y0": 293, "y1": 361},
-	&"_unused/troll": {"y0": 366, "y1": 433},
+## Frames 0-7 are the walk cycle and 8-11 the death sequence, uniformly across
+## all five rows - checked by rendering every frame of every row.
+const WALK_ROWS := {
+	&"slime": {"y0": 78, "y1": 164},
+	&"ogre": {"y0": 593, "y1": 710},
+	&"bee": {"y0": 789, "y1": 881},
+	&"_unused/shaman": {"y0": 242, "y1": 351},
+	&"_unused/troll": {"y0": 425, "y1": 532},
 }
+const WALK_FRAMES := 8
+const WALK_MIN_RUN := 12
 
-## The scan starts at 95 because the row's own label ("GOBLIN", "OGRE", "BAT")
-## runs x 25..~90 - at 60 it is clipped rather than excluded and arrives as a
-## 21-30px "variant" made of text. It ends at 1228 because the right-hand decor
-## starts at 1238 in every row.
-const ENEMY_X0 := 95
-const ENEMY_X1 := 1228
-const MIN_SPRITE_RUN := 20
+## A run wider than this multiple of its row's median holds two frames whose
+## art touches, and is split rather than dropped. Three of the five rows have
+## exactly one such pair.
+const WALK_SPLIT_RATIO := 1.5
 
-## Spans wider than this multiple of the row's narrowest hold more than one
-## creature and are dropped.
-##
-## The bat row overlaps wing-to-wing and does not segment: its six spans are
-## 263, 103, 92, 338, 133 and 102 wide, and rendering them shows three bats,
-## one, one, four, two and one. No projection threshold separates them, and
-## projecting the lower body rows splits bodies rather than dividing them. So
-## the row yields the three bats that stand alone and the rest are left on the
-## sheet. Every span in every other row passes this filter.
-const MAX_SPAN_RATIO := 1.4
+## A frame covering less than this fraction of its row's largest is broken art,
+## not a small pose. The bat's eighth walk frame is an orphaned wing with no
+## body; nothing else in any row comes near the threshold. Dropped on area
+## rather than on index so a regenerated sheet cannot silently lose a good
+## frame to a hard-coded skip.
+const WALK_MIN_AREA_RATIO := 0.45
 
-## Whether a pixel belongs to a sprite rather than the sheet background.
-func _is_content(sheet: Image, x: int, y: int) -> bool:
-	var c := sheet.get_pixel(x, y)
-	return Vector3(c.r, c.g, c.b).distance_squared_to(BACKGROUND / 255.0) * 65025.0 \
-		> KEY_TOLERANCE_SQ
-
-## Splits a horizontal band into sprite spans on gaps in its column
-## projection, then drops the spans that hold more than one creature.
-##
-## Projection works here and flood fill does not: a tight fill fragments a
-## sprite because its dark outlines sit near the background, and a loose one
-## merges neighbours.
-func _row_sprites(sheet: Image, y0: int, y1: int, x0: int, x1: int) -> Array:
+## The twelve frames of one row, in order, with broken art dropped.
+func _walk_row_frames(sheet: Image, y0: int, y1: int) -> Array:
+	var w := sheet.get_width()
 	var present := []
-	for x in range(x0, x1):
+	for x in w:
 		var any := false
-		for y in range(y0, y1):
-			if _is_content(sheet, x, y):
+		for y in range(y0, y1 + 1):
+			var c := sheet.get_pixel(x, y)
+			if Vector3(c.r, c.g, c.b).distance_squared_to(WALK_BACKGROUND / 255.0) \
+					* 65025.0 > KEY_TOLERANCE_SQ:
 				any = true
 				break
 		present.append(any)
-	var found := []
+	var runs := []
 	var start := -1
 	for i in present.size():
 		if present[i] and start < 0:
 			start = i
 		elif not present[i] and start >= 0:
-			if i - start >= MIN_SPRITE_RUN:
-				found.append(Vector2i(x0 + start, x0 + i))
+			if i - start >= WALK_MIN_RUN:
+				runs.append(Vector2i(start, i - 1))
 			start = -1
-	if start >= 0 and present.size() - start >= MIN_SPRITE_RUN:
-		found.append(Vector2i(x0 + start, x0 + present.size()))
-	if found.is_empty():
-		return found
-	var narrowest: int = found[0].y - found[0].x
-	for span in found:
-		narrowest = mini(narrowest, span.y - span.x)
+	if start >= 0 and present.size() - start >= WALK_MIN_RUN:
+		runs.append(Vector2i(start, present.size() - 1))
+
+	var widths := []
+	for r in runs:
+		widths.append(int(r.y) - int(r.x) + 1)
+	widths.sort()
+	var median: float = float(widths[widths.size() / 2])
+
+	# Split a run holding two touching frames at its sparsest interior column,
+	# searched between 30% and 70% of its width so the cut cannot land on an
+	# edge and shave a sliver off instead of dividing the pair.
+	var split := []
+	for r in runs:
+		var width: int = r.y - r.x + 1
+		if float(width) <= median * WALK_SPLIT_RATIO:
+			split.append(r)
+			continue
+		var best := -1
+		var best_count := 1 << 30
+		for k in range(int(width * 0.30), int(width * 0.70)):
+			var count: int = 0
+			for y in range(y0, y1 + 1):
+				var c := sheet.get_pixel(r.x + k, y)
+				if Vector3(c.r, c.g, c.b).distance_squared_to(WALK_BACKGROUND / 255.0) \
+						* 65025.0 > KEY_TOLERANCE_SQ:
+					count += 1
+			if count < best_count:
+				best_count = count
+				best = k
+		split.append(Vector2i(r.x, r.x + best - 1))
+		split.append(Vector2i(r.x + best, r.y))
+	split.sort_custom(func(a, b): return a.x < b.x)
+
+	var cut := []
+	var areas := []
+	for r in split:
+		var frame := Image.create_empty(int(r.y) - int(r.x) + 1, y1 - y0 + 1, false, Image.FORMAT_RGBA8)
+		frame.blit_rect(sheet, Rect2i(int(r.x), y0, int(r.y) - int(r.x) + 1, y1 - y0 + 1), Vector2i.ZERO)
+		var keyed := _trim(_key(frame, WALK_BACKGROUND))
+		cut.append(keyed)
+		var opaque := 0
+		for y in keyed.get_height():
+			for x in keyed.get_width():
+				if keyed.get_pixel(x, y).a > 8.0 / 255.0:
+					opaque += 1
+		areas.append(opaque)
+	var largest := 1
+	for a in areas:
+		largest = maxi(largest, int(a))
 	var out := []
-	for span in found:
-		if float(span.y - span.x) <= float(narrowest) * MAX_SPAN_RATIO:
-			out.append(span)
+	for i in cut.size():
+		if float(areas[i]) >= float(largest) * WALK_MIN_AREA_RATIO:
+			out.append(cut[i])
 	return out
 
-func _bake_enemies(sheet: Image) -> void:
-	for kind in ENEMY_ROWS:
-		var row: Dictionary = ENEMY_ROWS[kind]
+func _bake_walk_frames() -> void:
+	var sheet := Image.load_from_file(WALK_SHEET)
+	if sheet == null:
+		push_error("cannot load %s - see the header for where it goes" % WALK_SHEET)
+		return
+	# Same conversion _init does for the other sheet: it arrives RGB8 because
+	# the PNG carries no alpha, and blit_rect refuses to mix formats.
+	sheet.convert(Image.FORMAT_RGBA8)
+	for kind in WALK_ROWS:
+		var row: Dictionary = WALK_ROWS[kind]
 		var dir := "res://assets/art/enemies/%s" % kind
 		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(dir))
-		var spans := _row_sprites(sheet, int(row["y0"]), int(row["y1"]),
-			ENEMY_X0, ENEMY_X1)
-		for i in spans.size():
-			var span: Vector2i = spans[i]
-			var h: int = int(row["y1"]) - int(row["y0"])
-			var cut := Image.create_empty(span.y - span.x, h, false, Image.FORMAT_RGBA8)
-			cut.blit_rect(sheet, Rect2i(span.x, int(row["y0"]), span.y - span.x, h),
-				Vector2i.ZERO)
-			_trim(_key(cut)).save_png("%s/variant_%d.png" % [dir, i])
-		print("bake_sheet: %s x%d variants" % [kind, spans.size()])
+		var frames := _walk_row_frames(sheet, int(row["y0"]), int(row["y1"]))
+		var walk := 0
+		var death := 0
+		for i in frames.size():
+			# Index against the row as cut, so a dropped broken frame shortens
+			# the cycle it belonged to rather than shifting the death sequence
+			# up into the walk.
+			if i < WALK_FRAMES - (0 if frames.size() >= 12 else 1):
+				(frames[i] as Image).save_png("%s/walk_%d.png" % [dir, walk])
+				walk += 1
+			else:
+				(frames[i] as Image).save_png("%s/death_%d.png" % [dir, death])
+				death += 1
+		print("bake_sheet: %s %d walk, %d death" % [kind, walk, death])
 
 const DECOR_X0 := 1237
 const DECOR_X1 := 1525
@@ -647,7 +694,7 @@ func _decor_sprites(sheet: Image) -> Array:
 	var h := DECOR_Y1 - DECOR_Y0
 	var region := Image.create_empty(w, h, false, Image.FORMAT_RGBA8)
 	region.blit_rect(sheet, Rect2i(DECOR_X0, DECOR_Y0, w, h), Vector2i.ZERO)
-	region = _key(region)
+	region = _key(region, BACKGROUND)
 	var solid := []
 	solid.resize(w * h)
 	for y in h:
