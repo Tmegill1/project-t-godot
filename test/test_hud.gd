@@ -393,7 +393,12 @@ func test_the_mute_button_reports_and_toggles_the_muted_state() -> bool:
 func test_the_volume_slider_drives_the_audio_manager() -> bool:
 	var h := _ready_hud()
 	var mgr := _audio_manager_for(h)
-	var before := AudioServer.get_bus_volume_db(0)
+	# _audio_manager_for returns the process-wide autoload, not a fresh one,
+	# so BOTH its stored volume and the global bus level have to go back -
+	# restoring only the bus leaves _volume dirty for every later test in the
+	# suite, and the two are independent by design.
+	var before_bus := AudioServer.get_bus_volume_db(0)
+	var before_volume: float = mgr.get_volume()
 	var s := h.volume_slider()
 	assert_almost_eq(s.min_value, 0.0, 0.0001, "the slider bottoms out at silence")
 	assert_almost_eq(s.max_value, 1.0, 0.0001, "and tops out at full")
@@ -401,7 +406,8 @@ func test_the_volume_slider_drives_the_audio_manager() -> bool:
 	s.value = 0.3
 	s.emit_signal("value_changed", 0.3)
 	assert_almost_eq(mgr.get_volume(), 0.3, 0.0001, "moving the slider sets the volume")
-	AudioServer.set_bus_volume_db(0, before)
+	mgr.set_volume(before_volume)
+	AudioServer.set_bus_volume_db(0, before_bus)
 	h.free()
 	return true
 
@@ -410,10 +416,13 @@ func test_the_volume_slider_shows_the_volume_already_set() -> bool:
 	# current level rather than assume a default and silently reset it.
 	var h := _ready_hud()
 	var mgr := _audio_manager_for(h)
-	var before := AudioServer.get_bus_volume_db(0)
+	# Same as above: the autoload is shared, so its volume is restored too.
+	var before_bus := AudioServer.get_bus_volume_db(0)
+	var before_volume: float = mgr.get_volume()
 	mgr.set_volume(0.6)
 	h.refresh_audio_controls()
 	assert_almost_eq(h.volume_slider().value, 0.6, 0.0001, "the slider starts where the volume is")
-	AudioServer.set_bus_volume_db(0, before)
+	mgr.set_volume(before_volume)
+	AudioServer.set_bus_volume_db(0, before_bus)
 	h.free()
 	return true
