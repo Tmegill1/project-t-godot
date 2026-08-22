@@ -279,8 +279,8 @@ func test_an_enemy_faces_the_way_it_travels() -> bool:
 # --------------------------------------------------------------------------
 
 func test_death_despawns_after_the_tween_rather_than_an_animation() -> bool:
-	assert_true(Enemy.DEATH_TWEEN_MS > 0.0, "the death tween has a duration")
-	assert_true(Enemy.DEATH_TWEEN_MS < 1000.0,
+	assert_true(Enemy.DEATH_MS > 0.0, "the death sequence has a duration")
+	assert_true(Enemy.DEATH_MS < 1000.0,
 		"and it is short enough not to hold a kill on screen")
 	return true
 

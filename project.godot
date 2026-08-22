@@ -10,6 +10,8 @@ config_version=5
 
 [autoload]
 
+McpInteractionServer="*res://mcp_interaction_server.gd"
+
 AudioManager="*res://audio/audio_manager.gd"
 
 [application]

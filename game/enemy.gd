@@ -10,11 +10,11 @@ signal leaked(life_loss: int)
 
 ## How long a kill takes to leave the screen.
 ##
-## Replaces awaiting the death animation, which tied despawn timing to whatever
-## length the artist drew. The sheet has no death frames, so this file owns the
-## duration - short enough not to hold a corpse on screen, long enough that a
-## kill registers as feedback.
-const DEATH_TWEEN_MS := 250.0
+## 400ms across four drawn frames is 100ms each, which is a normal rate for
+## sprite animation. It was 250 when a death was a fade-and-shrink tween, where
+## the number set how fast one continuous motion ran; spread over four discrete
+## frames that is 62ms each and the fall reads as a blur rather than as a fall.
+const DEATH_MS := 400.0
 
 
 @onready var _sprite: Sprite2D = $Sprite
@@ -182,10 +182,9 @@ func _die(source: Dictionary) -> void:
 	if not is_inside_tree():
 		return
 	# The artist drew the fall, so it is played rather than faked. Each frame
-	# gets an equal share of DEATH_TWEEN_MS, which is what the fade-and-shrink
-	# tween before it took.
+	# gets an equal share of DEATH_MS.
 	var frames := Enemies.death_frames(kind)
-	var step := DEATH_TWEEN_MS / 1000.0 / float(frames)
+	var step := DEATH_MS / 1000.0 / float(frames)
 	for i in frames:
 		_sprite.texture = load("res://assets/art/enemies/%s/death_%d.png" % [kind, i])
 		apply_sprite_height()
