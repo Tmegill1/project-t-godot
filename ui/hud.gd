@@ -42,11 +42,23 @@ const EDGE_INSET := 12.0
 @onready var _wave: Label = $Top/WaveLabel
 @onready var _start: Button = $Top/StartButton
 @onready var _speed: Button = $Top/SpeedButton
+@onready var _mute: Button = $Top/MuteButton
+@onready var _volume_slider: HSlider = $Top/VolumeSlider
 @onready var _message: Label = $Top/Message
 
 var _board: GameBoard
 var _message_timer := 0.0
 var _fast := false
+
+func _ready() -> void:
+	_mute.pressed.connect(_toggle_mute)
+	_volume_slider.value_changed.connect(_on_volume_changed)
+
+func mute_button() -> Button:
+	return _mute
+
+func volume_slider() -> HSlider:
+	return _volume_slider
 
 func bind(board: GameBoard) -> void:
 	_board = board
@@ -68,6 +80,7 @@ func bind(board: GameBoard) -> void:
 	_on_lives_changed(board.get_lives())
 	_on_wave_changed(board.get_wave(), Waves.MAX_WAVES)
 	_message.text = ""
+	refresh_audio_controls()
 
 func _process(delta: float) -> void:
 	if _message_timer <= 0.0:
@@ -107,3 +120,39 @@ func _speed_label(factor: float) -> String:
 func _show_message(text: String) -> void:
 	_message.text = text
 	_message_timer = MESSAGE_SECONDS
+
+func _toggle_mute() -> void:
+	var mgr := _audio()
+	if mgr == null:
+		return
+	mgr.set_muted(not mgr.is_muted())
+	refresh_audio_controls()
+
+func _on_volume_changed(value: float) -> void:
+	var mgr := _audio()
+	if mgr != null:
+		mgr.set_volume(value)
+
+## Pulls both controls back into line with the AudioManager's actual state.
+##
+## Called on bind rather than assumed at build time: the HUD scene ships with
+## a full slider and an unmuted label, and the manager may already be at some
+## other setting by the time the HUD exists.
+func refresh_audio_controls() -> void:
+	var mgr := _audio()
+	if mgr == null:
+		return
+	_mute.text = "Sound off" if mgr.is_muted() else "Sound on"
+	_volume_slider.set_value_no_signal(mgr.get_volume())
+
+## Looks up the AudioManager autoload the same way GameBoard._play_sound
+## does, and for the same reasons (see game/game_board.gd:414-441): by
+## absolute path off the tree's own root rather than the bare global name,
+## so this also resolves from a Hud that was never added to a live tree -
+## every Hud the test harness builds, and calling get_node() directly on
+## self in that state throws rather than returning null.
+func _audio() -> Node:
+	var loop := Engine.get_main_loop()
+	if not loop is SceneTree:
+		return null
+	return loop.root.get_node_or_null("AudioManager")

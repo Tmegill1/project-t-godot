@@ -346,3 +346,72 @@ func test_the_speed_button_meets_the_44x44_minimum_tap_target() -> bool:
 		"SpeedButton has at least a 44x44 tap target")
 	h.free()
 	return true
+
+# --------------------------------------------------------------------------
+# audio controls (mute + volume)
+#
+# Hud reaches AudioManager the same way GameBoard._play_sound does (see
+# game/game_board.gd:414-441): by absolute path off the tree's own root,
+# not the bare global name - for the same reason, a Hud built by this
+# harness (like every board it builds) was never added to a live tree, so
+# a bare `AudioManager` reference or a relative get_node() would not resolve
+# the way it does in production.
+#
+# Under this harness that root already carries the real AudioManager
+# autoload - confirmed directly (Engine.get_main_loop().root has exactly
+# one child and it is AudioManager, the same finding test_audio_manager.gd's
+# own header documents), so this helper does not need to build or attach a
+# stand-in; it only has to find the one already there. That singleton is
+# shared by every test in this process, which is why the tests below set
+# the exact mute/volume state they depend on before asserting, rather than
+# assuming a default left by whichever test ran first, and why the ones
+# that move the bus restore it before returning (see test_audio_manager.gd's
+# volume section for the same discipline on the same global state).
+# --------------------------------------------------------------------------
+
+func _audio_manager_for(_h: Hud) -> Node:
+	return Engine.get_main_loop().root.get_node("AudioManager")
+
+func test_the_mute_button_reports_and_toggles_the_muted_state() -> bool:
+	var h := _ready_hud()
+	var mgr := _audio_manager_for(h)
+	mgr.set_muted(false)
+	h.refresh_audio_controls()
+	assert_eq(h.mute_button().text, "Sound on", "the button names the state it is in")
+
+	h.mute_button().emit_signal("pressed")
+	assert_true(mgr.is_muted(), "pressing it mutes")
+	assert_eq(h.mute_button().text, "Sound off", "and the label follows")
+
+	h.mute_button().emit_signal("pressed")
+	assert_false(mgr.is_muted(), "pressing it again unmutes")
+	h.free()
+	return true
+
+func test_the_volume_slider_drives_the_audio_manager() -> bool:
+	var h := _ready_hud()
+	var mgr := _audio_manager_for(h)
+	var before := AudioServer.get_bus_volume_db(0)
+	var s := h.volume_slider()
+	assert_almost_eq(s.min_value, 0.0, 0.0001, "the slider bottoms out at silence")
+	assert_almost_eq(s.max_value, 1.0, 0.0001, "and tops out at full")
+
+	s.value = 0.3
+	s.emit_signal("value_changed", 0.3)
+	assert_almost_eq(mgr.get_volume(), 0.3, 0.0001, "moving the slider sets the volume")
+	AudioServer.set_bus_volume_db(0, before)
+	h.free()
+	return true
+
+func test_the_volume_slider_shows_the_volume_already_set() -> bool:
+	# The HUD is built after the AudioManager exists, so it must read the
+	# current level rather than assume a default and silently reset it.
+	var h := _ready_hud()
+	var mgr := _audio_manager_for(h)
+	var before := AudioServer.get_bus_volume_db(0)
+	mgr.set_volume(0.6)
+	h.refresh_audio_controls()
+	assert_almost_eq(h.volume_slider().value, 0.6, 0.0001, "the slider starts where the volume is")
+	AudioServer.set_bus_volume_db(0, before)
+	h.free()
+	return true
