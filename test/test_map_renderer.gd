@@ -876,24 +876,57 @@ func test_every_prop_sprite_contributes_exactly_one_footprint() -> bool:
 	renderer.free()
 	return true
 
-func test_a_props_blocking_radius_is_half_the_tile_box_it_is_fitted_into() -> bool:
-	# _place normalises every prop's LONGEST axis to exactly TILE_SIZE, so the
-	# radius prop_footprints derives is always TILE_SIZE / 2 whatever the
-	# source dimensions are. That is precisely why trimming has to happen at
-	# bake time and cannot be compensated for here: the radius does not move,
-	# so the ART has to grow to fill it. tile131 untrimmed draws its subject at
-	# ~23px inside this same 24px radius - a blocking circle over twice the
-	# area of the visible art. test_prop_assets.gd's tight-bbox gate is what
-	# holds the other half of this bargain.
+func test_a_props_blocking_radius_is_half_the_box_its_slot_is_fitted_into() -> bool:
+	# _place normalises a prop's LONGEST axis to exactly the box it is given,
+	# so the radius prop_footprints derives is always half that box whatever
+	# the source dimensions are. That is precisely why trimming has to happen
+	# at bake time and cannot be compensated for here: the radius does not
+	# move to fit the art, so the ART has to fill the box. An untrimmed source
+	# drawing its subject at ~23px inside a 24px radius is a blocking circle
+	# over twice the area of the visible art. test_prop_assets.gd's tight-bbox
+	# gate holds the other half of this bargain.
+	#
+	# The box is per slot, not one constant: fire is drawn at 80% of a tile
+	# because the campfire out-shouted the player's towers. Asserting a single
+	# TILE_SIZE / 2 here - which this test did until fire shrank - would pin
+	# the wrong invariant, because the property that matters is that the
+	# radius follows the box, not that every box is a whole tile.
 	var renderer := MapRenderer.new()
 	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
 	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
+	# Read the slot off each prop sprite rather than out of the footprint:
+	# prop_footprints' dictionaries are a sim-facing contract that
+	# sim/placement.gd consumes, and growing them with a key only a test wants
+	# is how that contract stops meaning anything.
+	var checked := 0
+	var scales_seen := {}
+	for child in renderer.get_children():
+		if not (child is Sprite2D) or child.z_index != 1:
+			continue
+		var sprite: Sprite2D = child
+		var slot := sprite.texture.resource_path.get_file().get_basename()
+		if not MapRenderer.PROP_SCALE.has(StringName(slot)):
+			continue  # castle and cave are drawn at this z and are not props
+		var scale: float = float(MapRenderer.PROP_SCALE[StringName(slot)])
+		var tex: Texture2D = sprite.texture
+		var display := Vector2(tex.get_width(), tex.get_height()) * sprite.scale
+		scales_seen[scale] = true
+		assert_almost_eq(maxf(display.x, display.y), float(Tiles.TILE_SIZE) * scale, 0.001,
+			"%s's longest axis fills its own box exactly" % slot)
+		checked += 1
+	assert_true(checked > 0, "the demo map scatters props")
+	assert_true(scales_seen.size() > 1,
+		"and at more than one scale, so this proves something")
+
 	var footprints := renderer.prop_footprints()
-	assert_true(footprints.size() > 0, "the demo map scatters props")
+	assert_eq(footprints.size(), checked, "one footprint per prop")
+	var boxes := {}
+	for scale in scales_seen:
+		boxes[snappedf(float(Tiles.TILE_SIZE) * float(scale) / 2.0, 0.001)] = true
 	for entry in footprints:
 		var f: Dictionary = entry
-		assert_almost_eq(f["radius"], float(Tiles.TILE_SIZE) / 2.0, 0.001,
-			"footprint radius is half the tile box")
+		assert_true(boxes.has(snappedf(float(f["radius"]), 0.001)),
+			"a footprint radius of %f is half one of the slot boxes" % f["radius"])
 	renderer.free()
 	return true
 

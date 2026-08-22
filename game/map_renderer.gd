@@ -125,11 +125,32 @@ func _place(texture: Texture2D, col: int, row: int, size_px: float,
 	add_child(s)
 	return s
 
+## How much of a tile each prop slot fills. 1.0 unless a slot's art carries
+## more visual weight than its role deserves.
+##
+## Only fire is under 1.0. The decor column's campfire is its loudest object -
+## bright orange against every one of the three biomes' grounds - and up to
+## seven of them land on a map, so at full tile size they competed with the
+## player's own towers for attention. Shrinking the art shrinks the footprint
+## with it, which is intended rather than tolerated: prop_footprints derives a
+## blocking radius from displayed size precisely so that what blocks you is
+## what you can see, and holding the footprint while shrinking the art would
+## manufacture the invisible wall that rule exists to prevent.
+const PROP_SCALE := {
+	&"tree": 1.0, &"stone": 1.0, &"spike": 1.0, &"fire": 0.8,
+}
+
 ## Places a prop and records it as one, so prop_footprints can find it.
 func _place_prop(slot: StringName, col: int, row: int) -> Sprite2D:
 	# load() here, not in Biomes: data/ stays engine-free (test_sim_purity.gd).
 	var texture: Texture2D = load(Biomes.prop_path(_biome, slot))
-	var sprite := _place(texture, col, row, Tiles.TILE_SIZE, _Z_OVERLAY)
+	var box := Tiles.TILE_SIZE * float(PROP_SCALE.get(slot, 1.0))
+	# _place centres a sprite inside the box it is given, and the box is
+	# anchored at the tile's origin - so a box smaller than a tile has to be
+	# offset by the difference or the prop sits in the tile's top-left corner
+	# instead of the middle of it.
+	var inset := Vector2.ONE * (Tiles.TILE_SIZE - box) / 2.0
+	var sprite := _place(texture, col, row, box, _Z_OVERLAY, inset)
 	_prop_sprites[sprite] = true
 	return sprite
 
