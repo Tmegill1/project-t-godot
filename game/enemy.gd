@@ -26,7 +26,6 @@ var _path: PackedVector2Array
 var _wave := 1
 var _travelled := 0.0
 var _flip := false
-var _base_scale := 1.0
 
 func setup(enemy_kind: StringName, path: PackedVector2Array, wave: int, rng: Rng = null) -> void:
 	kind = enemy_kind
@@ -68,7 +67,6 @@ func setup(enemy_kind: StringName, path: PackedVector2Array, wave: int, rng: Rng
 func apply_sprite_height() -> void:
 	var factor := float(Enemies.DEFS[kind]["sprite_px"]) \
 		/ float(_sprite.texture.get_height())
-	_base_scale = factor
 	_sprite.scale = Vector2.ONE * factor
 
 ## Which frame of the walk cycle the enemy is showing.

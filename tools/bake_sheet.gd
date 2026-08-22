@@ -583,10 +583,19 @@ func _walk_row_frames(sheet: Image, y0: int, y1: int) -> Array:
 	var largest := 1
 	for a in areas:
 		largest = maxi(largest, int(a))
+	# Each surviving frame carries the index it had BEFORE anything was
+	# dropped, so the caller can tell which half lost it rather than guessing.
+	# The guess this replaced assumed a dropped frame came out of the walk
+	# half - true of the bat, the only row it currently applies to, and
+	# silently wrong for a row that loses a death frame instead: the walk half
+	# would stay whole and the rule would still lop its last frame into the
+	# death sequence, making death_0 a walking pose and discarding a real
+	# death frame. Nothing downstream could see that, because the counts stay
+	# self-consistent.
 	var out := []
 	for i in cut.size():
 		if float(areas[i]) >= float(largest) * WALK_MIN_AREA_RATIO:
-			out.append(cut[i])
+			out.append({"index": i, "image": cut[i]})
 	return out
 
 func _bake_walk_frames() -> void:
@@ -604,15 +613,17 @@ func _bake_walk_frames() -> void:
 		var frames := _walk_row_frames(sheet, int(row["y0"]), int(row["y1"]))
 		var walk := 0
 		var death := 0
-		for i in frames.size():
-			# Index against the row as cut, so a dropped broken frame shortens
-			# the cycle it belonged to rather than shifting the death sequence
-			# up into the walk.
-			if i < WALK_FRAMES - (0 if frames.size() >= 12 else 1):
-				(frames[i] as Image).save_png("%s/walk_%d.png" % [dir, walk])
+		for entry in frames:
+			var item: Dictionary = entry
+			# Split on the frame's ORIGINAL index, so a dropped frame shortens
+			# whichever half it came out of and never moves the boundary. The
+			# sheet draws the walk cycle first and the death sequence after it,
+			# uniformly across all five rows.
+			if int(item["index"]) < WALK_FRAMES:
+				(item["image"] as Image).save_png("%s/walk_%d.png" % [dir, walk])
 				walk += 1
 			else:
-				(frames[i] as Image).save_png("%s/death_%d.png" % [dir, death])
+				(item["image"] as Image).save_png("%s/death_%d.png" % [dir, death])
 				death += 1
 		print("bake_sheet: %s %d walk, %d death" % [kind, walk, death])
 

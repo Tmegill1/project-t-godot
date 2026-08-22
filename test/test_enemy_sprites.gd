@@ -36,6 +36,12 @@ func _count(kind: String, action: String) -> int:
 		n += 1
 	return n
 
+# This is also the gate on the bake's walk/death boundary. The bake splits a
+# row on each frame's ORIGINAL index, so a dropped frame shortens whichever
+# half it came out of - which means a row that loses a death frame reports
+# 8 walk / 3 death and fails here. An earlier rule assumed any drop came from
+# the walk half; under it that same row would have reported 7 / 4, stayed
+# self-consistent, and silently shipped a walking pose as death_0.
 func test_every_kind_ships_the_frames_its_row_yields() -> bool:
 	for kind in _KINDS:
 		assert_eq(_count(kind, "walk"), int(_EXPECTED_WALK[kind]),
