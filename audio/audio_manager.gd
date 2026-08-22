@@ -25,6 +25,18 @@ var _players: Array[AudioStreamPlayer] = []
 var _next := 0
 var _muted := false
 
+## Volume as a linear 0..1, applied to the master bus.
+##
+## Stored linear rather than read back from the bus because linear_to_db(0.0)
+## is -inf: silence is a level the bus can hold but not report in a form that
+## converts back.
+##
+## The bus, not the players: the pool rotates through POOL_SIZE
+## AudioStreamPlayers, so setting this per player would leave anything already
+## playing at the old level and would need re-applying inside play(). The bus
+## moves every voice at once, mid-playback included.
+var _volume := 1.0
+
 func _ready() -> void:
 	for sound_name in SOUNDS:
 		for ext in [".ogg", ".wav"]:
@@ -50,3 +62,16 @@ func play(sound: StringName) -> void:
 
 func set_muted(muted: bool) -> void:
 	_muted = muted
+
+func set_volume(linear: float) -> void:
+	_volume = clampf(linear, 0.0, 1.0)
+	AudioServer.set_bus_volume_db(0, linear_to_db(_volume))
+
+func get_volume() -> float:
+	return _volume
+
+## Whether play() is currently short-circuited. Independent of the volume:
+## muting does not zero the level and unmuting does not restore a remembered
+## one, so a player who adjusts the slider while muted gets what they chose.
+func is_muted() -> bool:
+	return _muted

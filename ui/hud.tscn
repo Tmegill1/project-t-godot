@@ -36,6 +36,19 @@ custom_minimum_size = Vector2(44, 44)
 layout_mode = 2
 text = "Speed 1x"
 
+[node name="MuteButton" type="Button" parent="Top"]
+custom_minimum_size = Vector2(44, 44)
+layout_mode = 2
+text = "Sound on"
+
+[node name="VolumeSlider" type="HSlider" parent="Top"]
+custom_minimum_size = Vector2(90, 44)
+layout_mode = 2
+min_value = 0.0
+max_value = 1.0
+step = 0.05
+value = 1.0
+
 [node name="Message" type="Label" parent="Top"]
 layout_mode = 2
 size_flags_horizontal = 3

@@ -6,8 +6,8 @@ extends Node2D
 
 ## Shared across every biome: the goal and spawn markers are player landmarks,
 ## not scenery, and are the same object whatever the map is made of.
-const _CASTLE := preload("res://assets/kenney/castle.png")
-const _CAVE := preload("res://assets/kenney/cave.png")
+const _CASTLE := preload("res://assets/art/castle.png")
+const _CAVE := preload("res://assets/art/cave.png")
 
 const _MAX_FIRE_TILES := 7
 
@@ -100,9 +100,7 @@ func prop_footprints() -> Array:
 ## Centring has to be applied to the position because these sprites are
 ## top-left anchored (centered = false, matching Phaser's setOrigin(0, 0)):
 ## once a sprite no longer fills its box, the leftover slack is split evenly
-## rather than all landing on the right/bottom edge. A square source has zero
-## slack and so still lands exactly on its tile origin, which is what keeps
-## the ground layer flush and seam-free.
+## rather than all landing on the right/bottom edge.
 func _place(texture: Texture2D, col: int, row: int, size_px: float,
 		z: int, offset := Vector2.ZERO) -> Sprite2D:
 	var s := Sprite2D.new()
@@ -113,71 +111,148 @@ func _place(texture: Texture2D, col: int, row: int, size_px: float,
 	var slack := (Vector2(size_px, size_px) - src * factor) / 2.0
 	s.position = Vector2(col * Tiles.TILE_SIZE, row * Tiles.TILE_SIZE) + offset + slack
 	s.scale = Vector2.ONE * factor
-	# Every tile here is minified, several of them hard (the largest Kenney
-	# source in this renderer is 128px, drawn into a 48px tile). The
-	# project-wide default filter is plain LINEAR, which samples the
-	# base level only and aliases badly at those ratios; this reads the mipmap
-	# chain that the .import files generate instead. LINEAR rather than NEAREST
-	# because this art is painted, not pixel art - the enemy sheets are the
-	# opposite case and take NEAREST (game/enemy.tscn).
+	# _place draws props (up to 96x61 into a 48px box, 1.83x) and endpoints
+	# (~220px into a 144px box, 1.49x) - hard enough minification that the
+	# project-wide default filter, plain LINEAR, would sample the base level
+	# only and alias badly; this reads the mipmap chain the .import files
+	# generate instead (test_art_import.gd). LINEAR rather than NEAREST
+	# because this art is painted, not pixel art - and the enemy sprites
+	# (game/enemy.tscn) are the same case, not the opposite: they are also
+	# painted art past a hard minification, so they also take
+	# LINEAR_WITH_MIPMAPS rather than NEAREST.
 	s.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	s.z_index = z
 	add_child(s)
 	return s
 
+## How much of a tile each prop slot fills. 1.0 unless a slot's art carries
+## more visual weight than its role deserves.
+##
+## Only fire is under 1.0. The decor column's campfire is its loudest object -
+## bright orange against every one of the three biomes' grounds - and up to
+## seven of them land on a map, so at full tile size they competed with the
+## player's own towers for attention. Shrinking the art shrinks the footprint
+## with it, which is intended rather than tolerated: prop_footprints derives a
+## blocking radius from displayed size precisely so that what blocks you is
+## what you can see, and holding the footprint while shrinking the art would
+## manufacture the invisible wall that rule exists to prevent.
+const PROP_SCALE := {
+	&"tree": 1.0, &"stone": 1.0, &"spike": 1.0, &"fire": 0.8,
+}
+
 ## Places a prop and records it as one, so prop_footprints can find it.
 func _place_prop(slot: StringName, col: int, row: int) -> Sprite2D:
 	# load() here, not in Biomes: data/ stays engine-free (test_sim_purity.gd).
 	var texture: Texture2D = load(Biomes.prop_path(_biome, slot))
-	var sprite := _place(texture, col, row, Tiles.TILE_SIZE, _Z_OVERLAY)
+	var box := Tiles.TILE_SIZE * float(PROP_SCALE.get(slot, 1.0))
+	# _place centres a sprite inside the box it is given, and the box is
+	# anchored at the tile's origin - so a box smaller than a tile has to be
+	# offset by the difference or the prop sits in the tile's top-left corner
+	# instead of the middle of it.
+	var inset := Vector2.ONE * (Tiles.TILE_SIZE - box) / 2.0
+	var sprite := _place(texture, col, row, box, _Z_OVERLAY, inset)
 	_prop_sprites[sprite] = true
 	return sprite
 
-## Ground is drawn from a corner-mask lattice sampled at TILE CENTRES: each
-## sprite spans the square between four adjacent centres, so the grid is
-## (cols + 1) x (rows + 1) and every sprite sits half a tile up and left of its
-## lattice point.
+## Ground is one sprite per tile, on the tile grid.
 ##
-## Anchoring anywhere else moves the road off the world-space route PathFinder
-## emits - enemies follow tile centres, so the road has to be centred on them.
-## The half-tile overhang this produces falls outside the viewport on the left,
-## top and bottom, and under TowerPanel's 95%-opaque background on the right.
+## This replaces a corner-mask lattice that sampled terrain at tile centres
+## over a (cols+1) x (rows+1) grid offset half a tile. That existed because the
+## previous art blended between terrains; this art does not - its cells are
+## discrete cards and its road pieces are shapes. An edge mask over orthogonal
+## neighbours is the simpler thing that this art actually wants.
 ##
-## Two alternatives were measured and rejected (spec section 7.1): sampling at
-## grid intersections draws a 70px road but floods the one-tile buildable strip
-## between the row-8 and row-10 legs, and a half-tile lattice minifies the
-## blend detail into a straight-edged bar.
+## Ground variety is drawn from its own Rng rather than the decoration one.
+## Which of the six ground cards a tile gets is cosmetic and should not move
+## when the decoration seed changes; drawing from the passed rng here would
+## also shift the whole decoration stream, since _draw_ground runs first.
 func _draw_ground() -> void:
-	# Exact at 48 (TILE_SIZE is even); intentional, as in tower.gd's frame_region.
-	@warning_ignore("integer_division")
-	var half := Tiles.TILE_SIZE / 2
-	for r in range(_rows + 1):
-		for c in range(_cols + 1):
+	var variants := Rng.new(Seeds.DEFAULT_GROUND_SEED)
+	for r in _rows:
+		for c in _cols:
 			# load() rather than a texture from Biomes: data/ is held
 			# engine-free by test_sim_purity.gd, so the render layer is where
 			# a path becomes a resource. Godot's ResourceLoader caches by
-			# path, so the 360 calls per render are dictionary hits.
-			var texture: Texture2D = load(Biomes.blend_path(_biome, corner_mask(c, r)))
-			_place(texture, c, r, Tiles.TILE_SIZE, _Z_GROUND,
-				Vector2(-half, -half))
+			# path, so the repeated calls are dictionary hits.
+			if _is_road(c, r):
+				_place_tile(load(Biomes.road_path(_biome, edge_mask(c, r))), c, r)
+			else:
+				_place_tile(load(Biomes.ground_path(
+					_biome, variants.int_range(0, Biomes.GROUND_VARIANTS - 1))), c, r)
 
-## The four tiles surrounding lattice point (c, r), as a bitmask.
-## Bit order is fixed: TL=1, TR=2, BL=4, BR=8, set means road.
-## Public so tests can assert the lattice without inspecting sprites.
-func corner_mask(c: int, r: int) -> int:
+## The four orthogonal neighbours of a cell that are road, as a bitmask.
+## Bit order is fixed: N=1, E=2, S=4, W=8. Out of bounds is not road.
+## Public so tests can assert the mask without inspecting sprites.
+func edge_mask(c: int, r: int) -> int:
 	var mask := 0
-	if _is_road(c - 1, r - 1):
-		mask |= 1
 	if _is_road(c, r - 1):
+		mask |= 1
+	if _is_road(c + 1, r):
 		mask |= 2
-	if _is_road(c - 1, r):
+	if _is_road(c, r + 1):
 		mask |= 4
-	if _is_road(c, r):
+	if _is_road(c - 1, r):
 		mask |= 8
 	return mask
 
-## Out of bounds reads as ground, which is what closes the lattice at the map
-## edge without a special case.
+## How much of each tile's edge is the card's painted border rather than
+## terrain, and is therefore not drawn.
+##
+## The sheet's terrain tiles are cards with a dark scalloped edge and a drop
+## shadow. Drawn whole, every cell boundary carries two of those edges back to
+## back and the board reads as a grid of cards in black gutters - the single
+## most visible thing about the first map rendered from this art. The spec
+## called for tiles "scaled to slightly overfill each cell" to close them,
+## which works for the ground and cannot work for the road: a road tile's
+## leading border is then drawn over its neighbour's road instead of over its
+## grass. Cropping removes it in both cases.
+##
+## MEASURED at 5 - the widest near-black run reaching in from any edge across
+## all 66 ground and road PNGs in all three biomes - plus one.
+const TILE_BLEED := 6
+
+## Draws a ground or road tile STRETCHED to fill its cell exactly.
+##
+## Deliberately not _place. A tile is a cell of a grid and has to cover its
+## cell; _place fits a source inside the box preserving aspect and centres it
+## in the slack, which is right for a prop and opens seams here - the road
+## pieces are 66x63, so aspect-fitting leaves 2.2px of transparency under
+## every one of them. The distortion this trades for is 4.7% on the roads and
+## under 2% on the ground.
+##
+## prop_footprints reads displayed size to derive a blocking radius and its
+## doc comment says that only measures correctly because _place scales
+## uniformly. That stays true: props still go through _place, and nothing
+## drawn here is ever recorded as a prop.
+func _place_tile(texture: Texture2D, col: int, row: int) -> Sprite2D:
+	var s := Sprite2D.new()
+	s.texture = texture
+	s.centered = false
+	# The card's border is cropped rather than drawn - see TILE_BLEED.
+	s.region_enabled = true
+	s.region_rect = Rect2(TILE_BLEED, TILE_BLEED,
+		texture.get_width() - TILE_BLEED * 2.0,
+		texture.get_height() - TILE_BLEED * 2.0)
+	s.position = Vector2(col * Tiles.TILE_SIZE, row * Tiles.TILE_SIZE)
+	s.scale = Vector2(
+		float(Tiles.TILE_SIZE) / s.region_rect.size.x,
+		float(Tiles.TILE_SIZE) / s.region_rect.size.y)
+	# Unlike _place, plain LINEAR here - no mipmap chain. Either of two
+	# reasons would be enough on its own. First, region_enabled is set two
+	# lines up: a mip level averages across the region's boundary, and for
+	# these tiles that means averaging the cropped card border (TILE_BLEED)
+	# back into the terrain, reintroducing by hand the seam the crop exists
+	# to remove. Second, the minification here is mild - 66 source px into a
+	# 48 cell, 1.125x - next to the props' up to 1.83x, so the aliasing plain
+	# LINEAR leaves behind is negligible by comparison. See test_art_import.gd,
+	# which pins both this exclusion and the props/endpoints/enemy inclusion.
+	s.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	s.z_index = _Z_GROUND
+	add_child(s)
+	return s
+
+## Out of bounds reads as ground, which is what the edge mask needs at the
+## map's border without a special case.
 func _is_road(c: int, r: int) -> bool:
 	if r < 0 or r >= _rows or c < 0 or c >= _cols:
 		return false

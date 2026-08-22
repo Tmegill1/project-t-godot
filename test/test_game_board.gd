@@ -1114,3 +1114,27 @@ func test_selling_an_upgraded_tower_refunds_half_of_everything_sunk_in() -> bool
 		"refund covers placement and upgrades together")
 	b.free()
 	return true
+
+# --------------------------------------------------------------------------
+# priority
+# --------------------------------------------------------------------------
+
+func test_cycling_priority_advances_the_selected_tower() -> bool:
+	var b := _ready_board()
+	var tower := _place_and_select(b, &"basic")
+	var before := tower.get_priority()
+	b.cycle_selected_tower_priority()
+	assert_eq(tower.get_priority(), Targeting.next_priority(before),
+		"the board advances the tower one step through the cycle")
+	b.free()
+	return true
+
+func test_cycling_priority_with_nothing_selected_is_a_no_op() -> bool:
+	# The inspector is hidden with no selection, but the board must not crash
+	# if the call arrives anyway - every other board mutator guards this.
+	var b := _ready_board()
+	b.cycle_selected_tower_priority()
+	assert_eq(b.get_gold(), Maps.get_def(Maps.FIRST)["starting_gold"],
+		"a fresh board with nothing selected was left untouched")
+	b.free()
+	return true

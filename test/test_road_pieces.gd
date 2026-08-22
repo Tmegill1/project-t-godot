@@ -1,0 +1,214 @@
+extends TestCase
+
+# Gates for the road pieces. Each piece is named by the connection mask it is
+# drawn for, and this file re-derives that mask from the committed pixels -
+# so the naming is proved rather than trusted, the same way the Kenney blend
+# table was.
+#
+# Bit order is N=1, E=2, S=4, W=8, and it is load-bearing: MapRenderer builds
+# the same mask from a cell's orthogonal neighbours and looks the piece up by
+# it. A transposed bit order produces a plausible-looking but wrong road.
+#
+# Mask 5 (north-south straight) has no source piece on the sheet and is
+# COMPOSED from the cross - see tools/bake_sheet.gd. It is gated here like any
+# other piece precisely because it is manufactured.
+
+const _BIOMES := ["forest", "desert", "ice"]
+const _MASKS := [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+
+func _road(biome: String, mask: int) -> Image:
+	var bytes := FileAccess.get_file_as_bytes(
+		"res://assets/art/%s/road_%02d.png" % [biome, mask])
+	if bytes.is_empty():
+		return null
+	var img := Image.new()
+	if img.load_png_from_buffer(bytes) != OK:
+		return null
+	return img
+
+## Where each biome's road and surround should have landed after the bake's
+## recolouring. Only the grass row holds road pieces on this sheet, so desert
+## and ice are recoloured from it - which is exactly why this test cannot use
+## a "road is warmer" heuristic: desert's road AND its surround are both warm,
+## and the road is the darker of the two.
+const _PALETTES := {
+	"forest": {"surround": Vector3(58, 69, 16), "road": Vector3(168, 119, 55)},
+	"desert": {"surround": Vector3(170, 123, 62), "road": Vector3(105, 76, 42)},
+	"ice": {"surround": Vector3(91, 145, 190), "road": Vector3(200, 220, 235)},
+}
+
+## Whether the middle of the given edge is road rather than surround, decided
+## by which of that biome's two palettes the sampled material is nearer to.
+func _edge_is_road(img: Image, biome: String, edge: String) -> bool:
+	var w := img.get_width()
+	var h := img.get_height()
+	var inset := maxi(6, mini(w, h) / 5)
+	var centre := {
+		"N": Vector2i(w / 2, inset), "S": Vector2i(w / 2, h - inset),
+		"W": Vector2i(inset, h / 2), "E": Vector2i(w - inset, h / 2),
+	}[edge] as Vector2i
+	var acc := Vector3.ZERO
+	var n := 0
+	for dy in range(-3, 4):
+		for dx in range(-3, 4):
+			var c := img.get_pixel(
+				clampi(centre.x + dx, 0, w - 1), clampi(centre.y + dy, 0, h - 1))
+			if c.a > 0.5:
+				acc += Vector3(c.r, c.g, c.b) * 255.0
+				n += 1
+	if n == 0:
+		return false
+	var mean := acc / float(n)
+	var palette: Dictionary = _PALETTES[biome]
+	return mean.distance_squared_to(palette["road"]) \
+		< mean.distance_squared_to(palette["surround"])
+
+func test_every_biome_ships_every_road_piece() -> bool:
+	for biome in _BIOMES:
+		for mask in _MASKS:
+			var img := _road(biome, mask)
+			assert_true(img != null, "%s/road_%02d.png decodes" % [biome, mask])
+	return true
+
+func test_each_piece_connects_exactly_where_its_name_says() -> bool:
+	var bits := {"N": 1, "E": 2, "S": 4, "W": 8}
+	for biome in _BIOMES:
+		for mask in _MASKS:
+			if mask == 0 or mask == 15:
+				continue  # no arms and all arms: the edge probe cannot separate them
+			var img := _road(biome, mask)
+			assert_true(img != null, "%s/road_%02d.png decodes" % [biome, mask])
+			if img == null:
+				continue
+			var derived := 0
+			for edge in bits:
+				if _edge_is_road(img, biome, edge):
+					derived |= int(bits[edge])
+			assert_eq(derived, mask,
+				"%s/road_%02d connects %d - the piece and its name disagree"
+					% [biome, mask, derived])
+	return true
+
+func test_the_composed_straight_is_road_north_south_and_surround_east_west() -> bool:
+	# Mask 5 is manufactured, so it gets its own assertion rather than only
+	# riding on the generic one above.
+	for biome in _BIOMES:
+		var img := _road(biome, 5)
+		assert_true(img != null, "%s/road_05.png decodes" % biome)
+		if img == null:
+			continue
+		assert_true(_edge_is_road(img, biome, "N"), "%s straight is road at the north edge" % biome)
+		assert_true(_edge_is_road(img, biome, "S"), "%s straight is road at the south edge" % biome)
+		assert_false(_edge_is_road(img, biome, "E"), "%s straight is surround at the east edge" % biome)
+		assert_false(_edge_is_road(img, biome, "W"), "%s straight is surround at the west edge" % biome)
+	return true
+
+func test_road_pieces_have_no_unkeyed_background_left() -> bool:
+	# Not "no dark pixels". The pieces' own outlines and painted shadows are
+	# legitimately dark, and forest keeps them unshifted because its palette is
+	# identity - so a brightness rule fails every forest piece while passing the
+	# recoloured biomes, which is a property of the recolour, not of the key.
+	# What must not survive is the SHEET BACKGROUND: an opaque pixel within the
+	# key's own tolerance of (9, 22, 28) means the key never ran.
+	var background := Vector3(9.0, 22.0, 28.0)
+	for biome in _BIOMES:
+		for mask in _MASKS:
+			var img := _road(biome, mask)
+			assert_true(img != null, "%s/road_%02d.png decodes" % [biome, mask])
+			if img == null:
+				continue
+			var survivors := 0
+			for y in range(0, img.get_height(), 2):
+				for x in range(0, img.get_width(), 2):
+					var c := img.get_pixel(x, y)
+					if c.a <= 0.5:
+						continue
+					if (Vector3(c.r, c.g, c.b) * 255.0).distance_squared_to(background) <= 250.0:
+						survivors += 1
+			assert_eq(survivors, 0,
+				"%s/road_%02d has %d unkeyed background pixels" % [biome, mask, survivors])
+	return true
+
+func test_no_composed_piece_carries_a_black_slot_in_its_interior() -> bool:
+	# _patch_arm used to fill an absent arm by copying an adjacent corner of
+	# the cross, and that corner carries the card's own outer border on its
+	# outer edges - so the copy dragged a near-black stripe into the middle of
+	# the tile. Tiled up it read as a bar across the road at every cell
+	# boundary. Nothing else in this file could see it: the piece still had
+	# the right mask, the right palette and a clean margin.
+	#
+	# The interior is everything more than BORDER from an edge. The card's own
+	# border lives outside that and is left alone.
+	const _BORDER := 6
+	const _DARK := 45.0 / 255.0
+	for biome in Biomes.KINDS:
+		for mask in 16:
+			var bytes := FileAccess.get_file_as_bytes(
+				"res://assets/art/%s/road_%02d.png" % [biome, mask])
+			assert_false(bytes.is_empty(), "%s road %d exists" % [biome, mask])
+			if bytes.is_empty():
+				continue
+			var img := Image.new()
+			assert_eq(img.load_png_from_buffer(bytes), OK,
+				"%s road %d decodes" % [biome, mask])
+			var dark := 0
+			for y in range(_BORDER, img.get_height() - _BORDER):
+				for x in range(_BORDER, img.get_width() - _BORDER):
+					var c := img.get_pixel(x, y)
+					if c.a > 0.5 and c.r < _DARK and c.g < _DARK and c.b < _DARK:
+						dark += 1
+			assert_eq(dark, 0,
+				"%s road %d has %d near-black interior pixels" % [biome, mask, dark])
+	return true
+
+func test_a_biome_s_road_belongs_to_the_same_world_as_its_ground() -> bool:
+	# The recolour preserves each pixel's offset from its source material so
+	# shading and texture survive - but an offset carries HUE as well as
+	# brightness, and the source verge is GRASS. Undamped, that grass arrives
+	# in the desert as green speckles and in the ice as a green band down both
+	# sides of a snow road, on an all-blue board. Measured before the fix: the
+	# ice road pieces reached a green dominance of +41 and the desert's +39.
+	#
+	# Nothing else here could see it. Every other gate in this file asks about
+	# the road-versus-surround SEPARATION, which green pixels answer correctly -
+	# they are still unambiguously surround. The question no gate asked was
+	# whether the surround looks like the ground it abuts.
+	#
+	# So the bound is the biome's own ground tiles, not a constant: whatever
+	# green the artist put in a biome's terrain is allowed in its road, and
+	# nothing beyond it is. That keeps forest honest (its grass is green in
+	# both) and desert honest (its cacti are green in both) without either
+	# needing a hand-picked number.
+	for biome in Biomes.KINDS:
+		var ground_peak := -255
+		for i in Biomes.GROUND_VARIANTS:
+			ground_peak = maxi(ground_peak, _green_dominance(Biomes.ground_path(biome, i)))
+		var road_peak := -255
+		for mask in 16:
+			road_peak = maxi(road_peak, _green_dominance(Biomes.road_path(biome, mask)))
+		assert_true(ground_peak > -255, "%s ground tiles decode" % biome)
+		assert_true(road_peak > -255, "%s road pieces decode" % biome)
+		assert_true(road_peak <= ground_peak,
+			"%s road peaks at %d green dominance against its ground's %d"
+				% [biome, road_peak, ground_peak])
+	return true
+
+## The greenest any opaque pixel gets, as green minus the larger of red and
+## blue. Negative everywhere means nothing in the image reads as vegetation.
+func _green_dominance(path: String) -> int:
+	var bytes := FileAccess.get_file_as_bytes(path)
+	if bytes.is_empty():
+		return -255
+	var img := Image.new()
+	if img.load_png_from_buffer(bytes) != OK:
+		return -255
+	var peak := -255
+	for y in img.get_height():
+		for x in img.get_width():
+			var c := img.get_pixel(x, y)
+			if c.a <= 0.5:
+				continue
+			var g := int(round(c.g * 255.0))
+			var rb := maxi(int(round(c.r * 255.0)), int(round(c.b * 255.0)))
+			peak = maxi(peak, g - rb)
+	return peak

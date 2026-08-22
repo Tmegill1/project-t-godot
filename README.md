@@ -310,12 +310,29 @@ by hand.
 
 ## Art
 
-Map, prop, endpoint and tower art is from Kenney's
-[Tower Defense (Top-Down)](https://kenney.nl/assets/tower-defense-top-down)
-pack, licensed CC0. `tools/bake_kenney.gd` bakes the committed assets under
-`assets/kenney/` from a copy extracted to `reference/kenney-td/`, which is
-gitignored. The ice biome's ground is a recolour of the pack's sand, since the
-pack ships no snow. Enemy sprites are not from this pack.
+Map, prop, endpoint, enemy and tower art is cut from a single illustrated
+reference sheet, vendored at `reference/illustrated-sheet/sheet.png`
+(gitignored). `tools/bake_sheet.gd` regenerates every committed asset under
+`assets/art/` and `assets/towers.png` from it:
+
+```bash
+godot --headless --script tools/bake_sheet.gd
+godot --headless --import
+git checkout -- project.godot
+```
+
+Two facts worth knowing before touching any of it:
+
+- **The road is drawn from an edge mask, not a corner mask.** The Kenney
+  pack this replaced blended terrain at tile corners; this art's road pieces
+  are discrete shapes keyed to which of a tile's four orthogonal neighbours
+  (N/E/S/W) are also road, so `MapRenderer` samples neighbours, not corners.
+  See `game/map_renderer.gd`'s `edge_mask` and `data/biomes.gd`'s
+  `road_path`.
+- **The sheet has no alpha channel**, so extraction cannot read transparency
+  directly - it keys a measured background colour instead (see
+  `tools/bake_sheet.gd`'s `BACKGROUND` and `KEY_TOLERANCE_SQ`) and keeps
+  whatever falls outside that tolerance.
 
 ---
 

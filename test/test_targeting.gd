@@ -85,6 +85,81 @@ func test_next_priority_cycles() -> bool:
 	assert_eq(Targeting.next_priority(&"closest"), &"first", "wraps around")
 	return true
 
+func test_weakest_prefers_the_lowest_health_enemy() -> bool:
+	var tower := {"position": Vector2.ZERO, "range": 500.0,
+		"priority": &"weakest", "detection": false}
+	var candidates := [
+		{"id": 1, "position": Vector2(10, 0), "health": 9, "path_index": 5,
+			"alive": true, "dying": false},
+		{"id": 2, "position": Vector2(20, 0), "health": 2, "path_index": 3,
+			"alive": true, "dying": false},
+		{"id": 3, "position": Vector2(30, 0), "health": 7, "path_index": 9,
+			"alive": true, "dying": false},
+	]
+	var picked = Targeting.select(tower, candidates)
+	assert_true(picked != null, "something was picked")
+	if picked == null:
+		return true
+	assert_eq(int(picked["id"]), 2, "the 2-health enemy is chosen over 7 and 9")
+	return true
+
+func test_weakest_is_the_exact_inverse_of_strongest() -> bool:
+	# Guards a sign error: a scorer returning +health for weakest would still
+	# pick "a" target and still pass a single-case test.
+	var candidates := [
+		{"id": 1, "position": Vector2(10, 0), "health": 4, "path_index": 1,
+			"alive": true, "dying": false},
+		{"id": 2, "position": Vector2(10, 0), "health": 11, "path_index": 1,
+			"alive": true, "dying": false},
+	]
+	var weak = Targeting.select({"position": Vector2.ZERO, "range": 500.0,
+		"priority": &"weakest", "detection": false}, candidates)
+	var strong = Targeting.select({"position": Vector2.ZERO, "range": 500.0,
+		"priority": &"strongest", "detection": false}, candidates)
+	assert_true(weak != null and strong != null, "both picked a target")
+	if weak == null or strong == null:
+		return true
+	assert_eq(int(weak["id"]), 1, "weakest takes the 4-health enemy")
+	assert_eq(int(strong["id"]), 2, "strongest takes the 11-health enemy")
+	return true
+
+func test_weakest_still_respects_range_and_the_phasing_gate() -> bool:
+	# The new scorer must not bypass is_targetable: a low-health enemy out of
+	# range, or phased against a tower without detection, is not a target.
+	var tower := {"position": Vector2.ZERO, "range": 50.0,
+		"priority": &"weakest", "detection": false}
+	var candidates := [
+		{"id": 1, "position": Vector2(500, 0), "health": 1, "path_index": 1,
+			"alive": true, "dying": false},
+		{"id": 2, "position": Vector2(10, 0), "health": 3, "path_index": 1,
+			"alive": true, "dying": false, "phased": true},
+		{"id": 3, "position": Vector2(20, 0), "health": 8, "path_index": 1,
+			"alive": true, "dying": false},
+	]
+	var picked = Targeting.select(tower, candidates)
+	assert_true(picked != null, "something in range was picked")
+	if picked == null:
+		return true
+	assert_eq(int(picked["id"]), 3, "the far 1-health and phased 3-health are both ineligible")
+	return true
+
+func test_the_priority_list_pairs_the_two_health_scorers() -> bool:
+	# Ordering is load-bearing: next_priority() cycles this array, and the two
+	# existing cycle tests only keep passing while `closest` stays last.
+	assert_eq(Targeting.PRIORITIES.size(), 5, "five priorities")
+	assert_eq(Targeting.PRIORITIES[Targeting.PRIORITIES.size() - 1], &"closest",
+		"closest stays last so the wrap assertion holds")
+	var strongest_at := Targeting.PRIORITIES.find(&"strongest")
+	assert_eq(Targeting.PRIORITIES[strongest_at + 1], &"weakest",
+		"weakest sits directly after strongest")
+	return true
+
+func test_every_priority_has_a_label() -> bool:
+	for priority in Targeting.PRIORITIES:
+		var label: String = Targeting.LABELS.get(priority, "")
+		assert_false(label.is_empty(), "%s has a label" % priority)
+	return true
+
 # --------------------------------------------------------------------------
 # Ported from targeting.test.ts beyond the brief's list. Expected values are
 # taken directly from the .test.ts file, never derived by running this

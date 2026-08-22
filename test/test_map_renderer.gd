@@ -6,12 +6,12 @@ extends TestCase
 # Texture2D.resource_path rather than by reaching into MapRenderer's private
 # _decorations dict, so these tests only rely on public state.
 
-const _SPIKE_PATH := "res://assets/kenney/forest/spike.png"
-const _FIRE_PATH := "res://assets/kenney/forest/fire.png"
-const _STONE_PATH := "res://assets/kenney/forest/stone.png"
-const _TREE_PATH := "res://assets/kenney/forest/tree.png"
-const _CAVE_PATH := "res://assets/kenney/cave.png"
-const _CASTLE_PATH := "res://assets/kenney/castle.png"
+const _SPIKE_PATH := "res://assets/art/forest/spike.png"
+const _FIRE_PATH := "res://assets/art/forest/fire.png"
+const _STONE_PATH := "res://assets/art/forest/stone.png"
+const _TREE_PATH := "res://assets/art/forest/tree.png"
+const _CAVE_PATH := "res://assets/art/cave.png"
+const _CASTLE_PATH := "res://assets/art/castle.png"
 
 func _demo_tiles() -> Array:
 	return Maps.build_tiles(Maps.FIRST)
@@ -49,10 +49,9 @@ func test_a_different_seed_gives_a_different_layout() -> bool:
 	b.free()
 	return true
 
-func test_ground_layer_has_one_sprite_per_lattice_point() -> bool:
-	# The lattice samples terrain at tile CENTRES, so a sprite spans the square
-	# between four adjacent centres and the grid gains one row and column.
-	# See spec section 7.1 for why the alternatives were rejected.
+func test_the_ground_layer_has_one_sprite_per_tile() -> bool:
+	# The corner lattice drew (cols+1)*(rows+1) sprites offset half a tile.
+	# The edge mask draws one per tile, on the grid.
 	var renderer := MapRenderer.new()
 	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
 	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
@@ -60,34 +59,13 @@ func test_ground_layer_has_one_sprite_per_lattice_point() -> bool:
 	for child in renderer.get_children():
 		if child is Sprite2D and child.z_index == -1:
 			ground += 1
-	var expected := (DemoMap.GRID_COLS + 1) * (DemoMap.GRID_ROWS + 1)
-	assert_eq(ground, expected, "one ground sprite per lattice point")
+	assert_eq(ground, DemoMap.GRID_COLS * DemoMap.GRID_ROWS,
+		"one ground sprite per tile")
 	renderer.free()
 	return true
 
-func test_ground_sprites_are_offset_half_a_tile_so_roads_sit_on_tile_centres() -> bool:
-	# If the lattice is anchored anywhere else the road draws half a tile off
-	# the world-space route PathFinder emits and enemies walk beside it.
-	var renderer := MapRenderer.new()
-	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
-	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
-	var half := Tiles.TILE_SIZE / 2
-	var found := false
-	for child in renderer.get_children():
-		if child is Sprite2D and child.z_index == -1:
-			var sprite: Sprite2D = child
-			if sprite.position == Vector2(3 * Tiles.TILE_SIZE - half, 5 * Tiles.TILE_SIZE - half):
-				found = true
-			# posmod, not %: the c == 0 column sits at -24, and GDScript's %
-			# keeps the sign, so a plain modulo returns -24 and fails here.
-			assert_eq(posmod(int(sprite.position.x), Tiles.TILE_SIZE), half,
-				"ground sprite x is on the half-tile lattice")
-	assert_true(found, "the lattice point at (3, 5) was drawn")
-	renderer.free()
-	return true
-
-func test_the_corner_mask_reads_road_from_the_four_surrounding_tile_centres() -> bool:
-	# Bit order is fixed and load-bearing: TL=1, TR=2, BL=4, BR=8.
+func test_the_edge_mask_reads_the_four_orthogonal_neighbours() -> bool:
+	# Bit order is fixed and load-bearing: N=1, E=2, S=4, W=8.
 	var renderer := MapRenderer.new()
 	var tiles: Array = []
 	for r in 3:
@@ -96,67 +74,121 @@ func test_the_corner_mask_reads_road_from_the_four_surrounding_tile_centres() ->
 			row.append(Tiles.BUILDABLE)
 		tiles.append(row)
 	tiles[1][1] = Tiles.PATH
+	tiles[0][1] = Tiles.PATH
 	renderer.render(tiles, Rng.new(1), &"forest")
-	# Lattice point (1, 1) has tile (1, 1) as its BOTTOM-RIGHT corner.
-	assert_eq(renderer.corner_mask(1, 1), 8, "road at bottom-right sets bit 8")
-	assert_eq(renderer.corner_mask(2, 1), 4, "road at bottom-left sets bit 4")
-	assert_eq(renderer.corner_mask(1, 2), 2, "road at top-right sets bit 2")
-	assert_eq(renderer.corner_mask(2, 2), 1, "road at top-left sets bit 1")
-	assert_eq(renderer.corner_mask(0, 0), 0, "no road nearby is mask 0")
+	assert_eq(renderer.edge_mask(1, 1), 1, "a road neighbour to the north sets bit 1")
+	tiles[0][1] = Tiles.BUILDABLE
+	tiles[1][2] = Tiles.PATH
+	renderer.render(tiles, Rng.new(1), &"forest")
+	assert_eq(renderer.edge_mask(1, 1), 2, "a road neighbour to the east sets bit 2")
+	tiles[1][2] = Tiles.BUILDABLE
+	tiles[2][1] = Tiles.PATH
+	renderer.render(tiles, Rng.new(1), &"forest")
+	assert_eq(renderer.edge_mask(1, 1), 4, "a road neighbour to the south sets bit 4")
+	tiles[2][1] = Tiles.BUILDABLE
+	tiles[1][0] = Tiles.PATH
+	renderer.render(tiles, Rng.new(1), &"forest")
+	assert_eq(renderer.edge_mask(1, 1), 8, "a road neighbour to the west sets bit 8")
 	renderer.free()
 	return true
 
-func test_spawn_and_goal_tiles_count_as_road_for_the_lattice() -> bool:
-	# Tiles.WALKABLE is PATH, SPAWN and GOAL. The old _draw_ground drew the
-	# path texture on all three, and the road must not break at the endpoints.
+func test_out_of_bounds_neighbours_are_not_road() -> bool:
 	var renderer := MapRenderer.new()
-	var tiles: Array = []
-	for r in 2:
-		var row: Array = []
-		for c in 2:
-			row.append(Tiles.BUILDABLE)
-		tiles.append(row)
-	tiles[0][0] = Tiles.SPAWN
-	tiles[1][1] = Tiles.GOAL
+	var tiles: Array = [[Tiles.PATH]]
 	renderer.render(tiles, Rng.new(1), &"forest")
-	assert_eq(renderer.corner_mask(1, 1), 1 | 8, "spawn and goal both read as road")
+	assert_eq(renderer.edge_mask(0, 0), 0, "an isolated cell has no road neighbours")
 	renderer.free()
 	return true
 
-func test_the_demo_map_never_needs_a_diagonal_blend_tile() -> bool:
-	# The pack ships no diagonal-only tile. Biomes.blend_path substitutes
-	# mask 15, and this asserts that substitution stays a safety net rather
-	# than something the shipped map actually depends on.
+func test_spawn_and_goal_count_as_road() -> bool:
+	# Tiles.WALKABLE is PATH, SPAWN and GOAL; the road must not break at the
+	# endpoints.
+	var renderer := MapRenderer.new()
+	var tiles: Array = [[Tiles.SPAWN, Tiles.PATH, Tiles.GOAL]]
+	renderer.render(tiles, Rng.new(1), &"forest")
+	assert_eq(renderer.edge_mask(1, 0), 2 | 8,
+		"spawn to the west and goal to the east both count")
+	renderer.free()
+	return true
+
+func test_every_road_cell_draws_the_piece_its_mask_names() -> bool:
 	var renderer := MapRenderer.new()
 	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
 	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
-	var diagonal := 0
-	for r in range(DemoMap.GRID_ROWS + 1):
-		for c in range(DemoMap.GRID_COLS + 1):
-			if renderer.corner_mask(c, r) in Biomes.DIAGONAL_MASKS:
-				diagonal += 1
-	assert_eq(diagonal, 0, "the demo map produces no diagonal corner cases")
-	renderer.free()
-	return true
-
-func test_every_ground_sprite_uses_the_texture_its_mask_names() -> bool:
-	var renderer := MapRenderer.new()
-	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
-	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
-	var half := Tiles.TILE_SIZE / 2
 	var checked := 0
 	for child in renderer.get_children():
 		if not (child is Sprite2D) or child.z_index != -1:
 			continue
 		var sprite: Sprite2D = child
-		var c := int((sprite.position.x + half) / Tiles.TILE_SIZE)
-		var r := int((sprite.position.y + half) / Tiles.TILE_SIZE)
-		assert_eq(sprite.texture.resource_path,
-			Biomes.blend_path(&"forest", renderer.corner_mask(c, r)),
-			"lattice point (%d, %d) uses its mask's texture" % [c, r])
+		if not sprite.texture.resource_path.contains("road_"):
+			continue
+		var c := int(sprite.position.x / Tiles.TILE_SIZE)
+		var r := int(sprite.position.y / Tiles.TILE_SIZE)
+		var named := int(sprite.texture.resource_path.get_file().get_basename().split("_")[1])
+		assert_eq(named, renderer.edge_mask(c, r),
+			"the piece at (%d, %d) is the one its mask names" % [c, r])
 		checked += 1
-	assert_true(checked > 0, "ground sprites were checked")
+	assert_true(checked > 0, "road cells were checked")
 	renderer.free()
+	return true
+
+func test_the_demo_map_needs_the_dead_end_pieces() -> bool:
+	# The reason there is no rotation. Rotating the five pieces the sheet
+	# itself draws reaches twelve of the sixteen masks; the four dead ends
+	# (1, 2, 4, 8) are unreachable from them, and the demo map has two - the
+	# spawn and the goal, where the road enters from one side only. This test
+	# fails the day someone reintroduces a rotation scheme.
+	var renderer := MapRenderer.new()
+	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
+	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
+	var dead_ends := 0
+	for r in DemoMap.GRID_ROWS:
+		for c in DemoMap.GRID_COLS:
+			if tiles[r][c] in Tiles.WALKABLE and renderer.edge_mask(c, r) in [1, 2, 4, 8]:
+				dead_ends += 1
+	assert_eq(dead_ends, 2, "the demo map's road has two dead ends")
+	renderer.free()
+	return true
+
+func test_ground_and_road_tiles_fill_their_cell_exactly() -> bool:
+	# Replaces test_square_ground_tiles_take_zero_slack_from_the_tile_box,
+	# whose premise was that every ground source is square. The illustrated
+	# road pieces are 66x63, so aspect-fitting them leaves a 2.2px transparent
+	# gap under every road tile - seams, in the layer whose whole job is to
+	# have none. The property worth keeping is unchanged and is stated more
+	# directly here: a tile lands on its cell's origin and covers the cell.
+	var renderer := MapRenderer.new()
+	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
+	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
+	var box := float(Tiles.TILE_SIZE)
+	var checked := 0
+	for child in renderer.get_children():
+		if not (child is Sprite2D) or child.z_index != -1:
+			continue
+		var sprite: Sprite2D = child
+		var display := sprite.region_rect.size * sprite.scale
+		assert_almost_eq(display.x, box, 0.01, "a tile is exactly one cell wide")
+		assert_almost_eq(display.y, box, 0.01, "a tile is exactly one cell tall")
+		var c := int(round(sprite.position.x / box))
+		var r := int(round(sprite.position.y / box))
+		assert_eq(sprite.position, Vector2(c * box, r * box),
+			"a tile lands on its cell's origin")
+		checked += 1
+	assert_true(checked > 0, "tiles were checked")
+	renderer.free()
+	return true
+
+func test_a_non_square_tile_source_is_the_case_this_covers() -> bool:
+	# The precondition the test above rests on. If every source were square,
+	# stretching and aspect-fitting would be the same thing and the seam this
+	# task fixes could not occur.
+	var bytes := FileAccess.get_file_as_bytes("res://assets/art/forest/road_10.png")
+	assert_false(bytes.is_empty(), "a road piece exists to measure")
+	var img := Image.new()
+	assert_eq(img.load_png_from_buffer(bytes), OK, "the road piece decodes")
+	assert_false(img.get_width() == img.get_height(),
+		"the road pieces are genuinely non-square (%dx%d)"
+			% [img.get_width(), img.get_height()])
 	return true
 
 func test_render_defaults_to_the_default_decoration_seed_when_no_rng_is_given() -> bool:
@@ -607,11 +639,10 @@ func test_blocked_tiles_get_three_to_five_stones_and_nothing_in_the_exclusion_zo
 # DELIBERATE DIVERGENCE note for the reference's own, much more extreme,
 # numbers - that history is about the pre-Kenney art and stays there).
 #
-# The Kenney forest/stone.png this test exercises is 112x98 (about 1.14:1),
-# so a regression to non-uniform scaling is still visible here even though
-# it is a mild case. Expected geometry is derived from the texture's own
-# dimensions rather than hardcoded, so the rule is what is pinned, not one
-# particular PNG's size.
+# The illustrated forest/stone.png this test exercises is 96x61 (about
+# 1.57:1), so a regression to non-uniform scaling is still visible here.
+# Expected geometry is derived from the texture's own dimensions rather than
+# hardcoded, so the rule is what is pinned, not one particular PNG's size.
 func test_decorations_preserve_their_aspect_ratio_and_sit_centred_in_the_tile() -> bool:
 	Grid.set_active(DemoMap.GRID_COLS, DemoMap.GRID_ROWS)
 	var tiles := _demo_tiles()
@@ -655,38 +686,6 @@ func test_decorations_preserve_their_aspect_ratio_and_sit_centred_in_the_tile() 
 	mr.free()
 	return true
 
-# A square source has zero slack to distribute, so it must land exactly on
-# its tile origin with a scale of TILE_SIZE / source size. This pins the
-# centring offset as *derived* rather than a constant: an implementation that
-# always shifted by a fixed amount would pass the stone test above but move
-# ground tiles off the grid, opening seams between them.
-func test_square_ground_tiles_take_zero_slack_from_the_tile_box() -> bool:
-	# Replaces test_square_ground_tiles_still_land_exactly_on_their_tile_origin,
-	# whose premise the half-tile lattice offset invalidates. The property
-	# worth keeping is unchanged: _place splits leftover slack to centre a
-	# sprite, and a SQUARE source has none, which is what keeps the ground
-	# layer flush and seam-free. Only the origin it lands on moved.
-	var renderer := MapRenderer.new()
-	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
-	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
-	var half := Tiles.TILE_SIZE / 2
-	var checked := 0
-	for child in renderer.get_children():
-		if not (child is Sprite2D) or child.z_index != -1:
-			continue
-		var sprite: Sprite2D = child
-		var tex: Texture2D = sprite.texture
-		assert_eq(tex.get_width(), tex.get_height(), "a ground tile is square")
-		var c := int((sprite.position.x + half) / Tiles.TILE_SIZE)
-		var r := int((sprite.position.y + half) / Tiles.TILE_SIZE)
-		assert_eq(sprite.position,
-			Vector2(c * Tiles.TILE_SIZE - half, r * Tiles.TILE_SIZE - half),
-			"ground sprite takes zero slack, landing on its lattice point")
-		checked += 1
-	assert_true(checked > 0, "ground sprites were checked")
-	renderer.free()
-	return true
-
 func test_render_called_twice_does_not_double_up_sprites() -> bool:
 	Grid.set_active(DemoMap.GRID_COLS, DemoMap.GRID_ROWS)
 	var tiles := _demo_tiles()
@@ -704,29 +703,50 @@ func test_render_called_twice_does_not_double_up_sprites() -> bool:
 
 # A mipmap chain is inert unless the sprite selects a filter that reads it:
 # Godot's TEXTURE_FILTER_LINEAR (the project default) samples the base level
-# only, however many mip levels exist. This is LINEAR_WITH_MIPMAPS and not
-# NEAREST_WITH_MIPMAPS because the map art is painted, high-resolution
-# artwork rather than pixel art - the opposite call from the enemy sheets,
-# which are 48px pixel art and take a NEAREST filter (see test_enemy.gd).
-# Two different asset classes, two different right answers, which is why
-# neither is set project-wide as a default. The other half of this fix -
-# that a chain actually exists to sample - is pinned by
-# test_asset_import.gd, which reads mipmaps/generate=true off the committed
-# .import files.
+# only, however many mip levels exist. MapRenderer draws two different
+# filters for two different reasons, and this test checks both.
+#
+# Props and endpoints (_place, drawn at z_index 1) sample
+# LINEAR_WITH_MIPMAPS: painted art past a hard minification (up to 1.83x for
+# props, 1.49x for the endpoints), the same case the enemy sprites are now
+# in (game/enemy.tscn also filters LINEAR_WITH_MIPMAPS - see test_enemy.gd;
+# this used to be the "opposite call" until this task generated their chain
+# too).
+#
+# Ground and road tiles (_place_tile, drawn at z_index -1) stay plain
+# LINEAR instead, on purpose: they are region-sampled (region_enabled crops
+# the card's painted border, TILE_BLEED) and only mildly minified (1.125x),
+# and a mip level would average that cropped border back into the terrain -
+# reintroducing by hand the seam the crop exists to remove. See
+# _place_tile's doc comment in map_renderer.gd.
+#
+# The other half of this fix - that a chain actually exists where one is
+# wanted, and does not exist where it would actively hurt - is pinned by
+# test_art_import.gd, which reads mipmaps/generate off the committed
+# .import files for both sides of the split.
 func test_map_sprites_select_a_filter_that_actually_samples_the_mipmap_chain() -> bool:
 	Grid.set_active(DemoMap.GRID_COLS, DemoMap.GRID_ROWS)
 	var tiles := _demo_tiles()
 	var mr := MapRenderer.new()
 	mr.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED))
 
-	var checked := 0
+	var overlay_checked := 0
+	var ground_checked := 0
 	for child in mr.get_children():
 		if not (child is Sprite2D):
 			continue
-		checked += 1
-		assert_eq(child.texture_filter, CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS,
-			"%s samples the mipmap chain when minified" % child.texture.resource_path.get_file())
-	assert_true(checked > 0, "precondition: the render produced sprites to check")
+		if child.z_index == 1:
+			overlay_checked += 1
+			assert_eq(child.texture_filter, CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS,
+				"%s (prop/endpoint) samples the mipmap chain when minified" % child.texture.resource_path.get_file())
+		elif child.z_index == -1:
+			ground_checked += 1
+			assert_eq(child.texture_filter, CanvasItem.TEXTURE_FILTER_LINEAR,
+				("%s (ground/road tile) stays plain LINEAR - a mip chain would " +
+				"bleed its cropped card border back into the terrain") %
+				child.texture.resource_path.get_file())
+	assert_true(overlay_checked > 0, "precondition: the render produced prop/endpoint sprites to check")
+	assert_true(ground_checked > 0, "precondition: the render produced ground/road sprites to check")
 
 	mr.free()
 	return true
@@ -856,23 +876,132 @@ func test_every_prop_sprite_contributes_exactly_one_footprint() -> bool:
 	renderer.free()
 	return true
 
-func test_a_props_blocking_radius_is_half_the_tile_box_it_is_fitted_into() -> bool:
-	# _place normalises every prop's LONGEST axis to exactly TILE_SIZE, so the
-	# radius prop_footprints derives is always TILE_SIZE / 2 whatever the
-	# source dimensions are. That is precisely why trimming has to happen at
-	# bake time and cannot be compensated for here: the radius does not move,
-	# so the ART has to grow to fill it. tile131 untrimmed draws its subject at
-	# ~23px inside this same 24px radius - a blocking circle over twice the
-	# area of the visible art. test_prop_assets.gd's tight-bbox gate is what
-	# holds the other half of this bargain.
+func test_a_props_blocking_radius_is_half_the_box_its_slot_is_fitted_into() -> bool:
+	# _place normalises a prop's LONGEST axis to exactly the box it is given,
+	# so the radius prop_footprints derives is always half that box whatever
+	# the source dimensions are. That is precisely why trimming has to happen
+	# at bake time and cannot be compensated for here: the radius does not
+	# move to fit the art, so the ART has to fill the box. An untrimmed source
+	# drawing its subject at ~23px inside a 24px radius is a blocking circle
+	# over twice the area of the visible art. test_prop_assets.gd's tight-bbox
+	# gate holds the other half of this bargain.
+	#
+	# The box is per slot, not one constant: fire is drawn at 80% of a tile
+	# because the campfire out-shouted the player's towers. Asserting a single
+	# TILE_SIZE / 2 here - which this test did until fire shrank - would pin
+	# the wrong invariant, because the property that matters is that the
+	# radius follows the box, not that every box is a whole tile.
 	var renderer := MapRenderer.new()
 	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
 	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
+	# Read the slot off each prop sprite rather than out of the footprint:
+	# prop_footprints' dictionaries are a sim-facing contract that
+	# sim/placement.gd consumes, and growing them with a key only a test wants
+	# is how that contract stops meaning anything.
+	var checked := 0
+	var scales_seen := {}
+	for child in renderer.get_children():
+		if not (child is Sprite2D) or child.z_index != 1:
+			continue
+		var sprite: Sprite2D = child
+		var slot := sprite.texture.resource_path.get_file().get_basename()
+		if not MapRenderer.PROP_SCALE.has(StringName(slot)):
+			continue  # castle and cave are drawn at this z and are not props
+		var scale: float = float(MapRenderer.PROP_SCALE[StringName(slot)])
+		var tex: Texture2D = sprite.texture
+		var display := Vector2(tex.get_width(), tex.get_height()) * sprite.scale
+		scales_seen[scale] = true
+		assert_almost_eq(maxf(display.x, display.y), float(Tiles.TILE_SIZE) * scale, 0.001,
+			"%s's longest axis fills its own box exactly" % slot)
+		checked += 1
+	assert_true(checked > 0, "the demo map scatters props")
+	assert_true(scales_seen.size() > 1,
+		"and at more than one scale, so this proves something")
+
 	var footprints := renderer.prop_footprints()
-	assert_true(footprints.size() > 0, "the demo map scatters props")
+	assert_eq(footprints.size(), checked, "one footprint per prop")
+	var boxes := {}
+	for scale in scales_seen:
+		boxes[snappedf(float(Tiles.TILE_SIZE) * float(scale) / 2.0, 0.001)] = true
 	for entry in footprints:
 		var f: Dictionary = entry
-		assert_almost_eq(f["radius"], float(Tiles.TILE_SIZE) / 2.0, 0.001,
-			"footprint radius is half the tile box")
+		assert_true(boxes.has(snappedf(float(f["radius"]), 0.001)),
+			"a footprint radius of %f is half one of the slot boxes" % f["radius"])
 	renderer.free()
 	return true
+
+func test_tiles_are_drawn_without_their_card_border() -> bool:
+	# The sheet's terrain tiles are cards with a painted dark edge. Drawn
+	# whole, every cell boundary carries two of those edges back to back and
+	# the map reads as a grid of cards in black gutters. The renderer draws
+	# the interior of each tile instead.
+	var renderer := MapRenderer.new()
+	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
+	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
+	var checked := 0
+	for child in renderer.get_children():
+		if not (child is Sprite2D) or child.z_index != -1:
+			continue
+		var sprite: Sprite2D = child
+		assert_true(sprite.region_enabled, "a tile is drawn from a region")
+		var tex: Texture2D = sprite.texture
+		assert_eq(sprite.region_rect,
+			Rect2(MapRenderer.TILE_BLEED, MapRenderer.TILE_BLEED,
+				tex.get_width() - MapRenderer.TILE_BLEED * 2.0,
+				tex.get_height() - MapRenderer.TILE_BLEED * 2.0),
+			"the region is the tile's interior")
+		checked += 1
+	assert_true(checked > 0, "tiles were checked")
+	renderer.free()
+	return true
+
+func test_the_bleed_is_wide_enough_for_the_widest_card_border() -> bool:
+	# Measured: probing inward from each edge of all 66 ground and road PNGs
+	# in all three biomes, the run of near-black pixels - the card's border
+	# plus _trim's 1px pad - never exceeds 5. A bleed under that leaves a dark
+	# line; far over it eats art. This pins the measurement rather than the
+	# taste.
+	var worst := 0
+	for biome in Biomes.KINDS:
+		for i in Biomes.GROUND_VARIANTS:
+			worst = maxi(worst, _border_run(Biomes.ground_path(biome, i)))
+		for mask in 16:
+			worst = maxi(worst, _border_run(Biomes.road_path(biome, mask)))
+	assert_true(worst > 0, "the tiles do have a card border to crop")
+	assert_true(MapRenderer.TILE_BLEED > worst,
+		"the bleed %d clears the widest border %d" % [MapRenderer.TILE_BLEED, worst])
+	assert_true(MapRenderer.TILE_BLEED <= worst + 3,
+		"the bleed %d does not eat art beyond the border %d"
+			% [MapRenderer.TILE_BLEED, worst])
+	return true
+
+## Longest run of near-black pixels reaching in from any edge of a tile.
+func _border_run(path: String) -> int:
+	var bytes := FileAccess.get_file_as_bytes(path)
+	if bytes.is_empty():
+		return 0
+	var img := Image.new()
+	if img.load_png_from_buffer(bytes) != OK:
+		return 0
+	var w := img.get_width()
+	var h := img.get_height()
+	var worst := 0
+	for probe in [w / 4, w / 2, 3 * w / 4]:
+		worst = maxi(worst, _run_from(img, probe, 0, 0, 1))
+		worst = maxi(worst, _run_from(img, probe, h - 1, 0, -1))
+	for probe in [h / 4, h / 2, 3 * h / 4]:
+		worst = maxi(worst, _run_from(img, 0, probe, 1, 0))
+		worst = maxi(worst, _run_from(img, w - 1, probe, -1, 0))
+	return worst
+
+func _run_from(img: Image, x: int, y: int, dx: int, dy: int) -> int:
+	var n := 0
+	while x >= 0 and x < img.get_width() and y >= 0 and y < img.get_height():
+		var c := img.get_pixel(x, y)
+		var lum := (c.r + c.g + c.b) / 3.0 * c.a
+		if lum >= 45.0 / 255.0:
+			break
+		n += 1
+		x += dx
+		y += dy
+	return n

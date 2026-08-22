@@ -19,6 +19,13 @@ func _ready_enemy() -> Enemy:
 	e.notification(Node.NOTIFICATION_READY)
 	return e
 
+## The same enemy _ready_enemy builds, set up with a seeded Rng so the variant
+## it picks is pinned rather than incidental.
+func _ready_enemy_with_seed(seed_value: int) -> Enemy:
+	var e := _ready_enemy()
+	e.setup(&"slime", _straight_path(), 1, Rng.new(seed_value))
+	return e
+
 func _straight_path() -> PackedVector2Array:
 	return PackedVector2Array([Vector2(0, 0), Vector2(100, 0), Vector2(100, 100)])
 
@@ -60,8 +67,6 @@ func test_setup_scales_health_and_speed_for_ogre_at_a_later_wave() -> bool:
 	assert_eq(e.sim["speed"], expected_speed, "ogre speed at wave 10 uses the ogre base and the wave-10 modifier")
 	assert_true(expected_health != float(Enemies.scaled_health(&"slime", modifiers["health_modifier"])),
 		"precondition: ogre and slime scale to different health values, so a kind mix-up would be caught")
-	assert_eq(e._sprite.scale, Vector2.ONE * float(Enemies.DEFS[&"ogre"]["sprite_scale"]),
-		"the sprite is scaled by the enemy's sprite_scale (1.2 for the ogre, not left at 1.0)")
 
 	e.free()
 	return true
@@ -132,26 +137,31 @@ func test_physics_process_skips_processing_while_dying_even_if_alive_flag_is_sta
 	e.free()
 	return true
 
-# The comment above the brief's guard explains why: a tick that consumes
-# itself arriving at a waypoint covers no real distance, so its "direction"
-# is noise from a sub-pixel delta and must not be allowed to flip the sprite.
-# A vertical micro-step (spawn 1px from the second waypoint, comfortably
-# inside Movement.WAYPOINT_ARRIVAL_RADIUS = 2.0) reaches "down" on the very
-# first tick while the enemy's facing is still its "side" default - if the
-# guard were dropped, this tick would visibly flip it to "down".
-func test_physics_process_does_not_update_facing_on_a_waypoint_arrival_tick() -> bool:
+# Movement.advance's documented quirk: a tick that arrives at a waypoint
+# consumes the whole tick and covers no real distance, so the moving_left it
+# reports comes from the sub-pixel delta toward the waypoint just reached,
+# not the direction travel actually continues in afterward. Engineered so
+# that stale reading (rightward, toward path[1]) disagrees with the facing
+# already established (leftward, as real prior travel would have set it) -
+# if the `not result["advanced_waypoint"]` guard in _physics_process were
+# dropped, this tick would flip the sprite back to match the stale reading.
+func test_physics_process_does_not_flip_the_sprite_on_a_waypoint_arrival_tick() -> bool:
 	var e := _ready_enemy()
-	var path := PackedVector2Array([Vector2(0, 0), Vector2(0, 1), Vector2(0, 100)])
+	# Spawns on path[0]; path[1] sits 1px away, inside
+	# Movement.WAYPOINT_ARRIVAL_RADIUS (2.0), so the very first tick arrives
+	# without moving - and reads as moving right (dx = 1 > 0), even though
+	# the path immediately continues sharply left afterward.
+	var path := PackedVector2Array([Vector2(0, 0), Vector2(1, 0), Vector2(-100, 0)])
 	e.setup(&"slime", path, 1)
-	assert_eq(e._facing, &"side", "precondition: default facing is side")
-	assert_eq(e._sprite.animation, &"walk_side", "precondition: default animation is walk_side")
+	var sprite: Sprite2D = e.get_node("Sprite")
+	e.set_facing_from_travel(true)  # establishes "facing left", as ongoing travel would
+	assert_true(sprite.flip_h, "precondition: facing left before the arrival tick")
 
 	e._physics_process(0.016)
 
 	assert_eq(e.sim["path_index"], 2, "the waypoint was still consumed")
-	assert_eq(e.sim["alive"], true, "goal not yet reached (path has a third point)")
-	assert_eq(e._facing, &"side", "facing was not touched on the arrival tick")
-	assert_eq(e._sprite.animation, &"walk_side", "animation was not replayed on the arrival tick")
+	assert_true(sprite.flip_h,
+		"the arrival tick's own stale (rightward) reading did not overwrite the established facing")
 
 	e.free()
 	return true
@@ -234,25 +244,121 @@ func test_take_damage_emits_died_exactly_once_on_the_lethal_hit_and_not_before()
 	e.free()
 	return true
 
-# _die() plays "death_%s" % _facing *before* its `await`, so it is observable
-# synchronously (see the walk-facing assertions at test_physics_process_does_
-# not_update_facing_on_a_waypoint_arrival_tick and the flip-matrix test
-# above). Both prior death-related tests deal their lethal hit while _facing
-# is still its class default (&"side"), so a mutation that hardcodes
-# "death_side" - or drops the "%s" interpolation entirely - would agree with
-# the correct code on every existing assertion. Driving the enemy to a
-# non-side facing first, via a real physics tick, closes that gap.
-func test_die_plays_the_death_animation_for_the_enemys_current_facing() -> bool:
+# --------------------------------------------------------------------------
+# variant selection, sizing, facing
+# --------------------------------------------------------------------------
+
+func test_an_enemy_draws_one_of_its_kind_s_variants() -> bool:
 	var e := _ready_enemy()
-	var vertical_path := PackedVector2Array([Vector2(0, 0), Vector2(0, 100), Vector2(0, 200)])
-	e.setup(&"slime", vertical_path, 1)
+	e.setup(&"slime", _straight_path(), 1)
+	var sprite: Sprite2D = e.get_node("Sprite")
+	assert_true(sprite.texture != null, "a variant was chosen")
+	assert_true(sprite.texture.resource_path.contains("/art/enemies/slime/"),
+		"and it came from this kind's art directory")
+	e.free()
+	return true
 
-	e._physics_process(0.016)  # distance to (0, 100) is 100px, well past WAYPOINT_ARRIVAL_RADIUS - no arrival, so facing updates
-	assert_eq(e._facing, &"down", "precondition: the tick actually turned the enemy to face down")
+func test_the_variant_choice_is_reproducible_from_the_seed() -> bool:
+	# Runs must stay reproducible - the whole harness depends on it.
+	var a := _ready_enemy_with_seed(1234)
+	var b := _ready_enemy_with_seed(1234)
+	assert_eq(a.get_node("Sprite").texture.resource_path,
+		b.get_node("Sprite").texture.resource_path,
+		"the same seed picks the same variant")
+	a.free()
+	b.free()
+	return true
 
-	e.take_damage({"damage": 999.0})  # one hit, comfortably lethal for a 5-health slime
-	assert_eq(e._sprite.animation, &"death_down", "the death animation matches the enemy's facing at the moment it died, not a fixed direction")
+func test_different_seeds_reach_more_than_one_variant() -> bool:
+	# Otherwise "pick a variant" could be a constant and every test above
+	# would still pass.
+	var seen := {}
+	for s in 40:
+		var e := _ready_enemy_with_seed(s + 1)
+		seen[e.get_node("Sprite").texture.resource_path] = true
+		e.free()
+	assert_true(seen.size() > 1, "%d distinct variants over 40 seeds" % seen.size())
+	return true
 
+func test_an_enemy_is_drawn_at_its_kind_s_declared_height() -> bool:
+	# The scale is derived from the chosen variant rather than fixed, because
+	# the variants are not a uniform size - a fixed factor would draw the same
+	# kind at a different size from one spawn to the next.
+	for kind in Enemies.KINDS:
+		var e := _ready_enemy()
+		e.setup(kind, _straight_path(), 1)
+		var sprite: Sprite2D = e.get_node("Sprite")
+		var drawn := float(sprite.texture.get_height()) * sprite.scale.y
+		assert_almost_eq(drawn, float(Enemies.DEFS[kind]["sprite_px"]), 0.01,
+			"%s draws at its declared height" % kind)
+		assert_almost_eq(sprite.scale.x, sprite.scale.y, 0.0001,
+			"%s is scaled uniformly, not stretched" % kind)
+		e.free()
+	return true
+
+func test_every_variant_of_a_kind_draws_at_the_same_height() -> bool:
+	# The defect a fixed scale factor would leave: same kind, different size.
+	for kind in Enemies.KINDS:
+		for i in Enemies.variant_count(kind):
+			var e := _ready_enemy()
+			e.setup(kind, _straight_path(), 1)
+			var sprite: Sprite2D = e.get_node("Sprite")
+			sprite.texture = load("res://assets/art/enemies/%s/variant_%d.png" % [kind, i])
+			e.apply_sprite_height()
+			var drawn := float(sprite.texture.get_height()) * sprite.scale.y
+			assert_almost_eq(drawn, float(Enemies.DEFS[kind]["sprite_px"]), 0.01,
+				"%s variant %d draws at the declared height" % [kind, i])
+			e.free()
+	return true
+
+func test_an_enemy_faces_the_way_it_travels() -> bool:
+	var e := _ready_enemy()
+	e.setup(&"slime", _straight_path(), 1)
+	var sprite: Sprite2D = e.get_node("Sprite")
+	e.set_facing_from_travel(true)
+	var left := sprite.flip_h
+	e.set_facing_from_travel(false)
+	assert_true(sprite.flip_h != left, "travelling the other way flips the sprite")
+	e.free()
+	return true
+
+func test_the_declared_variant_count_matches_what_was_baked() -> bool:
+	# The count is hand-written in data/enemies.gd while the bake decides the
+	# real number. A count that is too high makes the spawn pick a file that
+	# does not exist - a crash on a path only a live wave reaches.
+	for kind in Enemies.KINDS:
+		var on_disk := 0
+		while FileAccess.file_exists(
+				"res://assets/art/enemies/%s/variant_%d.png" % [kind, on_disk]):
+			on_disk += 1
+		assert_eq(Enemies.variant_count(kind), on_disk,
+			"%s declares %d variants and %d are baked"
+				% [kind, Enemies.variant_count(kind), on_disk])
+	return true
+
+# --------------------------------------------------------------------------
+# death: a tween replaces the death animation
+# --------------------------------------------------------------------------
+
+func test_death_despawns_after_the_tween_rather_than_an_animation() -> bool:
+	assert_true(Enemy.DEATH_TWEEN_MS > 0.0, "the death tween has a duration")
+	assert_true(Enemy.DEATH_TWEEN_MS < 1000.0,
+		"and it is short enough not to hold a kill on screen")
+	return true
+
+func test_a_lethal_hit_off_the_tree_still_pays_and_hides_the_bar() -> bool:
+	# Every enemy this suite builds is outside the scene tree (see this file's
+	# header), and create_tween() requires one. _die must reach everything the
+	# sim observes before it gives up on the presentation.
+	var e := _ready_enemy()
+	e.setup(&"slime", _straight_path(), 1)
+	var captured := {"count": 0}
+	e.died.connect(func(_v, _k): captured["count"] += 1)
+	e.take_damage({"damage": 999.0})
+	assert_eq(captured["count"], 1, "died fired on the lethal hit")
+	assert_true(e.sim["dying"], "the enemy is marked dying")
+	assert_false(e.sim["alive"], "and no longer alive")
+	assert_false(e._health_bar.visible, "the health bar is hidden")
 	e.free()
 	return true
 
@@ -340,152 +446,6 @@ func test_get_sim_state_returns_the_live_sim_dictionary() -> bool:
 	assert_eq(e.get_sim_state()["health"], 4.0, "reflects a mutation (the earlier hit), not a stale snapshot")
 
 	e.free()
-	return true
-
-# --------------------------------------------------------------------------
-# _set_facing / flip matrix (amendment 3: the brief's behaviour is accepted
-# as-is, deliberately not matching the reference's sticky flip on up/down)
-# --------------------------------------------------------------------------
-
-# One enemy per kind: each assertion within a kind's block deliberately
-# changes at least one of (direction, flip) from the previous call, so none
-# of these calls hit _set_facing's own "nothing changed" early return - that
-# path is exercised separately below.
-func test_set_facing_flip_matrix_for_all_three_creatures_and_directions() -> bool:
-	for entry in [
-		{"kind": &"slime", "flip_h": false},
-		{"kind": &"bee", "flip_h": false},
-		{"kind": &"ogre", "flip_h": true},
-	]:
-		var kind: StringName = entry["kind"]
-		assert_eq(Enemies.DEFS[kind]["flip_horizontally"], entry["flip_h"],
-			"precondition: %s's flip_horizontally is what this test assumes" % kind)
-
-		var e := _ready_enemy()
-		e.setup(kind, _straight_path(), 1)
-
-		e._set_facing(&"side", true)
-		var expected_side_left: bool = true if not entry["flip_h"] else false
-		assert_eq(e._sprite.flip_h, expected_side_left, "%s facing side, moving left" % kind)
-
-		e._set_facing(&"side", false)
-		var expected_side_right: bool = false if not entry["flip_h"] else true
-		assert_eq(e._sprite.flip_h, expected_side_right, "%s facing side, moving right" % kind)
-
-		e._set_facing(&"up", true)
-		var expected_up: bool = entry["flip_h"]
-		assert_eq(e._sprite.flip_h, expected_up, "%s facing up ignores moving_left (brief's non-sticky reset)" % kind)
-
-		e._set_facing(&"down", false)
-		var expected_down: bool = entry["flip_h"]
-		assert_eq(e._sprite.flip_h, expected_down, "%s facing down ignores moving_left (brief's non-sticky reset)" % kind)
-
-		e.free()
-	return true
-
-# Mutation target: `if direction == _facing and flip == _flip: return`.
-# Swapping `and` for `or` would make the guard fire whenever *either* half
-# matches. Each case below holds exactly one half equal to the enemy's
-# current state and changes the other, so a correct `and` must update and a
-# mutated `or` would wrongly skip - each case independently kills that
-# mutation.
-func test_set_facing_updates_when_only_one_of_direction_or_flip_differs() -> bool:
-	# Case 1: same direction ("side" -> "side"), different flip.
-	var e1 := _ready_enemy()
-	e1.setup(&"slime", _straight_path(), 1)  # starts at facing=side, flip=false
-	e1._set_facing(&"side", true)  # direction unchanged, flip becomes true
-	assert_eq(e1._sprite.flip_h, true, "flip alone changing is enough to update - an 'or' guard would wrongly skip this")
-	e1.free()
-
-	# Case 2: different direction ("side" -> "up"), same flip (false).
-	var e2 := _ready_enemy()
-	e2.setup(&"slime", _straight_path(), 1)  # starts at facing=side, flip=false
-	e2._set_facing(&"up", false)  # direction changes; flip stays false either way
-	assert_eq(e2._facing, &"up", "direction alone changing is enough to update - an 'or' guard would wrongly skip this")
-	assert_eq(e2._sprite.animation, &"walk_up", "the walk animation was replayed for the new direction")
-	e2.free()
-	return true
-
-# --------------------------------------------------------------------------
-# _build_frames
-# --------------------------------------------------------------------------
-
-func test_build_frames_produces_six_animations_with_correct_speed_and_loop_flags() -> bool:
-	var e := _ready_enemy()
-	e.setup(&"slime", _straight_path(), 1)
-	var frames: SpriteFrames = e._sprite.sprite_frames
-
-	assert_false(frames.has_animation("default"), "the default SpriteFrames animation was removed")
-	var names := frames.get_animation_names()
-	assert_eq(names.size(), 6, "exactly six animations")
-	for anim in ["walk_up", "walk_side", "walk_down", "death_up", "death_side", "death_down"]:
-		assert_true(anim in names, "%s animation exists" % anim)
-		assert_eq(frames.get_frame_count(anim), Enemy.FRAMES_PER_SHEET, "%s has FRAMES_PER_SHEET frames" % anim)
-
-	for anim in ["walk_up", "walk_side", "walk_down"]:
-		assert_eq(frames.get_animation_speed(anim), Enemy.WALK_FPS, "%s plays at WALK_FPS" % anim)
-		assert_true(frames.get_animation_loop(anim), "%s loops" % anim)
-	for anim in ["death_up", "death_side", "death_down"]:
-		assert_eq(frames.get_animation_speed(anim), Enemy.DEATH_FPS, "%s plays at DEATH_FPS" % anim)
-		assert_false(frames.get_animation_loop(anim), "%s does not loop" % anim)
-
-	e.free()
-	return true
-
-func test_build_frames_frame_regions_and_source_sheet_match_the_reference() -> bool:
-	var e := _ready_enemy()
-	e.setup(&"ogre", _straight_path(), 1)  # ogre to also exercise a non-default texture_key
-	var frames: SpriteFrames = e._sprite.sprite_frames
-
-	var first: AtlasTexture = frames.get_frame_texture(&"walk_down", 0)
-	assert_eq(first.region, Rect2(0, 0, Enemy.FRAME_SIZE, Enemy.FRAME_SIZE), "frame 0 region starts at x=0")
-	assert_eq(first.atlas.resource_path, "res://assets/enemies/ogre/D_Walk.png", "walk_down reads the D_Walk sheet for ogre")
-
-	var last: AtlasTexture = frames.get_frame_texture(&"walk_down", Enemy.FRAMES_PER_SHEET - 1)
-	assert_eq(last.region, Rect2(5 * Enemy.FRAME_SIZE, 0, Enemy.FRAME_SIZE, Enemy.FRAME_SIZE),
-		"the last frame's region starts at 5 * FRAME_SIZE = 240")
-
-	var death_side: AtlasTexture = frames.get_frame_texture(&"death_side", 2)
-	assert_eq(death_side.region, Rect2(2 * Enemy.FRAME_SIZE, 0, Enemy.FRAME_SIZE, Enemy.FRAME_SIZE),
-		"a middle frame's region starts at index * FRAME_SIZE")
-	assert_eq(death_side.atlas.resource_path, "res://assets/enemies/ogre/S_Death.png", "death_side reads the S_Death sheet")
-
-	var walk_up: AtlasTexture = frames.get_frame_texture(&"walk_up", 0)
-	assert_eq(walk_up.atlas.resource_path, "res://assets/enemies/ogre/U_Walk.png", "walk_up reads the U_Walk sheet")
-
-	e.free()
-	return true
-
-# All three real creatures have valid sheets on disk, so the "missing sheet"
-# branch never fires for any reachable production kind - exercising it
-# means calling _build_frames directly with a texture_key nothing on disk
-# matches. Pins that a missing sheet is skipped cleanly (continue) rather
-# than an unguarded null Texture2D getting wired into an AtlasTexture.
-func test_build_frames_skips_a_missing_sheet_without_crashing() -> bool:
-	var e := _ready_enemy()
-	var frames: SpriteFrames = e._build_frames("no_such_creature")
-
-	assert_true(frames.has_animation("walk_down"), "the animation slot still exists")
-	assert_eq(frames.get_frame_count("walk_down"), 0, "no frames were added for a sheet that failed to load")
-	assert_eq(frames.get_frame_count("death_up"), 0, "every animation is affected, not just one")
-
-	e.free()
-	return true
-
-# --------------------------------------------------------------------------
-# constants
-# --------------------------------------------------------------------------
-
-# A script-level const on a class_name script is directly readable as
-# ClassName.CONST_NAME with no tree, no node, and no draw pass involved -
-# the same technique test_tower.gd/test_projectile.gd use for their own
-# constants. This pins the literal values even though every one of them is
-# also exercised indirectly above (frame math, animation speeds).
-func test_frame_size_frames_per_sheet_and_fps_constants_match_the_brief() -> bool:
-	assert_eq(Enemy.FRAME_SIZE, 48, "FRAME_SIZE")
-	assert_eq(Enemy.FRAMES_PER_SHEET, 6, "FRAMES_PER_SHEET")
-	assert_eq(Enemy.WALK_FPS, 8.0, "WALK_FPS")
-	assert_eq(Enemy.DEATH_FPS, 10.0, "DEATH_FPS")
 	return true
 
 # --------------------------------------------------------------------------
@@ -659,30 +619,163 @@ func test_a_plain_hit_leaves_no_residue_for_a_later_slow_to_inherit() -> bool:
 	return true
 
 # --------------------------------------------------------------------------
+# run cycle: stride phase, squash and stretch, lean
+#
+# Replaces the old timed bob (_bob_clock ticking at a fixed BOB_HZ regardless
+# of the enemy's own speed). These tests pin that the cycle is driven by
+# distance travelled instead - the thing that actually makes a slow enemy
+# look slow and a fast enemy look fast, and that makes a stopped enemy stop.
+# --------------------------------------------------------------------------
+
+func test_the_stride_advances_with_distance_not_with_time() -> bool:
+	# The whole point. A slow enemy and a fast one must not cycle at the same
+	# rate, or neither looks like it is moving under its own power.
+	var slow := _ready_enemy()
+	slow.setup(&"ogre", _straight_path(), 1)
+	var fast := _ready_enemy()
+	fast.setup(&"bee", _straight_path(), 1)
+	assert_true(Enemies.DEFS[&"bee"]["base_speed"] > Enemies.DEFS[&"ogre"]["base_speed"],
+		"precondition: the bat is faster than the ogre")
+
+	for i in 10:
+		slow._physics_process(0.05)
+		fast._physics_process(0.05)
+
+	assert_true(fast.stride_phase() > slow.stride_phase(),
+		"over the same elapsed time the faster enemy is further through its stride (%f vs %f)"
+			% [fast.stride_phase(), slow.stride_phase()])
+	slow.free()
+	fast.free()
+	return true
+
+func test_a_stationary_enemy_does_not_cycle() -> bool:
+	# A timed cycle keeps running when the enemy is held up. A travelled one
+	# cannot.
+	var e := _ready_enemy()
+	e.setup(&"slime", _straight_path(), 1)
+	e._physics_process(0.05)
+	var moving := e.stride_phase()
+	assert_true(moving > 0.0, "precondition: it cycled while it was moving")
+
+	e.sim["speed"] = 0.0
+	for i in 10:
+		e._physics_process(0.05)
+	assert_almost_eq(e.stride_phase(), moving, 0.0001,
+		"a stopped enemy holds its phase instead of running on the spot")
+	e.free()
+	return true
+
+func test_a_slowed_enemy_cycles_more_slowly() -> bool:
+	var normal := _ready_enemy()
+	normal.setup(&"slime", _straight_path(), 1)
+	var slowed := _ready_enemy()
+	slowed.setup(&"slime", _straight_path(), 1)
+	slowed.sim["slow"] = Slow.apply(Slow.none(), 0.5, 5000.0)
+
+	for i in 8:
+		normal._physics_process(0.05)
+		slowed._physics_process(0.05)
+
+	assert_true(slowed.stride_phase() < normal.stride_phase(),
+		"a slowed enemy is less far through its stride (%f vs %f)"
+			% [slowed.stride_phase(), normal.stride_phase()])
+	normal.free()
+	slowed.free()
+	return true
+
+func test_the_stride_squashes_and_stretches_the_sprite() -> bool:
+	# A rigid sprite moved up and down still reads as a cut-out. The
+	# compression at footfall is what makes it read as weight.
+	var e := _ready_enemy()
+	e.setup(&"slime", _straight_path(), 1)
+	var sprite: Sprite2D = e.get_node("Sprite")
+	var seen_squashed := false
+	var seen_neutral := false
+	var base := sprite.scale.y
+	for i in 40:
+		e._physics_process(0.02)
+		if sprite.scale.y < base * 0.995:
+			seen_squashed = true
+		if absf(sprite.scale.y - base) < base * 0.005:
+			seen_neutral = true
+		assert_true(sprite.scale.y <= base + 0.0001,
+			"the stride never stretches past the sprite's declared height")
+	assert_true(seen_squashed, "the sprite compresses somewhere in the stride")
+	assert_true(seen_neutral, "and returns to its declared height somewhere in it")
+	e.free()
+	return true
+
+func test_the_stride_leans_the_sprite_into_its_travel() -> bool:
+	# Spec section 6 asked for this and the art swap dropped it without ruling
+	# on it.
+	#
+	# A manual set_facing_from_travel() call ahead of a tick does NOT
+	# exercise this: _physics_process re-derives facing from the REAL travel
+	# direction on every tick that does not arrive at a waypoint (see
+	# test_physics_process_does_not_flip_the_sprite_on_a_waypoint_arrival_tick
+	# above), so a manual override is clobbered on the very next tick before
+	# _apply_stride ever reads it - confirmed by running the straight-path,
+	# manual-override version of this test and watching the second assertion
+	# fail because the tick silently put facing back the way it was. A path
+	# that genuinely turns the enemy around is what actually exercises the
+	# lean's sign. Sampling across many ticks (rather than pinning two exact
+	# ones) keeps the test from depending on the precise tick where arrival
+	# consumes a whole step and travels zero distance.
+	var e := _ready_enemy()
+	var path := PackedVector2Array([Vector2(0, 0), Vector2(30, 0), Vector2(-500, 0)])
+	e.setup(&"slime", path, 1)
+	var sprite: Sprite2D = e.get_node("Sprite")
+
+	var right_lean := 0.0
+	var left_lean := 0.0
+	for i in 20:
+		e._physics_process(0.05)
+		if sprite.rotation < -0.01:
+			right_lean = sprite.rotation
+		elif sprite.rotation > 0.01:
+			left_lean = sprite.rotation
+
+	assert_true(right_lean < 0.0, "the enemy leans one way while heading toward path[1] (%f)" % right_lean)
+	assert_true(left_lean > 0.0, "and the other way once it turns around toward path[2] (%f)" % left_lean)
+	e.free()
+	return true
+
+func test_every_kind_declares_a_stride() -> bool:
+	for kind in Enemies.KINDS:
+		assert_true(float(Enemies.DEFS[kind]["stride_px"]) > 0.0,
+			"%s declares a stride length" % kind)
+	return true
+
+# --------------------------------------------------------------------------
 # Sprite filtering
 # --------------------------------------------------------------------------
 
-# The enemy sheets are 48x48 hand-placed pixel art (hard edges, a handful of
-# colours per sprite) drawn at sprite_scale 0.7 or 1.2. Godot's project-wide
-# default canvas filter is LINEAR, which bilinearly blends those hard edges
-# into mush at any scale other than 1.0 - so the enemies rendered blurry
-# while every neighbouring element stayed sharp.
+# The illustrated variants are painted art, minified between 1.3x and 1.6x to
+# reach their declared sprite_px (the ogre 79x76 into 58 tall, the goblin
+# 60x52 into 34, the bat 100x44 into 28) - the same regime map_renderer.gd's
+# _place already filters LINEAR_WITH_MIPMAPS for the props, for the same
+# reason. NEAREST was right for the Kenney sheets this replaced (48px
+# hand-placed pixel art, hard edges, a handful of colours per sprite); a
+# linear filter on THOSE smeared them. Painted art minified by a non-integer
+# factor wants the opposite: NEAREST would produce dropped-pixel aliasing,
+# and a mipmap chain keeps it clean at any distance the game ends up using.
+#
+# The chain now exists. Task 10 of the illustrated art swap turned
+# mipmaps/generate=true on for every variant .import sidecar (pinned by
+# test_art_import.gd), completing the pair this assertion started: the
+# filter was set to sample a chain before the chain existed to sample, and
+# now both halves are true together.
 #
 # This is set on the node in enemy.tscn rather than in setup(), so it holds
 # for an enemy that is instantiated but never set up too, and so it costs
 # nothing at runtime. The assertion reads the node property rather than the
 # scene file's text, so it stays true however the value comes to be set.
-#
-# Deliberately NOT applied project-wide: assets/kenney/** and assets/towers.png
-# are painted, high-resolution art downscaled hard (128px Kenney sources into
-# 48px tiles, a 37% reduction), and NEAREST on that produces dropped-pixel
-# aliasing. Only the genuine pixel art wants a nearest filter. See map_renderer.gd.
-func test_enemy_sprites_use_a_nearest_filter_so_the_pixel_art_stays_sharp() -> bool:
+func test_enemy_sprites_use_a_linear_mipmap_filter_for_the_minified_painted_art() -> bool:
 	var e := _ready_enemy()
-	var sprite: AnimatedSprite2D = e.get_node("Sprite")
+	var sprite: Sprite2D = e.get_node("Sprite")
 
-	assert_eq(sprite.texture_filter, CanvasItem.TEXTURE_FILTER_NEAREST,
-		"the enemy sprite filters NEAREST, keeping 48px pixel art crisp at sprite_scale 0.7 and 1.2")
+	assert_eq(sprite.texture_filter, CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS,
+		"the enemy sprite filters LINEAR_WITH_MIPMAPS, matching the minified painted props")
 	assert_false(sprite.texture_filter == CanvasItem.TEXTURE_FILTER_PARENT_NODE,
 		"the filter is stated on the sprite itself, not inherited from a parent that may not set one")
 

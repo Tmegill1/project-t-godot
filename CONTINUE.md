@@ -3,13 +3,14 @@
 **Point an assistant at this file and say "continue this project."** It contains
 everything needed to resume with no prior conversation.
 
-Last updated: 2026-08-18 · Branch `feat/kenney-art-swap` · **core slice, tower
-upgrades and free placement all merged to `master`; the Kenney art swap is
-implemented on this branch — all ten tasks done, suite green at 6689 checks
-across 36 files — and not yet merged**
+Last updated: 2026-08-21 · Branch `feat/illustrated-art-swap` · **core slice,
+tower upgrades, free placement and the Kenney art swap all merged to
+`master`; the illustrated art swap is implemented on this branch — all ten
+tasks done, suite green at 7143 checks across 37 files — and not yet
+merged**
 
-> **Picking this up after the art swap? Read §0 — it now covers what shipped
-> and the three rendering traps that are still true.** Read §5 and §6 too,
+> **Picking this up after the illustrated art swap? Read §0 — it now covers
+> what shipped and the traps that are still true.** Read §5 and §6 too,
 > whatever you do: the engine facts and the standing rules apply to
 > everything here.
 
@@ -20,77 +21,125 @@ across 36 files — and not yet merged**
 
 ---
 
-## 0. THE KENNEY ART SWAP — implemented, not yet merged
+## 0. THE ILLUSTRATED ART SWAP — implemented, not yet merged
 
-**Branch `feat/kenney-art-swap`, all ten tasks done, suite green at 6689
-checks across 36 files.** Every non-enemy asset has been replaced with
-Kenney's CC0 *Tower Defense (Top-Down)* pack, and the renderer gained a
-**biome layer** so a map declares itself forest, ice or desert. The old
-sliced reference sheet (`assets/map/`) and the tool that cut it
-(`tools/slice_atlas.gd`) are retired and deleted; see §2's asset row for the
+**Branch `feat/illustrated-art-swap`, all ten tasks done, suite green at
+7143 checks across 37 files.** Every piece of art in the game — map, props,
+endpoints, enemies *and* towers — has been replaced with a single illustrated
+reference sheet, and the Kenney CC0 pack the previous branch installed is
+now fully retired: `assets/kenney/`, `tools/bake_kenney.gd` and the three
+tests that gated the Kenney bake are deleted. See §2's asset row for the
 current layout.
 
 Design and plan, useful if the rendering approach needs revisiting:
 
-- [`docs/superpowers/specs/2026-08-16-kenney-art-swap-design.md`](docs/superpowers/specs/2026-08-16-kenney-art-swap-design.md) — the design, approved
-- [`docs/superpowers/plans/2026-08-16-kenney-art-swap.md`](docs/superpowers/plans/2026-08-16-kenney-art-swap.md) — the ten tasks, as built
+- [`docs/superpowers/specs/2026-08-20-illustrated-art-swap-design.md`](docs/superpowers/specs/2026-08-20-illustrated-art-swap-design.md) — the design, approved
+- [`docs/superpowers/plans/2026-08-20-illustrated-art-swap.md`](docs/superpowers/plans/2026-08-20-illustrated-art-swap.md) — the ten tasks, as built
 
 **Built with `superpowers:subagent-driven-development`** — a fresh subagent
-per task, two-stage review between tasks.
+per task, an independent review between tasks, and a whole-branch review at
+the end; the controller finished two tails directly when an implementer ran
+out of session budget. Fifty-one rulings were made during execution and
+recorded in a git-ignored ledger that was deleted when the branch closed, as
+that skill prescribes. **The reasoning is not lost with it**: every measured
+value and every non-obvious decision was written into the code as it was
+made, which is why `tools/bake_sheet.gd`'s constants say what they were
+measured against and the asset gates say what they exist to catch. If you
+want to know why a number is what it is, the comment beside it is the
+authority.
 
-**Scope boundary held.** This branch is the art plus the biome layer only.
-Map 2 and map 3 *layouts*, map-to-map progression, and `sim/economy.gd:42`'s
-dormant `limit_bonus_map2` stay a **later branch** — see §11. Ice and desert
-are proven on this branch by rendering the existing layout under them, not by
-new layouts.
+**Scope held to art plus per-spawn enemy variety.** Map 2/3 layouts,
+map-to-map progression and the five composable enemy properties are still a
+**later branch** — see §11. The Goblin Shaman and Troll rows are extracted
+under `assets/art/enemies/_unused/` but referenced by no code, waiting on an
+enemy-variety feature that needs its own stats, wave schedule and balance
+pass.
 
-**Enemies were not touched.** `assets/enemies/**`, `game/enemy.tscn`,
-`game/enemy.gd` and `data/enemies.gd` are exactly as they were before this
-branch. Monster variety is a separate, later effort.
+**Towers were touched too, unlike the Kenney branch.** `assets/towers.png`
+is rebaked from this sheet's sixteen upgrade-level illustrations; `Tower`'s
+`SHEET_COLUMNS`/`FRAME_SIZE` geometry changed to match. Combat rules and the
+upgrade tables did not move.
 
-### The three traps, all of which cost real time to find
+### Traps that cost real time to find
 
-**1. The tilesheet's packing order is NOT the individual-PNG numbering.**
-70 of the 299 tiles differ, starting at index 15 and including the whole
-130–137 prop range. Every index in the spec and plan is a
-`towerDefense_tileNNN.png` index. If you "verify" one against a tilesheet
-contact sheet you will correct it into a bug.
+**1. Extraction alignment is the single riskiest thing here.** The sheet is
+a labelled reference sheet, not a packed atlas — sections sit on different
+grids and carry row labels baked into the pixels — so every row is cut on a
+measured fixed pitch from a measured origin, never derived automatically
+(two automatic approaches were tried and both failed: a tight flood fill
+fragments sprites on their own outlines, a loose one merges the densely
+packed enemy rows into blobs). A few pixels of origin drift puts a sliver of
+the neighbouring sprite into every crop. The margin gates across
+`test_ground_tiles.gd`, `test_road_pieces.gd`, `test_prop_assets.gd` and
+others are what catch it — **if one goes red, move the origin, never the
+threshold.**
 
-**2. Corner classification alone picks a table that tiles WRONGLY.** Each
-terrain pairing appears twice in the pack — once with the road drawn as a small
-overlay lobe, once with the roles reversed — and both classify identically by
-corner colour. The separator is a measurement: road-pixel fraction ~0.04 in the
-family we want, ~0.46 in the other. Index position is not a usable rule (for
-grass↔dirt the correct family is the higher indices, for sand↔stone the lower).
-If `test_blend_tiles.gd`'s road-fraction gate goes red, the bake picked the
-inverted family — **fix the selection, never the threshold.**
+**2. The card border bled through every tile seam, and only rendering the
+board at real size caught it (Task 8).** The sheet's terrain tiles are cards
+with a painted dark scalloped edge; drawn whole, every cell boundary carried
+two of those edges back to back and the map read as a grid of cards in
+black gutters — invisible in any per-tile PNG check, the single most visible
+defect once the demo map was actually composed and looked at. Cropping the
+border (`TILE_BLEED`, `region_enabled` in `_place_tile`) fixed the tile
+interior, but the masked road pieces' patched-in arm then carried the same
+border inward from the wrong side; the fix was mirroring the copy rather
+than sampling it directly (`_patch_arm` in `tools/bake_sheet.gd`). Screenshot
+verification is not optional for rendering work — see §8.
 
-**3. The road draws 23px, and that is a measured consequence, not a bug.**
-Kenney draws roads as ~3-tile corridors; this map's are one tile wide with a
-one-tile grass gap between the row-8 and row-10 legs. Two alternatives were
-built and rejected: sampling at grid intersections draws a 70px road but floods
-that buildable grass strip and paints it as road, and a half-tile lattice
-draws 36px but minifies the blend detail into a straight-edged bar. So
-`PATH_HALF_WIDTH` follows the art **26 → 14** (Task 9), which is a deliberate
-amendment to spec §3. Whether 14 plays well is a **playtest** question — turn
-the constant and re-run, per §7's convention.
+**3. The mipmap-generation gap came back, across two separate branches.**
+The Kenney swap's own Task 10 found and fixed exactly this: a sprite filter
+set to sample a mipmap chain (`LINEAR_WITH_MIPMAPS`), with generation never
+turned on in the `.import` sidecar, so the filter silently fell back to the
+base level and aliased on every minified prop. This branch's Task 10 found
+the identical defect again, on the new art, present from Task 1 onward and
+invisible to every test because the old gate only walked `assets/kenney/`.
+`test/test_art_import.gd` now pins the fix as an explicit **split** rather
+than a blanket sweep — props, endpoints and enemy variants get a chain;
+ground/road tiles and `assets/towers.png` deliberately do not, because both
+are region-sampled and a mip level would average the sampled region's
+cropped or framed edge back into its neighbour. It pins **both** sides on
+purpose: a gate that only asserts the `true` half lets a later change flip
+the excluded assets on and nothing would notice. **If you add new
+mipmap-filtered art, generation is a second, separate flag — check it, don't
+assume the filter implies it.**
+
+**4. The road draws narrower than the pack it replaced, in the opposite
+direction from what the plan predicted.** The illustrated road is 20 source
+px of a 66px tile (measured directly off the committed, re-baked PNGs, not
+an earlier draft of them), giving a half-width of `9 ≈ round(8.89)` plus the
+standing 2px margin. `PATH_HALF_WIDTH` is now **11**, down from Kenney's 14
+— narrower, not the ~26px the plan initially guessed. `test/test_placement.gd`
+probes this exact boundary with literals derived from the constant; both
+move together if it ever does again (the Kenney swap's own history shows
+this coupling has broken once already).
 
 ### Where the source art lives
 
-`reference/kenney-td/` — extracted, **gitignored**, already in place. The
-Retina 128×128 set at `reference/kenney-td/PNG/Retina/` is what the bake reads;
-the 3.2MB archive is not committed. `tools/bake_kenney.gd` (Task 1) is the tool
-that turns it into committed assets under `assets/kenney/`.
+`reference/illustrated-sheet/sheet.png` — vendored, **gitignored**, already
+in place. `tools/bake_sheet.gd` is the tool that turns it into every
+committed asset under `assets/art/` and `assets/towers.png`:
 
-### One more thing that bites
+```bash
+godot --headless --script tools/bake_sheet.gd
+godot --headless --import
+git checkout -- project.godot
+```
+
+The sheet has **no alpha channel**, so extraction cannot read transparency
+directly — it keys a measured background colour instead
+(`tools/bake_sheet.gd`'s `BACKGROUND` and `KEY_TOLERANCE_SQ`).
+
+### One more thing that bites, still
 
 `prop_footprints()` derives a blocking radius from the texture's **full**
-dimensions, and `_place` normalises every prop's longest axis to `TILE_SIZE`.
-So the radius is **always 24 whatever the source size is** — trimming cannot
-change it. That is precisely why props are trimmed to their alpha bbox at bake
-time: the radius cannot move, so the *art* has to grow to fill it. Untrimmed,
-Kenney's bush draws its subject at ~23px inside that same 24px radius and
-players hit invisible walls in open grass.
+dimensions, and `_place` normalises every prop's longest displayed axis to
+`TILE_SIZE`. So the radius is **always 24 whatever the source size is** —
+trimming cannot change it. That is precisely why props are trimmed to their
+alpha bbox at bake time: the radius cannot move, so the *art* has to grow to
+fill it. This constraint is what forced `_place_tile` to become a separate
+function from `_place` in Task 6/8 rather than a flag on it — ground and
+road tiles are stretched to fill their cell exactly, which would corrupt
+`prop_footprints`' radius maths if props went through the same path.
 
 ---
 
@@ -119,13 +168,13 @@ win or lose → retry or menu, with sound.
 |---|---|
 | `sim/` — 11 modules | ✅ complete, reviewed |
 | `data/` — 9 modules | ✅ complete, reviewed |
-| `assets/` — 87 PNGs (`assets/kenney/` baked from Kenney's Tower Defense (Top-Down) pack, plus `assets/enemies/` and `assets/audio/`) | ✅ imported, baked, verified visually |
+| `assets/` — 169 PNGs (`assets/art/` and `assets/towers.png` baked from the illustrated reference sheet, plus `assets/audio/`) | ✅ imported, baked, verified visually |
 | `game/` — board, enemy, tower, projectile, map renderer | ✅ complete |
 | `ui/` — menu, HUD (with a 1.5x speed toggle), build panel, tower inspector, game-over, victory | ✅ complete |
 | `audio/` — pooled playback, 17 core-slice events | ✅ complete |
 | Web export | ✅ preset + build; **boots and renders in a browser; not yet played in one** |
 | Deploy | ✅ live at **https://tmegill1.github.io/project-t-godot/** — every push to `master` republishes, at the address GitHub assigns (no custom domain) |
-| Tests | ✅ 6689 checks across 36 files, exit 0 |
+| Tests | ✅ 7143 checks across 37 files, exit 0 |
 | Tower upgrades | ✅ **all 11 tasks done** — rules, tower, board, harness, inspector, verified in the running game. See §4 |
 
 **The repo is public** and the game is deployed from it.
@@ -483,22 +532,47 @@ the player runs, not only in the thing the tests run.
 2. **The balance is unplaytested.** The original's own handoff notes say every
    number is a placeholder. "Matches Phaser" will not mean "plays well." Tune with
    the harness, which is exactly what it is for.
-3. **Web export is 40.6 MB** — measured, not predicted; the design anticipated
+3. **Volume and mute do not persist between runs.** The HUD's two audio
+   controls drive `AudioManager` directly and nothing writes them to disk, so
+   a player who mutes the game gets sound back next launch. Deliberately not
+   built: there is no settings file in this project yet, and inventing one for
+   two values is a bigger decision than it looks. **Decide** whether this
+   project wants a settings resource, and if so what else belongs in it.
+4. **Web export is 40.6 MB** — measured, not predicted; the design anticipated
    25–40 MB. 39.5 MB of that is `index.wasm`, the Godot engine binary. The
    game's own `index.pck` is 790 KB raw / 666 KB gzipped, against the Phaser
    build's 368 KB gzipped — so the game data itself is roughly 1.8× larger, but
    that difference is noise beside the engine. Trimming art or audio cannot
    meaningfully move the total; only a different engine would.
-4. **The HUD's white "Gold / Lives / Wave" text has no backing plate**, and
-   screenshots from the Kenney art swap show it is nearly illegible over the
-   snow biome and low-contrast over sand; it read fine over green grass. Not
-   fixed on this branch: only forest is wired to a playable map today, so ice
-   and desert are unreachable in game, and the right fix — a backing plate, a
-   text shadow, or a per-biome tint — is a design call, not a bug fix. Whoever
-   wires up the ice map will meet this immediately.
+5. **The HUD's white "Gold / Lives / Wave" text has no backing plate, and it
+   is illegible on ice and on desert.** This was nearly illegible over the
+   Kenney pack's snow biome and it did not improve: re-checked live at the end
+   of this branch, with the board re-rendered under each biome and captured,
+   the white text disappears into both the pale ice and the tan sand. An
+   earlier note on this branch claimed both "read fine at a glance"; the
+   screenshots say otherwise, and the screenshots win. Not fixed here: only
+   forest is wired to a playable map today, so ice and desert are unreachable
+   in game, and the right fix — a backing plate, a text shadow, or a per-biome
+   tint — is a design call rather than a bug fix. Whoever wires up the ice map
+   will meet this immediately.
+
+6. **RESOLVED — towers now draw at 2.4x their footprint.** They were the
+   least prominent thing on the board: a placed tower drew about 19 x 26px of
+   art against 44px bright-orange campfires and 48px trees. They had not
+   shrunk (the Kenney basic drew 20 x 22) — the props got louder. Fixed by
+   `Tower.DISPLAY_SCALE`, set to 2.0 and then raised to 2.4 on the owner's
+   call, which is **display only**: `Placement`
+   still reads `Towers.DEFS[kind]["size"]` directly, so the corridor, the prop
+   clearances and the tower-to-tower spacing are untouched, and
+   `test_the_display_scale_does_not_reach_the_placement_radius` is what stops
+   a future tidy-up merging the two. Compared in game at 1.6, 1.8 and 2.0 and
+   checked at the crowded end, where four towers packed to
+   `MIN_TOWER_SPACING` stay individually legible. Left here rather than
+   deleted because the *reason* still matters: this art needs the player's
+   pieces drawn larger than their footprint, and anything new that goes on
+   the board should be judged against the props, not against the old pack.
 
 ---
-
 ## 10. Known gaps
 
 - **Task 15 never had a formal review pass.** It was verified visually by the
@@ -526,6 +600,17 @@ the player runs, not only in the thing the tests run.
   and stop expecting a test to hold them. (The effect-values gap listed here
   before is closed: `EXPECTED_EFFECTS` in `test_upgrade_tables.gd` now states
   all thirty-two tiers.)
+- **`assets/enemies/**` (30 PNGs: directional `D_Walk`/`D_Death`/`S_Walk`/
+  `S_Death`/`U_Walk`/`U_Death` sheets for bee, ogre and slime) is orphaned.**
+  Found while documenting the illustrated art swap: it predates *both* art
+  swaps — the Kenney branch explicitly left it untouched, and the
+  illustrated branch's own enemy work (Tasks 7 and 9) moved `game/enemy.gd`
+  onto `assets/art/enemies/<kind>/variant_N.png` per-spawn variants without
+  ever pointing at these sheets. Nothing references them by path or by
+  `.import` UID — grepped both, zero hits. Out of scope to delete here: this
+  task's constraints rule out touching any PNG, and this directory has
+  nothing to do with Kenney. Whoever next touches enemy art should delete
+  it.
 
 ---
 
@@ -533,21 +618,23 @@ the player runs, not only in the thing the tests run.
 
 ```bash
 cd ~/Projects/project-t-godot
-git checkout feat/kenney-art-swap
+git checkout feat/illustrated-art-swap
 godot --headless --import                            # once, after a fresh clone
-godot --headless --quit --script test/run_tests.gd   # expect 6689 checks, exit 0
+godot --headless --quit --script test/run_tests.gd   # expect 7143 checks, exit 0
 godot --path .                                       # and actually play a run
 ```
 
-**§0 — the Kenney art swap — is done and not yet merged.** All ten tasks are
-implemented and the suite is green. Merge `feat/kenney-art-swap` to `master`
-first; if you touch map rendering again afterward, read §0's three traps
-before you do — each one produced a wrong-but-plausible result before it was
-caught, and two of them look correct right up until the map is rendered.
+**§0 — the illustrated art swap — is done and not yet merged.** All ten
+tasks are implemented and the suite is green. Merge
+`feat/illustrated-art-swap` to `master` first; if you touch map or enemy
+rendering again afterward, read §0's traps before you do — the mipmap gap in
+particular has now recurred once already across two separate branches, and
+will again if the next new art forgets it is a two-part fix (filter AND
+`.import` generation).
 
 **After that merge**, the next piece is the map 2 and map 3 layouts plus
-map-to-map progression, which the art branch deliberately excludes and which
-needs its own spec and plan.
+map-to-map progression, which this branch (like the one before it)
+deliberately excludes and which needs its own spec and plan.
 
 **The other standing feature** is the five composable enemy properties —
 armoured, phased, swift, shielded, splitter. Pierce and detection are already

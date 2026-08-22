@@ -43,6 +43,7 @@ var _counters := {}
 var _kicker: Label = null
 var _name: Label = null
 var _sell: Button = null
+var _priority: Button = null
 
 @onready var _rows_root: VBoxContainer = $Rows
 
@@ -67,6 +68,9 @@ func branch_rows() -> Dictionary:
 
 func sell_row() -> Button:
 	return _sell if has_tower() else null
+
+func priority_row() -> Button:
+	return _priority
 
 func show_tower(tower: Tower) -> void:
 	_tower = tower
@@ -108,6 +112,16 @@ func _build_rows() -> void:
 		_rows_root.add_child(button)
 		_rows[branch] = button
 
+	# One cycling button rather than one per priority. Five side-by-side
+	# controls would report a minimum width the 140px sidebar cannot hold -
+	# the failure this panel's header documents - and Targeting.next_priority
+	# already exists for exactly this control.
+	_priority = Button.new()
+	_priority.custom_minimum_size = MIN_TAP_SIZE
+	_priority.clip_text = true
+	_priority.pressed.connect(_on_priority_pressed)
+	_rows_root.add_child(_priority)
+
 	_sell = Button.new()
 	_sell.custom_minimum_size = MIN_TAP_SIZE
 	_sell.clip_text = true
@@ -133,6 +147,7 @@ func _refresh() -> void:
 			Upgrades.DEFS[_tower.kind][branch]["label"],
 			int(_tower.tiers[branch]), UpgradesSim.MAX_TIER,
 		]
+	_priority.text = "Target: %s" % Targeting.LABELS[_tower.get_priority()]
 	_sell.text = "Sell  %d gold" % EconomySim.sell_refund(_tower.price_paid)
 	_refresh_gating()
 
@@ -186,3 +201,9 @@ func _on_branch_pressed(branch: StringName) -> void:
 
 func _on_sell_pressed() -> void:
 	_board.sell_selected_tower()
+
+## Asks the board to cycle, then re-reads the tower. The panel never advances
+## the priority itself - the board owns what happens to a selected tower.
+func _on_priority_pressed() -> void:
+	_board.cycle_selected_tower_priority()
+	_refresh()

@@ -252,3 +252,79 @@ func test_unknown_sound_name_is_a_no_op_not_a_crash() -> bool:
 	assert_eq(int(mgr._next), next_before, "an unrecognised sound name does not advance the pool")
 	mgr.free()
 	return true
+
+# --------------------------------------------------------------------------
+# volume
+#
+# AudioServer.set_bus_volume_db(0, ...) is real, global engine state - it
+# outlives the AudioManager instance that called it and is shared by every
+# test in this process, not just the ones in this file (test_hud.gd's audio
+# tests reach the same bus through the live singleton). Every test below
+# that moves the bus captures its level first and restores it before
+# returning, the same way test_volume_reaches_the_master_bus does, so a test
+# order this file did not anticipate still starts from an undisturbed bus.
+# --------------------------------------------------------------------------
+
+# Alias for _ready_manager(): the same bare-instance construction the mute
+# tests above already use ("without entering the tree" - see the file
+# header), under the shorter name these tests were written against.
+func _manager():
+	return _ready_manager()
+
+func test_volume_round_trips_as_the_linear_value_that_was_set() -> bool:
+	# Stored linear rather than read back from the bus: linear_to_db(0.0) is
+	# -inf, so silence cannot survive a round trip through decibels.
+	var mgr = _manager()
+	var before := AudioServer.get_bus_volume_db(0)
+	mgr.set_volume(0.5)
+	assert_almost_eq(mgr.get_volume(), 0.5, 0.0001, "half volume round-trips")
+	mgr.set_volume(0.0)
+	assert_almost_eq(mgr.get_volume(), 0.0, 0.0001, "silence round-trips")
+	mgr.set_volume(1.0)
+	assert_almost_eq(mgr.get_volume(), 1.0, 0.0001, "full volume round-trips")
+	AudioServer.set_bus_volume_db(0, before)
+	mgr.free()
+	return true
+
+func test_volume_is_clamped_to_the_range_a_slider_can_produce() -> bool:
+	var mgr = _manager()
+	var before := AudioServer.get_bus_volume_db(0)
+	mgr.set_volume(-3.0)
+	assert_almost_eq(mgr.get_volume(), 0.0, 0.0001, "below zero clamps to silence")
+	mgr.set_volume(9.0)
+	assert_almost_eq(mgr.get_volume(), 1.0, 0.0001, "above one clamps to full")
+	AudioServer.set_bus_volume_db(0, before)
+	mgr.free()
+	return true
+
+func test_volume_reaches_the_master_bus() -> bool:
+	# The pool rotates through twelve players, so a per-player volume would
+	# leave a sound already playing at the old level. The bus moves all of
+	# them, mid-playback included.
+	var mgr = _manager()
+	var before := AudioServer.get_bus_volume_db(0)
+	mgr.set_volume(0.25)
+	var quiet := AudioServer.get_bus_volume_db(0)
+	mgr.set_volume(1.0)
+	var loud := AudioServer.get_bus_volume_db(0)
+	assert_true(quiet < loud, "a lower linear volume is a lower bus level (%f vs %f)" % [quiet, loud])
+	assert_almost_eq(loud, 0.0, 0.001, "full volume is unity gain on the bus")
+	AudioServer.set_bus_volume_db(0, before)
+	mgr.free()
+	return true
+
+func test_muting_does_not_disturb_the_volume() -> bool:
+	# Two independent controls. A player who mutes, moves the slider, then
+	# unmutes must get the level they chose while muted.
+	var mgr = _manager()
+	var before := AudioServer.get_bus_volume_db(0)
+	mgr.set_volume(0.4)
+	mgr.set_muted(true)
+	assert_almost_eq(mgr.get_volume(), 0.4, 0.0001, "muting leaves the volume alone")
+	mgr.set_volume(0.8)
+	mgr.set_muted(false)
+	assert_almost_eq(mgr.get_volume(), 0.8, 0.0001, "the level chosen while muted survives unmuting")
+	assert_false(mgr.is_muted(), "and the mute is off")
+	AudioServer.set_bus_volume_db(0, before)
+	mgr.free()
+	return true

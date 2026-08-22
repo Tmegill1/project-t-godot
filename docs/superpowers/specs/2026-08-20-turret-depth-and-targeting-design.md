@@ -199,10 +199,14 @@ did not come from, which is a worse lie than instant traverse.
 Health"; `strongest`'s label becomes "Highest Health" so the pair reads as a
 pair.
 
-Adding an entry changes what `next_priority()` cycles through, so
-`test_targeting.gd`'s two cycle tests update to match. That is a legitimate
-consequence, not a weakened assertion — the cycle-completeness test already
-walks `PRIORITIES.size()` and keeps working unchanged.
+**Insertion position is load-bearing, and chosen so nothing existing changes.**
+`next_priority()` cycles `PRIORITIES`, and `test_next_priority_cycles` asserts
+`first → last` and `closest → first`. Placing `weakest` directly after
+`strongest` keeps `closest` last, so both assertions still hold and **no
+existing test is edited**. Appending it instead would break the wrap assertion
+and force a change that is indistinguishable from weakening a test. The
+cycle-completeness test already walks `PRIORITIES.size()` and adapts either
+way.
 
 ### 5.2 The control
 
@@ -228,10 +232,15 @@ re-selection. There is no save system, so it needs no persistence.
 
 ### 6.1 Layering
 
-Today everything sits on fixed z-layers: ground −1, props and endpoints +1,
-towers 2 (`game/game_board.tscn:21`), enemies at the default 0. The
-consequence is that **enemies currently draw behind trees** regardless of where
-they stand, because z-index beats position and nothing sorts.
+Today only `game/map_renderer.gd:124` sets a z-index in code: ground −1, props
+and endpoints +1. `$Towers` and `$Enemies` set none, so both sit at the default
+0. (`game/game_board.tscn:21`'s `z_index = 2` belongs to `PlacementPreview`,
+not to the towers — an earlier draft of this section misread it.)
+
+The consequence is that **props currently draw above both towers and
+enemies**: a tree covers a tower standing beside it, and an enemy walking past
+one, whatever their positions, because z-index beats position and nothing
+sorts.
 
 The new model:
 

@@ -12,8 +12,8 @@ func test_enemy_stats_match_the_phaser_build() -> bool:
 	assert_eq(ogre["base_health"], 8, "ogre health")
 	assert_eq(ogre["reward"], 20, "ogre reward")
 	assert_eq(ogre["life_loss"], 5, "ogre leak cost")
-	assert_eq(ogre["sprite_scale"], 1.2, "ogre is larger than the others")
-	assert_true(ogre["flip_horizontally"], "ogre artwork faces the wrong way")
+	assert_eq(ogre["sprite_px"], 58.0, "ogre draws taller than the others")
+	assert_false(ogre["flip_horizontally"], "ogre artwork faces the same way as the others on this sheet")
 
 	var bee: Dictionary = Enemies.DEFS[&"bee"]
 	assert_eq(bee["base_speed"], 150.0, "bee speed")
@@ -82,16 +82,28 @@ func test_tower_cosmetic_and_progression_fields_match_the_phaser_build() -> bool
 			assert_eq(def[field], expected[kind][field], "%s.%s" % [kind, field])
 	return true
 
-## label, texture_key, sprite_scale and flip_horizontally pick which sprite
-## sheet an enemy uses and how it is drawn (Task 17 reads texture_key
-## directly). Only ogre's sprite_scale/flip_horizontally were asserted
-## before; this covers every field, for every kind, against
-## reference/project-t/td-browser/src/game/data/enemies.ts.
-func test_enemy_cosmetic_fields_match_the_phaser_build() -> bool:
+## NOT a Phaser-parity test, unlike its neighbours - which is why it no longer
+## carries that name. label still matches the reference, but variant_count and
+## sprite_px have no Phaser counterpart at all: they were introduced by this
+## port when the enemy art became per-spawn illustrated variants.
+##
+## label, variant_count, sprite_px and flip_horizontally pick which sprite
+## directory an enemy draws from and how it is sized/mirrored. variant_count
+## and sprite_px replaced texture_key and sprite_scale when the enemy sheets
+## became per-spawn illustrated variants rather than a single uniform
+## animation sheet per kind (see data/enemies.gd's own doc comment); every
+## kind's flip_horizontally is false because all three kinds' art on this
+## sheet faces right, including the ogre, which faced left on the old sheet.
+## stride_px joined the same table for a different reason - not sizing or
+## mirroring, but how far each kind travels per run cycle - and is pinned
+## here for the same reason as its neighbours: nothing else in the suite
+## would notice a value silently drifting back to 0.0 or to another kind's
+## number.
+func test_enemy_cosmetic_fields_are_the_ones_this_port_draws_from() -> bool:
 	var expected := {
-		&"slime": {"label": "Slime", "texture_key": "slime", "sprite_scale": 0.7, "flip_horizontally": false},
-		&"ogre":  {"label": "Ogre",  "texture_key": "ogre",  "sprite_scale": 1.2, "flip_horizontally": true},
-		&"bee":   {"label": "Bee",   "texture_key": "bee",   "sprite_scale": 0.7, "flip_horizontally": false},
+		&"slime": {"label": "Slime", "variant_count": 15, "sprite_px": 34.0, "stride_px": 30.0, "flip_horizontally": false},
+		&"ogre":  {"label": "Ogre",  "variant_count": 13, "sprite_px": 58.0, "stride_px": 46.0, "flip_horizontally": false},
+		&"bee":   {"label": "Bee",   "variant_count": 3,  "sprite_px": 28.0, "stride_px": 32.0, "flip_horizontally": false},
 	}
 	for kind in expected.keys():
 		var def: Dictionary = Enemies.DEFS[kind]
