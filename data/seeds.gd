@@ -14,3 +14,7 @@ const DEFAULT_DECORATION_SEED := 771144
 ## Which of the six ground cards each tile gets. Separate from the decoration
 ## seed so ground variety does not move when decoration does.
 const DEFAULT_GROUND_SEED := 20260821
+
+## Which variant each spawn draws. Separate from the decoration seed so enemy
+## variety does not move when scenery does.
+const DEFAULT_SPAWN_SEED := 20260822

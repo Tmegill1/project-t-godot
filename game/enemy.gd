@@ -1,33 +1,43 @@
 class_name Enemy
 extends Node2D
 
-## Enemy view: owns an animated sprite and health bar, asks sim/movement.gd
+## Enemy view: owns a sprite and health bar, asks sim/movement.gd
 ## where to move each tick, and reports its own death/leak upward by signal.
 ## Decides nothing about the game itself - the sim modules do.
 
 signal died(reward: int, kind: StringName)
 signal leaked(life_loss: int)
 
-const FRAME_SIZE := 48
-const FRAMES_PER_SHEET := 6
-const WALK_FPS := 8.0
-const DEATH_FPS := 10.0
+## How long a kill takes to leave the screen.
+##
+## Replaces awaiting the death animation, which tied despawn timing to whatever
+## length the artist drew. The sheet has no death frames, so this file owns the
+## duration - short enough not to hold a corpse on screen, long enough that a
+## kill registers as feedback.
+const DEATH_TWEEN_MS := 250.0
 
-@onready var _sprite: AnimatedSprite2D = $Sprite
+## How far the walk bob lifts the sprite, and how fast it cycles.
+##
+## The sheet's rows are variants rather than animation frames, so motion is
+## synthesised: without this an enemy slides along the path like a paper
+## cutout.
+const BOB_PIXELS := 2.0
+const BOB_HZ := 5.0
+
+@onready var _sprite: Sprite2D = $Sprite
 @onready var _health_bar: ColorRect = $HealthBar
 
 var kind: StringName
 var sim := {}
 var _path: PackedVector2Array
 var _wave := 1
-var _facing: StringName = &"side"
+var _bob_clock := 0.0
 var _flip := false
 
-func setup(enemy_kind: StringName, path: PackedVector2Array, wave: int) -> void:
+func setup(enemy_kind: StringName, path: PackedVector2Array, wave: int, rng: Rng = null) -> void:
 	kind = enemy_kind
 	_path = path
 	_wave = wave
-	var def: Dictionary = Enemies.DEFS[kind]
 	var modifiers := Waves.get_modifiers(wave)
 	var health := float(Enemies.scaled_health(kind, modifiers["health_modifier"]))
 
@@ -43,10 +53,26 @@ func setup(enemy_kind: StringName, path: PackedVector2Array, wave: int) -> void:
 	}
 
 	position = path[0]
-	_sprite.sprite_frames = _build_frames(def["texture_key"])
-	_sprite.scale = Vector2.ONE * float(def["sprite_scale"])
-	_play_walk()
+	# One of this kind's variants, chosen per spawn. A wave of eight shows
+	# eight subtly different creatures rather than eight identical ones. The
+	# default keeps the three-argument call sites working and keeps a spawn
+	# reproducible either way.
+	if rng == null:
+		rng = Rng.new(Seeds.DEFAULT_SPAWN_SEED)
+	_sprite.texture = load("res://assets/art/enemies/%s/variant_%d.png"
+		% [kind, rng.int_range(0, Enemies.variant_count(kind) - 1)])
+	apply_sprite_height()
 	_update_health_bar()
+
+## Scales the current variant to the kind's declared displayed height.
+##
+## Derived per sprite rather than fixed, because the variants are not a
+## uniform size - see data/enemies.gd's note on sprite_px. Uniform on both
+## axes: these are creatures, and a stretched one reads as a bug.
+func apply_sprite_height() -> void:
+	var factor := float(Enemies.DEFS[kind]["sprite_px"]) \
+		/ float(_sprite.texture.get_height())
+	_sprite.scale = Vector2.ONE * factor
 
 func _physics_process(delta: float) -> void:
 	# sim starts as {}; a physics tick landing between the node entering the
@@ -69,7 +95,10 @@ func _physics_process(delta: float) -> void:
 	# A tick that advanced a waypoint covered no distance, so its reported
 	# direction comes from a sub-pixel delta and would make the sprite jitter.
 	if not result["advanced_waypoint"]:
-		_set_facing(result["direction"], result["moving_left"])
+		set_facing_from_travel(bool(result["moving_left"]))
+
+	_bob_clock += delta
+	_sprite.position.y = -absf(sin(_bob_clock * BOB_HZ * TAU)) * BOB_PIXELS
 
 	if result["reached_goal"]:
 		sim["alive"] = false
@@ -115,48 +144,36 @@ func get_sim_state() -> Dictionary:
 func _die(source: Dictionary) -> void:
 	sim["dying"] = true
 	sim["alive"] = false
+	# Emitted before the presentation, unchanged: economy timing must not move
+	# because the death animation became a tween.
 	died.emit(EconomySim.kill_reward(int(Enemies.DEFS[kind]["reward"]), source), kind)
 	_health_bar.visible = false
-	_sprite.play("death_%s" % _facing)
-	await _sprite.animation_finished
+	# Every enemy the test harness builds is outside the scene tree (see the
+	# header of test/test_enemy.gd) and create_tween() requires one. This is
+	# not a new limitation: today's `await _sprite.animation_finished` never
+	# resolves off-tree either, so nothing past this point has ever run in a
+	# test. Returning says so instead of parking a coroutine forever.
+	if not is_inside_tree():
+		return
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(self, "scale", Vector2.ONE * 0.6, DEATH_TWEEN_MS / 1000.0)
+	tween.tween_property(self, "modulate:a", 0.0, DEATH_TWEEN_MS / 1000.0)
+	await tween.finished
 	queue_free()
 
-func _set_facing(direction: StringName, moving_left: bool) -> void:
-	var flip := moving_left if direction == &"side" else false
+## Faces the way the enemy is travelling. Up and down both draw the side pose -
+## the sheet gives one facing, so there is nothing else to draw.
+func set_facing_from_travel(moving_left: bool) -> void:
+	var flip := moving_left
 	if Enemies.DEFS[kind]["flip_horizontally"]:
 		flip = not flip
-	if direction == _facing and flip == _flip:
+	if flip == _flip:
 		return
-	_facing = direction
 	_flip = flip
 	_sprite.flip_h = flip
-	_play_walk()
-
-func _play_walk() -> void:
-	_sprite.play("walk_%s" % _facing)
 
 func _update_health_bar() -> void:
 	var fraction: float = clampf(sim["health"] / sim["max_health"], 0.0, 1.0)
 	_health_bar.size.x = 32.0 * fraction
 	_health_bar.color = Color.GREEN.lerp(Color.RED, 1.0 - fraction)
-
-func _build_frames(texture_key: String) -> SpriteFrames:
-	var frames := SpriteFrames.new()
-	frames.remove_animation("default")
-	for action in ["Walk", "Death"]:
-		for dir_pair in [["U", "up"], ["S", "side"], ["D", "down"]]:
-			var anim := "%s_%s" % [action.to_lower(), dir_pair[1]]
-			frames.add_animation(anim)
-			frames.set_animation_speed(anim, WALK_FPS if action == "Walk" else DEATH_FPS)
-			frames.set_animation_loop(anim, action == "Walk")
-			var path := "res://assets/enemies/%s/%s_%s.png" % [texture_key, dir_pair[0], action]
-			var sheet: Texture2D = load(path)
-			if sheet == null:
-				push_error("missing sheet %s" % path)
-				continue
-			for i in FRAMES_PER_SHEET:
-				var atlas := AtlasTexture.new()
-				atlas.atlas = sheet
-				atlas.region = Rect2(i * FRAME_SIZE, 0, FRAME_SIZE, FRAME_SIZE)
-				frames.add_frame(anim, atlas)
-	return frames

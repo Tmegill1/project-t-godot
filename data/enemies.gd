@@ -1,19 +1,31 @@
 class_name Enemies
 
+## sprite_px is a displayed HEIGHT, not a scale factor. It replaced
+## sprite_scale, which only made sense against Kenney's uniform 48x48
+## animation frames: the illustrated variants are not a uniform size (goblins
+## 54-69 x 50-54, ogres 71-80 x 67-76, bats 94-105 x 41-47), so a fixed factor
+## drew the same kind at a different size from one spawn to the next. The
+## values preserve the sizes the Kenney art drew at - 33.6, 57.6 and 33.6px -
+## except the bat, which is naturally wide and is given a little less height
+## so it does not out-mass the tanky kind.
+##
+## flip_horizontally is false for all three because all three faces on this
+## sheet point right. It stays in the table because it is a property of the
+## ART, and the next sheet may not agree with this one.
 const DEFS := {
 	&"slime": {
 		"label": "Slime", "base_speed": 100.0, "base_health": 5, "reward": 5,
-		"life_loss": 1, "texture_key": "slime", "sprite_scale": 0.7,
+		"life_loss": 1, "variant_count": 15, "sprite_px": 34.0,
 		"flip_horizontally": false,
 	},
 	&"ogre": {
 		"label": "Ogre", "base_speed": 60.0, "base_health": 8, "reward": 20,
-		"life_loss": 5, "texture_key": "ogre", "sprite_scale": 1.2,
-		"flip_horizontally": true,
+		"life_loss": 5, "variant_count": 13, "sprite_px": 58.0,
+		"flip_horizontally": false,
 	},
 	&"bee": {
 		"label": "Bee", "base_speed": 150.0, "base_health": 3, "reward": 10,
-		"life_loss": 2, "texture_key": "bee", "sprite_scale": 0.7,
+		"life_loss": 2, "variant_count": 3, "sprite_px": 28.0,
 		"flip_horizontally": false,
 	},
 }
@@ -27,3 +39,10 @@ static func scaled_health(kind: StringName, health_modifier: float) -> int:
 ## Speed for a spawn, applying the wave modifier. Unrounded, never below one.
 static func scaled_speed(kind: StringName, speed_modifier: float) -> float:
 	return maxf(1.0, float(DEFS[kind]["base_speed"]) * speed_modifier)
+
+## How many per-spawn variants this kind's art directory holds. Baked by
+## tools/bake_sheet.gd; pinned by test_enemy.gd against the files on disk, so a
+## re-bake that produces a different number cannot silently leave this table
+## pointing at a variant that is not there.
+static func variant_count(kind: StringName) -> int:
+	return int(DEFS[kind]["variant_count"])

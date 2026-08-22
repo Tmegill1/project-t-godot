@@ -38,6 +38,10 @@ var _counts := {}            # StringName -> int
 var _spawn_queue: Array = []  # {kind, at_ms}
 var _wave_clock := 0.0
 var _spawned := 0
+## Which variant each spawn draws. Reset per wave so replaying a wave shows
+## the same creatures, and separate from every other random system so enemy
+## variety does not move when they do.
+var _spawn_rng := Rng.new(Seeds.DEFAULT_SPAWN_SEED)
 
 @onready var _map_renderer: MapRenderer = $MapRenderer
 @onready var _towers_root: Node2D = $Towers
@@ -103,6 +107,7 @@ func start_next_wave() -> void:
 	_wave_active = true
 	_wave_clock = 0.0
 	_spawned = 0
+	_spawn_rng = Rng.new(Seeds.DEFAULT_SPAWN_SEED)
 	_spawn_queue = Waves.build_schedule(_wave)
 	wave_changed.emit(_wave, Waves.MAX_WAVES)
 	wave_state_changed.emit(true)
@@ -138,7 +143,7 @@ func _spawn(kind: StringName) -> void:
 		return
 	var enemy: Enemy = ENEMY_SCENE.instantiate()
 	_enemies_root.add_child(enemy)
-	enemy.setup(kind, _paths[0], _wave)
+	enemy.setup(kind, _paths[0], _wave, _spawn_rng)
 	enemy.died.connect(_on_enemy_died)
 	enemy.leaked.connect(_on_enemy_leaked)
 
