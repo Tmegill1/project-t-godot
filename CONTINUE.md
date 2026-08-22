@@ -550,19 +550,20 @@ the player runs, not only in the thing the tests run.
    tint — is a design call rather than a bug fix. Whoever wires up the ice map
    will meet this immediately.
 
-5. **The player's towers are the least prominent thing on their own board.**
-   Measured live: a placed tower draws about 19 x 26px of art, while a campfire
-   prop draws 44px, is bright orange, and up to seven of them sit on a map. The
-   towers did not shrink — the Kenney basic tower drew 20 x 22px and the
-   illustrated one draws 19 x 26 — what changed is everything around them, from
-   flat vector props to richly illustrated ones. The fix is a game-feel call
-   and the art swap deliberately did not make it: **decide whether to scale the
-   towers up** (`Towers.DEFS[kind]["size"]` is 0.75–0.85, and `Tower.setup`
-   draws the 96px frame at `TILE_SIZE * size`), **make the props subtler**
-   (`MapRenderer._MAX_FIRE_TILES` is 7, and the fire slot points at the decor
-   column's campfire, its loudest object), **or both**. All three biomes are
-   captured at `docs/screenshots/board-{forest,ice,desert}.png`, taken live at
-   the end of the illustrated art swap.
+5. **RESOLVED — towers now draw at twice their footprint.** They were the
+   least prominent thing on the board: a placed tower drew about 19 x 26px of
+   art against 44px bright-orange campfires and 48px trees. They had not
+   shrunk (the Kenney basic drew 20 x 22) — the props got louder. Fixed by
+   `Tower.DISPLAY_SCALE = 2.0`, which is **display only**: `Placement`
+   still reads `Towers.DEFS[kind]["size"]` directly, so the corridor, the prop
+   clearances and the tower-to-tower spacing are untouched, and
+   `test_the_display_scale_does_not_reach_the_placement_radius` is what stops
+   a future tidy-up merging the two. Compared in game at 1.6, 1.8 and 2.0 and
+   checked at the crowded end, where four towers packed to
+   `MIN_TOWER_SPACING` stay individually legible. Left here rather than
+   deleted because the *reason* still matters: this art needs the player's
+   pieces drawn larger than their footprint, and anything new that goes on
+   the board should be judged against the props, not against the old pack.
 
 ---
 ## 10. Known gaps
