@@ -4,7 +4,10 @@ class_name Targeting
 ## pushes damage toward the exit where leaks happen, "last" protects the back
 ## of a queue, "strongest" focuses elites, "closest" maximises uptime.
 
-const PRIORITIES: Array[StringName] = [&"first", &"last", &"strongest", &"closest"]
+## `weakest` sits directly after `strongest` rather than at the end. The two
+## health scorers read as a pair there, and it keeps `closest` last, which is
+## what lets next_priority()'s existing wrap test keep passing unchanged.
+const PRIORITIES: Array[StringName] = [&"first", &"last", &"strongest", &"weakest", &"closest"]
 
 ## The default a freshly placed tower uses, matching pre-upgrade behaviour
 ## where every tower shot whatever was nearest.
@@ -12,7 +15,8 @@ const DEFAULT_PRIORITY := &"closest"
 
 const LABELS := {
 	&"first": "First", &"last": "Last",
-	&"strongest": "Strongest", &"closest": "Closest",
+	&"strongest": "Highest Health", &"weakest": "Lowest Health",
+	&"closest": "Closest",
 }
 
 static func next_priority(current: StringName) -> StringName:
@@ -63,5 +67,7 @@ static func _score_for(tower: Dictionary, candidate: Dictionary) -> float:
 			return -float(candidate["path_index"])
 		&"strongest":
 			return float(candidate["health"])
+		&"weakest":
+			return -float(candidate["health"])
 		_:
 			return -tower["position"].distance_to(candidate["position"])
