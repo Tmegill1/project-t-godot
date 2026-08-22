@@ -57,7 +57,7 @@ func test_setup_atlas_region_for_each_tower_kind() -> bool:
 # derived FROM FRAME_SIZE, so comparing scale alone can't catch a FRAME_SIZE
 # mutation that cancels out). Multiplying back by the region width is what
 # actually pins the on-screen size.
-func test_setup_sprite_display_size_equals_tile_size_times_def_size() -> bool:
+func test_setup_sprite_display_size_is_the_footprint_times_the_display_scale() -> bool:
 	Grid.set_active(23, 14)
 	for kind in Towers.KINDS:
 		var t := _ready_tower()
@@ -65,10 +65,26 @@ func test_setup_sprite_display_size_equals_tile_size_times_def_size() -> bool:
 		var region: Rect2 = (t._sprite.texture as AtlasTexture).region
 		var displayed_width: float = t._sprite.scale.x * region.size.x
 		var displayed_height: float = t._sprite.scale.y * region.size.y
-		var expected: float = Tiles.TILE_SIZE * float(Towers.DEFS[kind]["size"])
-		assert_almost_eq(displayed_width, expected, 0.001, "%s displayed width is TILE_SIZE * size" % kind)
-		assert_almost_eq(displayed_height, expected, 0.001, "%s displayed height is TILE_SIZE * size" % kind)
+		var expected: float = Tiles.TILE_SIZE * float(Towers.DEFS[kind]["size"]) \
+			* Tower.DISPLAY_SCALE
+		assert_almost_eq(displayed_width, expected, 0.001,
+			"%s displayed width is TILE_SIZE * size * DISPLAY_SCALE" % kind)
+		assert_almost_eq(displayed_height, expected, 0.001,
+			"%s displayed height is TILE_SIZE * size * DISPLAY_SCALE" % kind)
 		t.free()
+	return true
+
+# DISPLAY_SCALE is cosmetic and the placement radius is not. They are derived
+# from the same `size` field, so the easy mistake is to "tidy" them into one
+# expression and silently shrink every buildable area on the board. This is
+# the test that would go red if someone did.
+func test_the_display_scale_does_not_reach_the_placement_radius() -> bool:
+	assert_true(Tower.DISPLAY_SCALE > 1.0,
+		"precondition: towers draw larger than their footprint, or this proves nothing")
+	for kind in Towers.KINDS:
+		assert_almost_eq(Placement.tower_radius(kind),
+			Tiles.TILE_SIZE * float(Towers.DEFS[kind]["size"]) / 2.0, 0.001,
+			"%s blocks the same area it always did" % kind)
 	return true
 
 # --------------------------------------------------------------------------

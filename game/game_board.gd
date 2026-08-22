@@ -214,7 +214,10 @@ func _update_ghost(world: Vector2) -> void:
 	atlas.region = Tower.frame_region(int(def["sprite_frame"]))
 	_ghost.texture = atlas
 	_ghost.centered = true
-	_ghost.scale = Vector2.ONE * (Tiles.TILE_SIZE * float(def["size"]) / Tower.FRAME_SIZE)
+	# Tower.DISPLAY_SCALE too, or the preview would not be the size of the
+	# thing it is previewing.
+	_ghost.scale = Vector2.ONE * (Tiles.TILE_SIZE * float(def["size"])
+		* Tower.DISPLAY_SCALE / Tower.FRAME_SIZE)
 	_ghost.modulate = Color(0.4, 1.0, 0.4, 0.5) if verdict["ok"] else Color(1.0, 0.3, 0.3, 0.5)
 
 	# PreviewRange is a sibling of PlacementPreview, not its child - like

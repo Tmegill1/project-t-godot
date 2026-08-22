@@ -14,6 +14,29 @@ const TOWER_SHEET := preload("res://assets/towers.png")
 const SHEET_COLUMNS := 5
 const FRAME_SIZE := 96
 
+## How much larger a tower DRAWS than the footprint it occupies.
+##
+## Display only. Placement still reads Towers.DEFS[kind]["size"] directly
+## through Placement.tower_radius, so the corridor, the prop clearances and
+## the tower-to-tower spacing are all exactly what they were - this changes
+## what the player sees, not where they may build.
+##
+## It exists because the illustrated art made the towers the least prominent
+## thing on the board. They did not shrink: the Kenney basic tower drew
+## 20x22px and the illustrated one drew 19x26. What changed is everything
+## around them - flat vector props became painted ones, so a 44px campfire
+## and a 48px tree out-read the player's own pieces. Measured across all
+## sixteen frames and compared in game at 1.6, 1.8 and 2.0: at 2.0 a level-1
+## tower draws about 38 x 51px and a level-4 about 46 x 66, which puts the
+## weakest tower at the height of a tree and the strongest above an ogre.
+## Below that the campfire still out-reads them. Checked at the crowded end
+## too - four towers packed to MIN_TOWER_SPACING stay individually legible,
+## touching rather than merging.
+##
+## The sprite stays centred on the tower's position rather than growing from
+## its base, so it remains concentric with the range indicator.
+const DISPLAY_SCALE := 2.0
+
 ## Where a frame index sits on the shared tower sheet, row-major across
 ## SHEET_COLUMNS. One PNG gets one description of its geometry: the build
 ## panel's button icons come through here too (ui/tower_panel.gd's icon_for),
@@ -64,7 +87,7 @@ func setup(tower_kind: StringName, world_pos: Vector2, paid: int) -> void:
 	_stats = UpgradesSim.resolve_tower_stats(kind, tiers)
 	position = world_pos
 
-	var target_px := Tiles.TILE_SIZE * float(_def["size"])
+	var target_px := Tiles.TILE_SIZE * float(_def["size"]) * DISPLAY_SCALE
 	_sprite.scale = Vector2.ONE * (target_px / FRAME_SIZE)
 
 	_range_indicator.tint = _def["color"]
