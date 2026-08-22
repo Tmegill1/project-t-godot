@@ -555,8 +555,9 @@ the player runs, not only in the thing the tests run.
    towers up** (`Towers.DEFS[kind]["size"]` is 0.75–0.85, and `Tower.setup`
    draws the 96px frame at `TILE_SIZE * size`), **make the props subtler**
    (`MapRenderer._MAX_FIRE_TILES` is 7, and the fire slot points at the decor
-   column's campfire, its loudest object), **or both**. Screenshots of all
-   three biomes exist in the branch's ledger.
+   column's campfire, its loudest object), **or both**. All three biomes are
+   captured at `docs/screenshots/board-{forest,ice,desert}.png`, taken live at
+   the end of the illustrated art swap.
 
 ---
 ## 10. Known gaps
