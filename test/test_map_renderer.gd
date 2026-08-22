@@ -639,11 +639,10 @@ func test_blocked_tiles_get_three_to_five_stones_and_nothing_in_the_exclusion_zo
 # DELIBERATE DIVERGENCE note for the reference's own, much more extreme,
 # numbers - that history is about the pre-Kenney art and stays there).
 #
-# The Kenney forest/stone.png this test exercises is 112x98 (about 1.14:1),
-# so a regression to non-uniform scaling is still visible here even though
-# it is a mild case. Expected geometry is derived from the texture's own
-# dimensions rather than hardcoded, so the rule is what is pinned, not one
-# particular PNG's size.
+# The illustrated forest/stone.png this test exercises is 96x61 (about
+# 1.57:1), so a regression to non-uniform scaling is still visible here.
+# Expected geometry is derived from the texture's own dimensions rather than
+# hardcoded, so the rule is what is pinned, not one particular PNG's size.
 func test_decorations_preserve_their_aspect_ratio_and_sit_centred_in_the_tile() -> bool:
 	Grid.set_active(DemoMap.GRID_COLS, DemoMap.GRID_ROWS)
 	var tiles := _demo_tiles()
@@ -704,29 +703,50 @@ func test_render_called_twice_does_not_double_up_sprites() -> bool:
 
 # A mipmap chain is inert unless the sprite selects a filter that reads it:
 # Godot's TEXTURE_FILTER_LINEAR (the project default) samples the base level
-# only, however many mip levels exist. This is LINEAR_WITH_MIPMAPS and not
-# NEAREST_WITH_MIPMAPS because the map art is painted, high-resolution
-# artwork rather than pixel art - the opposite call from the enemy sheets,
-# which are 48px pixel art and take a NEAREST filter (see test_enemy.gd).
-# Two different asset classes, two different right answers, which is why
-# neither is set project-wide as a default. The other half of this fix -
-# that a chain actually exists to sample - is pinned by
-# test_asset_import.gd, which reads mipmaps/generate=true off the committed
-# .import files.
+# only, however many mip levels exist. MapRenderer draws two different
+# filters for two different reasons, and this test checks both.
+#
+# Props and endpoints (_place, drawn at z_index 1) sample
+# LINEAR_WITH_MIPMAPS: painted art past a hard minification (up to 1.83x for
+# props, 1.49x for the endpoints), the same case the enemy sprites are now
+# in (game/enemy.tscn also filters LINEAR_WITH_MIPMAPS - see test_enemy.gd;
+# this used to be the "opposite call" until this task generated their chain
+# too).
+#
+# Ground and road tiles (_place_tile, drawn at z_index -1) stay plain
+# LINEAR instead, on purpose: they are region-sampled (region_enabled crops
+# the card's painted border, TILE_BLEED) and only mildly minified (1.125x),
+# and a mip level would average that cropped border back into the terrain -
+# reintroducing by hand the seam the crop exists to remove. See
+# _place_tile's doc comment in map_renderer.gd.
+#
+# The other half of this fix - that a chain actually exists where one is
+# wanted, and does not exist where it would actively hurt - is pinned by
+# test_art_import.gd, which reads mipmaps/generate off the committed
+# .import files for both sides of the split.
 func test_map_sprites_select_a_filter_that_actually_samples_the_mipmap_chain() -> bool:
 	Grid.set_active(DemoMap.GRID_COLS, DemoMap.GRID_ROWS)
 	var tiles := _demo_tiles()
 	var mr := MapRenderer.new()
 	mr.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED))
 
-	var checked := 0
+	var overlay_checked := 0
+	var ground_checked := 0
 	for child in mr.get_children():
 		if not (child is Sprite2D):
 			continue
-		checked += 1
-		assert_eq(child.texture_filter, CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS,
-			"%s samples the mipmap chain when minified" % child.texture.resource_path.get_file())
-	assert_true(checked > 0, "precondition: the render produced sprites to check")
+		if child.z_index == 1:
+			overlay_checked += 1
+			assert_eq(child.texture_filter, CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS,
+				"%s (prop/endpoint) samples the mipmap chain when minified" % child.texture.resource_path.get_file())
+		elif child.z_index == -1:
+			ground_checked += 1
+			assert_eq(child.texture_filter, CanvasItem.TEXTURE_FILTER_LINEAR,
+				("%s (ground/road tile) stays plain LINEAR - a mip chain would " +
+				"bleed its cropped card border back into the terrain") %
+				child.texture.resource_path.get_file())
+	assert_true(overlay_checked > 0, "precondition: the render produced prop/endpoint sprites to check")
+	assert_true(ground_checked > 0, "precondition: the render produced ground/road sprites to check")
 
 	mr.free()
 	return true

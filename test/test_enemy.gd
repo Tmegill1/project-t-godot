@@ -632,12 +632,11 @@ func test_a_plain_hit_leaves_no_residue_for_a_later_slow_to_inherit() -> bool:
 # factor wants the opposite: NEAREST would produce dropped-pixel aliasing,
 # and a mipmap chain keeps it clean at any distance the game ends up using.
 #
-# The chain is not generated yet. Every .import sidecar under assets/art/
-# still says mipmaps/generate=false, so this filter currently falls back to
-# the base level and behaves as plain LINEAR - which is already the right
-# call for this art. Task 10 of the illustrated art swap turns generation on
-# for the variants, and this assertion is what makes the filter half of that
-# pair true in advance rather than something to remember later.
+# The chain now exists. Task 10 of the illustrated art swap turned
+# mipmaps/generate=true on for every variant .import sidecar (pinned by
+# test_art_import.gd), completing the pair this assertion started: the
+# filter was set to sample a chain before the chain existed to sample, and
+# now both halves are true together.
 #
 # This is set on the node in enemy.tscn rather than in setup(), so it holds
 # for an enemy that is instantiated but never set up too, and so it costs

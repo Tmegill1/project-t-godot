@@ -111,13 +111,15 @@ func _place(texture: Texture2D, col: int, row: int, size_px: float,
 	var slack := (Vector2(size_px, size_px) - src * factor) / 2.0
 	s.position = Vector2(col * Tiles.TILE_SIZE, row * Tiles.TILE_SIZE) + offset + slack
 	s.scale = Vector2.ONE * factor
-	# Every tile here is minified, several of them hard (the largest Kenney
-	# source in this renderer is 128px, drawn into a 48px tile). The
-	# project-wide default filter is plain LINEAR, which samples the
-	# base level only and aliases badly at those ratios; this reads the mipmap
-	# chain that the .import files generate instead. LINEAR rather than NEAREST
-	# because this art is painted, not pixel art - the enemy sheets are the
-	# opposite case and take NEAREST (game/enemy.tscn).
+	# _place draws props (up to 96x61 into a 48px box, 1.83x) and endpoints
+	# (~220px into a 144px box, 1.49x) - hard enough minification that the
+	# project-wide default filter, plain LINEAR, would sample the base level
+	# only and alias badly; this reads the mipmap chain the .import files
+	# generate instead (test_art_import.gd). LINEAR rather than NEAREST
+	# because this art is painted, not pixel art - and the enemy sprites
+	# (game/enemy.tscn) are the same case, not the opposite: they are also
+	# painted art past a hard minification, so they also take
+	# LINEAR_WITH_MIPMAPS rather than NEAREST.
 	s.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	s.z_index = z
 	add_child(s)
@@ -214,9 +216,16 @@ func _place_tile(texture: Texture2D, col: int, row: int) -> Sprite2D:
 	s.scale = Vector2(
 		float(Tiles.TILE_SIZE) / s.region_rect.size.x,
 		float(Tiles.TILE_SIZE) / s.region_rect.size.y)
-	# Same reasoning as _place: this art is painted, not pixel art, and every
-	# tile is minified from 66px into 48px.
-	s.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	# Unlike _place, plain LINEAR here - no mipmap chain. Either of two
+	# reasons would be enough on its own. First, region_enabled is set two
+	# lines up: a mip level averages across the region's boundary, and for
+	# these tiles that means averaging the cropped card border (TILE_BLEED)
+	# back into the terrain, reintroducing by hand the seam the crop exists
+	# to remove. Second, the minification here is mild - 66 source px into a
+	# 48 cell, 1.125x - next to the props' up to 1.83x, so the aliasing plain
+	# LINEAR leaves behind is negligible by comparison. See test_art_import.gd,
+	# which pins both this exclusion and the props/endpoints/enemy inclusion.
+	s.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	s.z_index = _Z_GROUND
 	add_child(s)
 	return s
