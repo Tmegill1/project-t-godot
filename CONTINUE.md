@@ -533,19 +533,32 @@ the player runs, not only in the thing the tests run.
    build's 368 KB gzipped — so the game data itself is roughly 1.8× larger, but
    that difference is noise beside the engine. Trimming art or audio cannot
    meaningfully move the total; only a different engine would.
-4. **The HUD's white "Gold / Lives / Wave" text has no backing plate.** This
-   was nearly illegible over the Kenney pack's snow biome; re-checked against
-   the illustrated sheet's ice and desert biomes while verifying this
-   branch's render (Task 10 screenshots), the new art's less saturated blue
-   ice and tan sand both read fine at a glance, though still with no
-   dedicated contrast treatment under it. Not fixed on this branch: only
+4. **The HUD's white "Gold / Lives / Wave" text has no backing plate, and it
+   is illegible on ice and on desert.** This was nearly illegible over the
+   Kenney pack's snow biome and it did not improve: re-checked live at the end
+   of this branch, with the board re-rendered under each biome and captured,
+   the white text disappears into both the pale ice and the tan sand. An
+   earlier note on this branch claimed both "read fine at a glance"; the
+   screenshots say otherwise, and the screenshots win. Not fixed here: only
    forest is wired to a playable map today, so ice and desert are unreachable
-   in game, and the right fix — a backing plate, a
-   text shadow, or a per-biome tint — is a design call, not a bug fix. Whoever
-   wires up the ice map will meet this immediately.
+   in game, and the right fix — a backing plate, a text shadow, or a per-biome
+   tint — is a design call rather than a bug fix. Whoever wires up the ice map
+   will meet this immediately.
+
+5. **The player's towers are the least prominent thing on their own board.**
+   Measured live: a placed tower draws about 19 x 26px of art, while a campfire
+   prop draws 44px, is bright orange, and up to seven of them sit on a map. The
+   towers did not shrink — the Kenney basic tower drew 20 x 22px and the
+   illustrated one draws 19 x 26 — what changed is everything around them, from
+   flat vector props to richly illustrated ones. The fix is a game-feel call
+   and the art swap deliberately did not make it: **decide whether to scale the
+   towers up** (`Towers.DEFS[kind]["size"]` is 0.75–0.85, and `Tower.setup`
+   draws the 96px frame at `TILE_SIZE * size`), **make the props subtler**
+   (`MapRenderer._MAX_FIRE_TILES` is 7, and the fire slot points at the decor
+   column's campfire, its loudest object), **or both**. Screenshots of all
+   three biomes exist in the branch's ledger.
 
 ---
-
 ## 10. Known gaps
 
 - **Task 15 never had a formal review pass.** It was verified visually by the
