@@ -57,6 +57,15 @@ func _place_tower(b: GameBoard, kind: StringName) -> Tower:
 		return b._towers_root.get_child(placed)
 	return null
 
+## Places a tower and selects it through the board, matching
+## test_game_board.gd's helper of the same name: cycle_selected_tower_priority
+## acts on the board's selection, not on whatever tower a test happens to hold
+## a reference to, so a press has to reach a tower selected this way.
+func _place_and_select(b: GameBoard, kind: StringName) -> Tower:
+	var t := _place_tower(b, kind)
+	b._handle_tap(t.position)
+	return b._selected_tower
+
 func test_starts_empty_with_no_tower_shown() -> bool:
 	var i := _ready_inspector()
 	assert_false(i.has_tower(), "nothing selected at start")
@@ -545,4 +554,67 @@ func test_the_rows_are_inset_from_the_sidebar_edges() -> bool:
 	assert_true(140.0 - 16.0 >= TowerInspector.MIN_TAP_SIZE.x,
 		"the inset column is still wide enough for a row at its minimum size")
 	i.free()
+	return true
+
+# --------------------------------------------------------------------------
+# targeting priority
+#
+# Targeting priorities have existed in sim/targeting.gd, and cycling +
+# setting have existed on Tower/GameBoard, since earlier tasks - but nothing
+# in the player-facing UI ever called any of it. This is the row that does.
+# --------------------------------------------------------------------------
+
+func test_the_priority_row_shows_the_selected_tower_s_priority() -> bool:
+	var i := _ready_inspector()
+	var b := _ready_board()
+	i.bind(b)
+	var t := _ready_tower_on(b)
+
+	t.set_priority(&"first")
+	i.show_tower(t)
+	assert_eq(i.priority_row().text, "Target: First", "the row names the current priority")
+
+	t.set_priority(&"weakest")
+	i.show_tower(t)
+	assert_eq(i.priority_row().text, "Target: Lowest Health", "and follows it when it changes")
+	i.free(); b.free()
+	return true
+
+func test_pressing_the_priority_row_cycles_and_relabels() -> bool:
+	# The press has to reach the tower through the board AND come back as new
+	# text without the row being rebuilt - this panel may not free a node
+	# after _ready(), which is what the rebuild-on-change version got wrong.
+	var i := _ready_inspector()
+	var b := _ready_board()
+	i.bind(b)
+	var t := _place_and_select(b, &"basic")
+	t.set_priority(&"first")
+	i.show_tower(t)
+
+	i.priority_row().pressed.emit()
+
+	assert_eq(t.get_priority(), &"last", "the press advanced the tower")
+	assert_eq(i.priority_row().text, "Target: Last", "and the row relabelled itself")
+	i.free(); b.free()
+	return true
+
+func test_the_priority_row_meets_the_tap_target_minimum() -> bool:
+	var i := _ready_inspector()
+	var b := _ready_board()
+	i.bind(b)
+	i.show_tower(_ready_tower_on(b))
+	assert_eq(i.priority_row().custom_minimum_size, TowerInspector.MIN_TAP_SIZE,
+		"the priority row is as tappable as every other row")
+	i.free(); b.free()
+	return true
+
+func test_the_priority_row_clips_rather_than_widening_the_panel() -> bool:
+	# The 140px sidebar once grew 37px out over the map because a child
+	# reported a wider minimum. "Lowest Health" is the longest label.
+	var i := _ready_inspector()
+	var b := _ready_board()
+	i.bind(b)
+	i.show_tower(_ready_tower_on(b))
+	assert_true(i.priority_row().clip_text, "the row clips its text like the branch rows do")
+	i.free(); b.free()
 	return true
