@@ -23,17 +23,24 @@ const MIN_TOWER_SPACING := 44.0
 ## Half the width of the corridor towers may not be built in, measured from the
 ## path centreline.
 ##
-## Tied to what the art draws, not to the tile size. The Kenney road lands at
-## about 23px wide (Kenney draws ~3-tile corridors; this map's roads are one
-## tile, so only the blend lobes carry it), which puts the honest half-width at
-## 14 rather than the 26 the old 48px reference road justified. Leaving it at
-## 26 would refuse placement across a 14px band of open-looking ground on each
-## side of the road - the same invisible-wall defect that untrimmed prop
-## footprints cause, arriving from the road side.
+## Tied to what the illustrated art draws, not to the tile size. The composed
+## north-south straight (assets/art/forest/road_05.png, identical across
+## biomes since they are one composition recoloured) draws a road whose
+## median cross-section is 20 of the source's 66px; converted through
+## MapRenderer's TILE_BLEED crop (TILE_SIZE / (66 - TILE_BLEED*2) world px per
+## source px, not the naive TILE_SIZE / 66) that is a drawn half-width of
+## 8.89 world px. 11 is that rounded to the nearest pixel plus the 2px margin
+## this constant has always carried. It went DOWN again, from Kenney's 14:
+## the illustrated cross's arms are about a third of its cell, narrower than
+## the Kenney corridor it replaces, not the ~48px a full-tile-dirt reading
+## would suggest. Leaving it wider than the road would refuse placement
+## across a band of open-looking ground on each side of the road - the same
+## invisible-wall defect that untrimmed prop footprints cause, arriving from
+## the road side.
 ##
-## test/test_road_width.gd re-measures the road off the committed blend tiles
-## and fails if this drifts away from it.
-const PATH_HALF_WIDTH := 14.0
+## test/test_road_width.gd re-measures the road off the committed art and
+## fails if this drifts away from it.
+const PATH_HALF_WIDTH := 11.0
 
 ## Shortest distance from `point` to the segment ab.
 ##
