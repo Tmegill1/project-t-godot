@@ -57,6 +57,9 @@ Five creature bands, each a name label above a sprite band:
 - Create: `assets/art/enemies/<kind>/walk_N.png`, `assets/art/enemies/<kind>/death_N.png`
 - Delete: `assets/art/enemies/<kind>/variant_N.png`
 - Test: `test/test_enemy_sprites.gd`
+- Test: `test/test_art_import.gd`
+
+**`test/test_art_import.gd` is coupled to the variants and an earlier version of this file list missed it.** It builds the mipmap gate's path list from `Enemies.variant_count(kind)` and asserts a total that counts "31 enemy variants (15 slime + 13 ogre + 3 bee)". Deleting the variant PNGs takes that gate red. It must follow the frames: walk and death frames are minified the same way variants were, so they want the same mipmap chain, and the count it pins moves from 31 to 43 (8 + 4 walk/death for slime and ogre, 7 + 4 for bee). The gate itself is load-bearing and stays — its own docstring records that a previous swap deleted a gate along with its assets and the defect came straight back.
 
 **Interfaces:**
 - Consumes: `_trim` from the existing bake tool.
