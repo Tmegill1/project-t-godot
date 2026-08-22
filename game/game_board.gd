@@ -398,6 +398,16 @@ func upgrade_selected_tower(branch: StringName) -> void:
 	tower_upgraded.emit(branch)
 	_play_sound(&"place")
 
+## Advances the selected tower one step through Targeting.PRIORITIES.
+##
+## The inspector calls this rather than reaching into the tower, matching how
+## upgrades and selling already work: the board owns what happens to a
+## selected tower, and the panel only asks.
+func cycle_selected_tower_priority() -> void:
+	if _selected_tower == null:
+		return
+	_selected_tower.set_priority(Targeting.next_priority(_selected_tower.get_priority()))
+
 func sell_selected_tower() -> void:
 	if _selected_tower == null or not is_instance_valid(_selected_tower):
 		return

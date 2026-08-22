@@ -572,3 +572,35 @@ func test_tick_carries_the_upgraded_pierce() -> bool:
 	t.free()
 	target_node.free()
 	return true
+
+# --------------------------------------------------------------------------
+# priority
+# --------------------------------------------------------------------------
+
+func test_a_new_tower_starts_on_the_default_priority() -> bool:
+	var tower := _setup_tower(&"basic")
+	assert_eq(tower.get_priority(), Targeting.DEFAULT_PRIORITY,
+		"a fresh tower uses the default priority")
+	tower.free()
+	return true
+
+func test_set_priority_changes_what_targeting_is_asked_for() -> bool:
+	# to_targeting_dict is the only path the priority reaches the rules by, so
+	# setting the field without it reaching the dict would be invisible.
+	var tower := _setup_tower(&"basic")
+	tower.set_priority(&"weakest")
+	assert_eq(tower.get_priority(), &"weakest", "the getter reports the new value")
+	assert_eq(tower.to_targeting_dict()["priority"], &"weakest",
+		"the targeting dict carries it to the rules")
+	tower.free()
+	return true
+
+func test_priority_survives_an_upgrade() -> bool:
+	# apply_upgrade rebuilds stats and visuals; a naive implementation that
+	# re-ran setup would silently reset the player's choice.
+	var tower := _setup_tower(&"basic")
+	tower.set_priority(&"first")
+	tower.apply_upgrade(&"sustained")
+	assert_eq(tower.get_priority(), &"first", "the choice survives buying a tier")
+	tower.free()
+	return true

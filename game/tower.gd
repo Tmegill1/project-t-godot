@@ -121,6 +121,18 @@ func apply_upgrade(branch: StringName) -> void:
 func get_stats() -> Dictionary:
 	return _stats
 
+## The player's target-selection choice for this tower.
+##
+## Deliberately per-tower rather than global: which enemy to shoot is a
+## positional decision, and the tower covering the entrance wants a different
+## answer from the one guarding the exit. Survives upgrades - apply_upgrade
+## rebuilds stats and visuals but never touches this.
+func set_priority(priority: StringName) -> void:
+	_priority = priority
+
+func get_priority() -> StringName:
+	return _priority
+
 ## Sprite frame and range ring, both derived from the tiers.
 func _refresh_visuals() -> void:
 	var atlas := AtlasTexture.new()
