@@ -630,7 +630,14 @@ func test_a_plain_hit_leaves_no_residue_for_a_later_slow_to_inherit() -> bool:
 # hand-placed pixel art, hard edges, a handful of colours per sprite); a
 # linear filter on THOSE smeared them. Painted art minified by a non-integer
 # factor wants the opposite: NEAREST would produce dropped-pixel aliasing,
-# and mipmaps keep it clean at any distance/zoom the game ends up using.
+# and a mipmap chain keeps it clean at any distance the game ends up using.
+#
+# The chain is not generated yet. Every .import sidecar under assets/art/
+# still says mipmaps/generate=false, so this filter currently falls back to
+# the base level and behaves as plain LINEAR - which is already the right
+# call for this art. Task 10 of the illustrated art swap turns generation on
+# for the variants, and this assertion is what makes the filter half of that
+# pair true in advance rather than something to remember later.
 #
 # This is set on the node in enemy.tscn rather than in setup(), so it holds
 # for an enemy that is instantiated but never set up too, and so it costs

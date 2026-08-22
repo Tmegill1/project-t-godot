@@ -82,6 +82,11 @@ func test_tower_cosmetic_and_progression_fields_match_the_phaser_build() -> bool
 			assert_eq(def[field], expected[kind][field], "%s.%s" % [kind, field])
 	return true
 
+## NOT a Phaser-parity test, unlike its neighbours - which is why it no longer
+## carries that name. label still matches the reference, but variant_count and
+## sprite_px have no Phaser counterpart at all: they were introduced by this
+## port when the enemy art became per-spawn illustrated variants.
+##
 ## label, variant_count, sprite_px and flip_horizontally pick which sprite
 ## directory an enemy draws from and how it is sized/mirrored. variant_count
 ## and sprite_px replaced texture_key and sprite_scale when the enemy sheets
@@ -89,7 +94,7 @@ func test_tower_cosmetic_and_progression_fields_match_the_phaser_build() -> bool
 ## animation sheet per kind (see data/enemies.gd's own doc comment); every
 ## kind's flip_horizontally is false because all three kinds' art on this
 ## sheet faces right, including the ogre, which faced left on the old sheet.
-func test_enemy_cosmetic_fields_match_the_phaser_build() -> bool:
+func test_enemy_cosmetic_fields_are_the_ones_this_port_draws_from() -> bool:
 	var expected := {
 		&"slime": {"label": "Slime", "variant_count": 15, "sprite_px": 34.0, "flip_horizontally": false},
 		&"ogre":  {"label": "Ogre",  "variant_count": 13, "sprite_px": 58.0, "flip_horizontally": false},
