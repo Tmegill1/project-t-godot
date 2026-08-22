@@ -2793,6 +2793,11 @@ git commit -m "Crop the card border and stop the arm patch dragging it inward"
 **Files:**
 - Modify: `sim/placement.gd`
 - Test: `test/test_road_width.gd`
+- Test: `test/test_placement.gd`
+
+**`test/test_placement.gd` is coupled to this constant and an earlier version of this task's file list dropped it.** `test_can_place_thresholds_are_exact_on_both_sides` checks the corridor boundary from both sides with literal distances — `radius 20 + PATH_HALF_WIDTH 14 = 34`, probed at 33.9 and 34.1 — and a comment naming the arithmetic. Those literals move with the constant. This same coupling was hit and fixed the last time this constant moved, in the Kenney swap's commit `e3131ce`, which took the same test's thresholds from 46 to 34.
+
+The test itself is correct and stays: `<` versus `<=` is the classic surviving mutant at a boundary, and a range-only check would not catch it. Move the two literals and the comment, and change nothing else about it.
 
 **Interfaces:**
 - Consumes: the road pieces from Task 8 and `MapRenderer.TILE_BLEED` from Task 8.
@@ -2827,7 +2832,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add sim/placement.gd test/test_road_width.gd
+git add sim/placement.gd test/test_road_width.gd test/test_placement.gd
 git commit -m "Retune the no-build corridor to the illustrated road"
 ```
 
