@@ -12,21 +12,38 @@ class_name Enemies
 ## flip_horizontally is false for all three because all three faces on this
 ## sheet point right. It stays in the table because it is a property of the
 ## ART, and the next sheet may not agree with this one.
+##
+## stride_px is how far a creature travels per complete stride, so it sets the
+## SPATIAL frequency of the run cycle while the creature's own speed sets the
+## temporal one. That is why it is not a rate: the bat's wings beat far faster
+## than its body advances, so its stride is short, and the ogre lumbers, so its
+## stride is long.
+##
+## The bat's stride_px was retuned from an initial guess of 14.0 to 32.0 (see
+## Enemy.stride_phase's doc comment and the run motion task's report): at
+## 14.0 and the bat's own 150px/s, _physics_process's fixed 1/60s tick covers
+## more than a third of the sine's half-period every frame, so the bob/squash/
+## lean sampled a fast-moving wave far below the rate needed to read as
+## motion - watching it live showed the whole sprite buzzing rather than
+## flying, not a faster version of the same cycle the other kinds show. 32.0
+## keeps the bat's cycle visibly quicker than the slime's (about 9.4 footfalls
+## a second against 6.7) while sampling it densely enough per frame to read as
+## a cycle rather than noise.
 const DEFS := {
 	&"slime": {
 		"label": "Slime", "base_speed": 100.0, "base_health": 5, "reward": 5,
 		"life_loss": 1, "variant_count": 15, "sprite_px": 34.0,
-		"flip_horizontally": false,
+		"stride_px": 30.0, "flip_horizontally": false,
 	},
 	&"ogre": {
 		"label": "Ogre", "base_speed": 60.0, "base_health": 8, "reward": 20,
 		"life_loss": 5, "variant_count": 13, "sprite_px": 58.0,
-		"flip_horizontally": false,
+		"stride_px": 46.0, "flip_horizontally": false,
 	},
 	&"bee": {
 		"label": "Bee", "base_speed": 150.0, "base_health": 3, "reward": 10,
 		"life_loss": 2, "variant_count": 3, "sprite_px": 28.0,
-		"flip_horizontally": false,
+		"stride_px": 32.0, "flip_horizontally": false,
 	},
 }
 

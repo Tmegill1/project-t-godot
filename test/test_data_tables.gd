@@ -94,11 +94,16 @@ func test_tower_cosmetic_and_progression_fields_match_the_phaser_build() -> bool
 ## animation sheet per kind (see data/enemies.gd's own doc comment); every
 ## kind's flip_horizontally is false because all three kinds' art on this
 ## sheet faces right, including the ogre, which faced left on the old sheet.
+## stride_px joined the same table for a different reason - not sizing or
+## mirroring, but how far each kind travels per run cycle - and is pinned
+## here for the same reason as its neighbours: nothing else in the suite
+## would notice a value silently drifting back to 0.0 or to another kind's
+## number.
 func test_enemy_cosmetic_fields_are_the_ones_this_port_draws_from() -> bool:
 	var expected := {
-		&"slime": {"label": "Slime", "variant_count": 15, "sprite_px": 34.0, "flip_horizontally": false},
-		&"ogre":  {"label": "Ogre",  "variant_count": 13, "sprite_px": 58.0, "flip_horizontally": false},
-		&"bee":   {"label": "Bee",   "variant_count": 3,  "sprite_px": 28.0, "flip_horizontally": false},
+		&"slime": {"label": "Slime", "variant_count": 15, "sprite_px": 34.0, "stride_px": 30.0, "flip_horizontally": false},
+		&"ogre":  {"label": "Ogre",  "variant_count": 13, "sprite_px": 58.0, "stride_px": 46.0, "flip_horizontally": false},
+		&"bee":   {"label": "Bee",   "variant_count": 3,  "sprite_px": 28.0, "stride_px": 32.0, "flip_horizontally": false},
 	}
 	for kind in expected.keys():
 		var def: Dictionary = Enemies.DEFS[kind]

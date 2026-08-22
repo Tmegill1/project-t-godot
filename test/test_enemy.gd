@@ -619,6 +619,134 @@ func test_a_plain_hit_leaves_no_residue_for_a_later_slow_to_inherit() -> bool:
 	return true
 
 # --------------------------------------------------------------------------
+# run cycle: stride phase, squash and stretch, lean
+#
+# Replaces the old timed bob (_bob_clock ticking at a fixed BOB_HZ regardless
+# of the enemy's own speed). These tests pin that the cycle is driven by
+# distance travelled instead - the thing that actually makes a slow enemy
+# look slow and a fast enemy look fast, and that makes a stopped enemy stop.
+# --------------------------------------------------------------------------
+
+func test_the_stride_advances_with_distance_not_with_time() -> bool:
+	# The whole point. A slow enemy and a fast one must not cycle at the same
+	# rate, or neither looks like it is moving under its own power.
+	var slow := _ready_enemy()
+	slow.setup(&"ogre", _straight_path(), 1)
+	var fast := _ready_enemy()
+	fast.setup(&"bee", _straight_path(), 1)
+	assert_true(Enemies.DEFS[&"bee"]["base_speed"] > Enemies.DEFS[&"ogre"]["base_speed"],
+		"precondition: the bat is faster than the ogre")
+
+	for i in 10:
+		slow._physics_process(0.05)
+		fast._physics_process(0.05)
+
+	assert_true(fast.stride_phase() > slow.stride_phase(),
+		"over the same elapsed time the faster enemy is further through its stride (%f vs %f)"
+			% [fast.stride_phase(), slow.stride_phase()])
+	slow.free()
+	fast.free()
+	return true
+
+func test_a_stationary_enemy_does_not_cycle() -> bool:
+	# A timed cycle keeps running when the enemy is held up. A travelled one
+	# cannot.
+	var e := _ready_enemy()
+	e.setup(&"slime", _straight_path(), 1)
+	e._physics_process(0.05)
+	var moving := e.stride_phase()
+	assert_true(moving > 0.0, "precondition: it cycled while it was moving")
+
+	e.sim["speed"] = 0.0
+	for i in 10:
+		e._physics_process(0.05)
+	assert_almost_eq(e.stride_phase(), moving, 0.0001,
+		"a stopped enemy holds its phase instead of running on the spot")
+	e.free()
+	return true
+
+func test_a_slowed_enemy_cycles_more_slowly() -> bool:
+	var normal := _ready_enemy()
+	normal.setup(&"slime", _straight_path(), 1)
+	var slowed := _ready_enemy()
+	slowed.setup(&"slime", _straight_path(), 1)
+	slowed.sim["slow"] = Slow.apply(Slow.none(), 0.5, 5000.0)
+
+	for i in 8:
+		normal._physics_process(0.05)
+		slowed._physics_process(0.05)
+
+	assert_true(slowed.stride_phase() < normal.stride_phase(),
+		"a slowed enemy is less far through its stride (%f vs %f)"
+			% [slowed.stride_phase(), normal.stride_phase()])
+	normal.free()
+	slowed.free()
+	return true
+
+func test_the_stride_squashes_and_stretches_the_sprite() -> bool:
+	# A rigid sprite moved up and down still reads as a cut-out. The
+	# compression at footfall is what makes it read as weight.
+	var e := _ready_enemy()
+	e.setup(&"slime", _straight_path(), 1)
+	var sprite: Sprite2D = e.get_node("Sprite")
+	var seen_squashed := false
+	var seen_neutral := false
+	var base := sprite.scale.y
+	for i in 40:
+		e._physics_process(0.02)
+		if sprite.scale.y < base * 0.995:
+			seen_squashed = true
+		if absf(sprite.scale.y - base) < base * 0.005:
+			seen_neutral = true
+		assert_true(sprite.scale.y <= base + 0.0001,
+			"the stride never stretches past the sprite's declared height")
+	assert_true(seen_squashed, "the sprite compresses somewhere in the stride")
+	assert_true(seen_neutral, "and returns to its declared height somewhere in it")
+	e.free()
+	return true
+
+func test_the_stride_leans_the_sprite_into_its_travel() -> bool:
+	# Spec section 6 asked for this and the art swap dropped it without ruling
+	# on it.
+	#
+	# A manual set_facing_from_travel() call ahead of a tick does NOT
+	# exercise this: _physics_process re-derives facing from the REAL travel
+	# direction on every tick that does not arrive at a waypoint (see
+	# test_physics_process_does_not_flip_the_sprite_on_a_waypoint_arrival_tick
+	# above), so a manual override is clobbered on the very next tick before
+	# _apply_stride ever reads it - confirmed by running the straight-path,
+	# manual-override version of this test and watching the second assertion
+	# fail because the tick silently put facing back the way it was. A path
+	# that genuinely turns the enemy around is what actually exercises the
+	# lean's sign. Sampling across many ticks (rather than pinning two exact
+	# ones) keeps the test from depending on the precise tick where arrival
+	# consumes a whole step and travels zero distance.
+	var e := _ready_enemy()
+	var path := PackedVector2Array([Vector2(0, 0), Vector2(30, 0), Vector2(-500, 0)])
+	e.setup(&"slime", path, 1)
+	var sprite: Sprite2D = e.get_node("Sprite")
+
+	var right_lean := 0.0
+	var left_lean := 0.0
+	for i in 20:
+		e._physics_process(0.05)
+		if sprite.rotation < -0.01:
+			right_lean = sprite.rotation
+		elif sprite.rotation > 0.01:
+			left_lean = sprite.rotation
+
+	assert_true(right_lean < 0.0, "the enemy leans one way while heading toward path[1] (%f)" % right_lean)
+	assert_true(left_lean > 0.0, "and the other way once it turns around toward path[2] (%f)" % left_lean)
+	e.free()
+	return true
+
+func test_every_kind_declares_a_stride() -> bool:
+	for kind in Enemies.KINDS:
+		assert_true(float(Enemies.DEFS[kind]["stride_px"]) > 0.0,
+			"%s declares a stride length" % kind)
+	return true
+
+# --------------------------------------------------------------------------
 # Sprite filtering
 # --------------------------------------------------------------------------
 

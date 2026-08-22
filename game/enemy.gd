@@ -16,13 +16,14 @@ signal leaked(life_loss: int)
 ## kill registers as feedback.
 const DEATH_TWEEN_MS := 250.0
 
-## How far the walk bob lifts the sprite, and how fast it cycles.
+## How far the stride lifts, compresses and leans the sprite.
 ##
-## The sheet's rows are variants rather than animation frames, so motion is
-## synthesised: without this an enemy slides along the path like a paper
-## cutout.
-const BOB_PIXELS := 2.0
-const BOB_HZ := 5.0
+## All three are fractions of the sprite rather than pixel counts, because the
+## kinds are drawn at 28 to 58px tall and a fixed 2px lift - what this replaced -
+## is below the threshold where it registers on any of them.
+const BOB_FRACTION := 0.10
+const SQUASH_FRACTION := 0.10
+const LEAN_RADIANS := 0.08
 
 @onready var _sprite: Sprite2D = $Sprite
 @onready var _health_bar: ColorRect = $HealthBar
@@ -31,8 +32,9 @@ var kind: StringName
 var sim := {}
 var _path: PackedVector2Array
 var _wave := 1
-var _bob_clock := 0.0
+var _travelled := 0.0
 var _flip := false
+var _base_scale := 1.0
 
 func setup(enemy_kind: StringName, path: PackedVector2Array, wave: int, rng: Rng = null) -> void:
 	kind = enemy_kind
@@ -72,7 +74,34 @@ func setup(enemy_kind: StringName, path: PackedVector2Array, wave: int, rng: Rng
 func apply_sprite_height() -> void:
 	var factor := float(Enemies.DEFS[kind]["sprite_px"]) \
 		/ float(_sprite.texture.get_height())
+	_base_scale = factor
 	_sprite.scale = Vector2.ONE * factor
+
+## How far through its stride the enemy is, in radians. Advanced by DISTANCE
+## TRAVELLED, not by elapsed time.
+##
+## This is the difference between running and sliding. A timed cycle makes a
+## 60px/s ogre bob at exactly the rate a 150px/s bat does, keeps cycling while
+## an enemy is slowed, and keeps cycling while it is stopped. A travelled one
+## cannot do any of those things - the same arithmetic that moves the enemy
+## drives the cycle, so the cycle is correct for free.
+func stride_phase() -> float:
+	return _travelled / float(Enemies.DEFS[kind]["stride_px"]) * TAU
+
+## Draws one frame of the stride: two lifts per cycle, one per foot, with the
+## sprite compressing at each footfall and extending at the top of each lift.
+##
+## The squash is what sells it. A sprite that only moves up and down is a
+## rigid cut-out being moved up and down; compressing it at the moment it
+## takes weight is what a run looks like without any frames to draw it with.
+func _apply_stride() -> void:
+	var lift: float = absf(sin(stride_phase()))
+	var height := float(Enemies.DEFS[kind]["sprite_px"])
+	_sprite.position.y = -lift * height * BOB_FRACTION
+	var squash := (1.0 - lift) * SQUASH_FRACTION
+	_sprite.scale = Vector2(_base_scale * (1.0 + squash * 0.6),
+		_base_scale * (1.0 - squash))
+	_sprite.rotation = (LEAN_RADIANS if _flip else -LEAN_RADIANS) * lift
 
 func _physics_process(delta: float) -> void:
 	# sim starts as {}; a physics tick landing between the node entering the
@@ -87,6 +116,7 @@ func _physics_process(delta: float) -> void:
 	# loop order so a wave times the same headlessly as it plays.
 	tick_slow(delta * 1000.0)
 
+	var before := position
 	var result := Movement.advance(position, sim["path_index"], _path,
 		current_speed(), delta * 1000.0)
 	position = result["position"]
@@ -97,8 +127,10 @@ func _physics_process(delta: float) -> void:
 	if not result["advanced_waypoint"]:
 		set_facing_from_travel(bool(result["moving_left"]))
 
-	_bob_clock += delta
-	_sprite.position.y = -absf(sin(_bob_clock * BOB_HZ * TAU)) * BOB_PIXELS
+	# Distance actually covered this tick, not elapsed time - see
+	# stride_phase()'s doc comment for why that distinction is the whole point.
+	_travelled += before.distance_to(position)
+	_apply_stride()
 
 	if result["reached_goal"]:
 		sim["alive"] = false
