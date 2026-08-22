@@ -4,7 +4,7 @@
 
 **Goal:** Enemies walk and die on drawn animation frames instead of on synthesised motion, and the per-spawn variant system that stood in for animation is removed.
 
-**Architecture:** A second vendored sheet, `reference/illustrated-sheet/walk-and-death.png`, holds five creatures each drawn as eight walk frames and four death frames. `tools/bake_sheet.gd` gains a pass that cuts them to `assets/art/enemies/<kind>/walk_N.png` and `death_N.png`, replacing `variant_N.png`. `game/enemy.gd` selects a walk frame by **distance travelled** — the same principle the synthesised stride already used, so the cycle still speeds up with the enemy and stops when it stops — and plays the death frames in place of the fade-and-shrink tween.
+**Architecture:** A second sheet at `reference/illustrated-sheet/walk-and-death.png` holds five creatures each drawn as eight walk frames and four death frames. `tools/bake_sheet.gd` gains a pass that cuts them to `assets/art/enemies/<kind>/walk_N.png` and `death_N.png`, replacing `variant_N.png`. `game/enemy.gd` selects a walk frame by **distance travelled** — the same principle the synthesised stride already used, so the cycle still speeds up with the enemy and stops when it stops — and plays the death frames in place of the fade-and-shrink tween.
 
 **Tech Stack:** Godot 4.7.1.stable, GDScript, the project's own `TestCase`/`run_tests.gd` harness.
 
@@ -25,6 +25,8 @@
 - Stage `.uid` sidecars alongside any new `.gd` file.
 
 ## The sheet, measured
+
+**`reference/` is git-ignored**, by the same convention the first sheet follows — neither is tracked, and only the baked PNGs are committed. So the bake cannot be re-run from a fresh clone without the sheet being put back by hand. That is pre-existing and out of scope here; it is worth knowing before you go looking for the file in git.
 
 `reference/illustrated-sheet/walk-and-death.png`, 1683 × 935, background `(6.5, 21.5, 30.0)` — **close to but not the same as the first sheet's `(9, 22, 28)`, so it needs its own constant rather than reusing `BACKGROUND`.**
 
@@ -400,7 +402,7 @@ Contact-sheet every walk and death frame of every kind, in order, composited ove
 - [ ] **Step 6: Commit**
 
 ```bash
-git add tools/bake_sheet.gd assets/art/enemies test/test_enemy_sprites.gd reference
+git add tools/bake_sheet.gd assets/art/enemies test/test_enemy_sprites.gd
 git commit -m "Cut the walk and death frames, and retire the variants"
 ```
 
