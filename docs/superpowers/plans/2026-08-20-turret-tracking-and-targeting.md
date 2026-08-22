@@ -10,6 +10,17 @@
 
 **Spec:** `docs/superpowers/specs/2026-08-20-turret-depth-and-targeting-design.md`
 
+> **STATUS, 2026-08-22.** Tasks 1 to 3 — the targeting priorities and the
+> control that picks them — are **live and unexecuted**, and are what to run
+> if you are here for the targeting selector. Tasks 4 to 7 are **dead**: they
+> bake base and turret atlases with `tools/bake_kenney.gd`, which the
+> illustrated art swap deleted along with the Kenney pack they read from.
+> Turret rotation is still wanted and still unbuilt; it needs re-planning
+> against `tools/bake_sheet.gd` and the illustrated sheet, whose towers are
+> drawn as single pieces rather than as a base plus a separable turret. The
+> global constraint below naming `tools/bake_kenney.gd` and the Kenney tile
+> indices applies only to those dead tasks.
+
 **This is plan 1 of 2.** It delivers packages A and B and is complete on its own — the game is playable and better at the end of it. `docs/superpowers/plans/2026-08-20-board-depth.md` delivers package C (shadows and Y-sorting) and stacks on top of this one. Execute this plan alone to leave the graphics as they are; execute both, in order, to add depth.
 
 ## Global Constraints
