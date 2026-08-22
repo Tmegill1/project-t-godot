@@ -26,16 +26,18 @@ const FRAME_SIZE := 96
 ## 20x22px and the illustrated one drew 19x26. What changed is everything
 ## around them - flat vector props became painted ones, so a 44px campfire
 ## and a 48px tree out-read the player's own pieces. Measured across all
-## sixteen frames and compared in game at 1.6, 1.8 and 2.0: at 2.0 a level-1
-## tower draws about 38 x 51px and a level-4 about 46 x 66, which puts the
-## weakest tower at the height of a tree and the strongest above an ogre.
-## Below that the campfire still out-reads them. Checked at the crowded end
-## too - four towers packed to MIN_TOWER_SPACING stay individually legible,
-## touching rather than merging.
+## sixteen frames and compared in game at 1.6, 1.8 and 2.0, then raised a
+## further 20% on the owner's call. At 2.4 a level-1 tower draws about
+## 46 x 61px and a level-4 about 55 x 79, so the weakest tower stands above a
+## 48px tree and the strongest well above an ogre; below 2.0 the 44px campfire
+## still out-read them. At this scale four towers packed to MIN_TOWER_SPACING
+## do overlap, which reads as a built-up strongpoint rather than as an error -
+## and the footprints underneath them have not moved, so the overlap is
+## cosmetic.
 ##
 ## The sprite stays centred on the tower's position rather than growing from
 ## its base, so it remains concentric with the range indicator.
-const DISPLAY_SCALE := 2.0
+const DISPLAY_SCALE := 2.4
 
 ## Where a frame index sits on the shared tower sheet, row-major across
 ## SHEET_COLUMNS. One PNG gets one description of its geometry: the build
