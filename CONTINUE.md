@@ -532,13 +532,19 @@ the player runs, not only in the thing the tests run.
 2. **The balance is unplaytested.** The original's own handoff notes say every
    number is a placeholder. "Matches Phaser" will not mean "plays well." Tune with
    the harness, which is exactly what it is for.
-3. **Web export is 40.6 MB** — measured, not predicted; the design anticipated
+3. **Volume and mute do not persist between runs.** The HUD's two audio
+   controls drive `AudioManager` directly and nothing writes them to disk, so
+   a player who mutes the game gets sound back next launch. Deliberately not
+   built: there is no settings file in this project yet, and inventing one for
+   two values is a bigger decision than it looks. **Decide** whether this
+   project wants a settings resource, and if so what else belongs in it.
+4. **Web export is 40.6 MB** — measured, not predicted; the design anticipated
    25–40 MB. 39.5 MB of that is `index.wasm`, the Godot engine binary. The
    game's own `index.pck` is 790 KB raw / 666 KB gzipped, against the Phaser
    build's 368 KB gzipped — so the game data itself is roughly 1.8× larger, but
    that difference is noise beside the engine. Trimming art or audio cannot
    meaningfully move the total; only a different engine would.
-4. **The HUD's white "Gold / Lives / Wave" text has no backing plate, and it
+5. **The HUD's white "Gold / Lives / Wave" text has no backing plate, and it
    is illegible on ice and on desert.** This was nearly illegible over the
    Kenney pack's snow biome and it did not improve: re-checked live at the end
    of this branch, with the board re-rendered under each biome and captured,
@@ -550,11 +556,12 @@ the player runs, not only in the thing the tests run.
    tint — is a design call rather than a bug fix. Whoever wires up the ice map
    will meet this immediately.
 
-5. **RESOLVED — towers now draw at twice their footprint.** They were the
+6. **RESOLVED — towers now draw at 2.4x their footprint.** They were the
    least prominent thing on the board: a placed tower drew about 19 x 26px of
    art against 44px bright-orange campfires and 48px trees. They had not
    shrunk (the Kenney basic drew 20 x 22) — the props got louder. Fixed by
-   `Tower.DISPLAY_SCALE = 2.0`, which is **display only**: `Placement`
+   `Tower.DISPLAY_SCALE`, set to 2.0 and then raised to 2.4 on the owner's
+   call, which is **display only**: `Placement`
    still reads `Towers.DEFS[kind]["size"]` directly, so the corridor, the prop
    clearances and the tower-to-tower spacing are untouched, and
    `test_the_display_scale_does_not_reach_the_placement_radius` is what stops
