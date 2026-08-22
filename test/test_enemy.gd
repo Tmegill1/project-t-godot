@@ -278,10 +278,15 @@ func test_an_enemy_faces_the_way_it_travels() -> bool:
 # death: a tween replaces the death animation
 # --------------------------------------------------------------------------
 
-func test_death_despawns_after_the_tween_rather_than_an_animation() -> bool:
+# Named for what it now is. It read "after the tween rather than an animation"
+# when a death was a fade-and-shrink, which is exactly backwards after the art
+# arrived with a fall drawn into it.
+func test_death_runs_for_a_duration_this_file_owns() -> bool:
 	assert_true(Enemy.DEATH_MS > 0.0, "the death sequence has a duration")
 	assert_true(Enemy.DEATH_MS < 1000.0,
 		"and it is short enough not to hold a kill on screen")
+	assert_true(Enemy.DEATH_MS / float(Enemies.death_frames(&"slime")) >= 60.0,
+		"and each drawn frame gets long enough to be seen")
 	return true
 
 func test_a_lethal_hit_off_the_tree_still_pays_and_hides_the_bar() -> bool:
