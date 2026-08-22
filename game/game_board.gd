@@ -404,8 +404,8 @@ func upgrade_selected_tower(branch: StringName) -> void:
 ## upgrades and selling already work: the board owns what happens to a
 ## selected tower, and the panel only asks.
 func cycle_selected_tower_priority() -> void:
-	# is_instance_valid as well as the null check, matching both siblings
-	# below. Nothing reaches this with a freed tower today - sell_selected_tower
+	# is_instance_valid as well as the null check, matching the other two
+	# methods that act on the selected tower. Nothing reaches this with a freed tower today - sell_selected_tower
 	# deselects before it frees - but the three guards being different shapes
 	# is how the fourth one gets written wrong.
 	if _selected_tower == null or not is_instance_valid(_selected_tower):
