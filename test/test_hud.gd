@@ -4,9 +4,11 @@ extends TestCase
 # resolve on NOTIFICATION_READY, which add_child() does NOT deliver in this
 # harness (test/run_tests.gd runs entirely inside SceneTree._initialize(),
 # before the tree's own root has entered a tree - Task 17's finding,
-# reconfirmed for Task 20 in task-20-21-amendments.md). Hud defines no
-# _ready() override of its own, so notification(NOTIFICATION_READY) here is
-# purely the engine's default @onready resolution.
+# reconfirmed for Task 20 in task-20-21-amendments.md). Hud now does define
+# a _ready() override (it wires the mute button and volume slider), and
+# calling notification(NOTIFICATION_READY) by hand delivers that too, the
+# same way it delivers @onready resolution - Godot's default handling for
+# this notification runs both, whether the node is in a live tree or not.
 #
 # Consequence: nodes are never inside the tree, so get_tree() returns null.
 # Hud._process reads no get_tree() state, so it is safe to call directly as
