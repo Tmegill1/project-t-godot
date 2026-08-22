@@ -37,11 +37,16 @@ Design and plan, useful if the rendering approach needs revisiting:
 - [`docs/superpowers/plans/2026-08-20-illustrated-art-swap.md`](docs/superpowers/plans/2026-08-20-illustrated-art-swap.md) — the ten tasks, as built
 
 **Built with `superpowers:subagent-driven-development`** — a fresh subagent
-per task, review between tasks, controller finished a couple of tails
-directly when an implementer ran out of session budget. The ledger,
-`.superpowers/sdd/2026-08-20-illustrated-art-swap/progress.md` (git-ignored),
-is the recovery map — every measured value below and dozens more are ruled
-there with the "why" and the "cost if wrong".
+per task, an independent review between tasks, and a whole-branch review at
+the end; the controller finished two tails directly when an implementer ran
+out of session budget. Fifty-one rulings were made during execution and
+recorded in a git-ignored ledger that was deleted when the branch closed, as
+that skill prescribes. **The reasoning is not lost with it**: every measured
+value and every non-obvious decision was written into the code as it was
+made, which is why `tools/bake_sheet.gd`'s constants say what they were
+measured against and the asset gates say what they exist to catch. If you
+want to know why a number is what it is, the comment beside it is the
+authority.
 
 **Scope held to art plus per-spawn enemy variety.** Map 2/3 layouts,
 map-to-map progression and the five composable enemy properties are still a
