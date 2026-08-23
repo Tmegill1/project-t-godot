@@ -30,7 +30,7 @@ extends TestCase
 #
 # Included - painted art past a hard minification, sampled whole (no
 # region_enabled): props (up to 96x61 into a 48px box, 1.83x), the two
-# composed endpoints (~220px into a 144px box, 1.49x), and the enemy variants
+# composed endpoints (~220px into a 144px box, 1.49x), and the enemy frames
 # (up to 105x47 into 28-58px tall, 1.3-1.6x). All three go through a filter
 # that samples a mip chain - see the sprite tests named above - so a missing
 # chain would alias on every one of them.
@@ -89,13 +89,26 @@ func _endpoint_import_paths() -> Array[String]:
 		"res://assets/art/cave.png.import",
 	]
 
-## Every referenced enemy variant - the three kinds Enemies.KINDS names, not
-## the unreferenced assets/art/enemies/_unused/ rows (see the docstring above).
-func _enemy_variant_import_paths() -> Array[String]:
+## Every referenced enemy frame - the three kinds Enemies.KINDS names, not the
+## unreferenced assets/art/enemies/_unused/ rows (see the docstring above).
+##
+## Counted off the FILESYSTEM rather than a data table, unlike the tiles below.
+## These used to be per-spawn variants enumerated by Enemies.variant_count;
+## they are now walk and death frames, and the bake decides how many of each a
+## row yields - the bat's walk is seven where the others are eight, because its
+## eighth frame came off the sheet as an orphaned wing and the bake drops
+## broken art on area. A table would have to be told that; the directory
+## already knows it. Enemies.KINDS still drives the outer loop, so a kind
+## disappearing from the data still shows up here.
+func _enemy_frame_import_paths() -> Array[String]:
 	var out: Array[String] = []
 	for kind in Enemies.KINDS:
-		for i in Enemies.variant_count(kind):
-			out.append("res://assets/art/enemies/%s/variant_%d.png.import" % [kind, i])
+		for action in ["walk", "death"]:
+			var i := 0
+			while FileAccess.file_exists(
+					"res://assets/art/enemies/%s/%s_%d.png" % [kind, action, i]):
+				out.append("res://assets/art/enemies/%s/%s_%d.png.import" % [kind, action, i])
+				i += 1
 	return out
 
 ## Every biome's ground variants and road edge-mask pieces.
@@ -127,15 +140,17 @@ func _mipmap_setting(path: String) -> String:
 		return "false"
 	return ""
 
-func test_props_endpoints_and_enemy_variants_generate_a_mipmap_chain() -> bool:
-	var paths := _prop_import_paths() + _endpoint_import_paths() + _enemy_variant_import_paths()
-	# Pinned, not just "> 0": 45 is 12 props (4 slots x 3 biomes) + 2
-	# endpoints + 31 enemy variants (15 slime + 13 ogre + 3 bee) as of this
-	# fix. If this drops, a biome, prop slot or enemy kind went missing from
-	# the data tables, not "the assets are fine, just fewer of them".
-	assert_true(paths.size() == 45,
-		("expected 45 mipmap-chain imports (12 props + 2 endpoints + 31 " +
-		"enemy variants), got %d - a biome, prop slot or enemy kind is " +
+func test_props_endpoints_and_enemy_frames_generate_a_mipmap_chain() -> bool:
+	var paths := _prop_import_paths() + _endpoint_import_paths() + _enemy_frame_import_paths()
+	# Pinned, not just "> 0": 49 is 12 props (4 slots x 3 biomes) + 2
+	# endpoints + 35 enemy frames (8 walk + 4 death for slime and for ogre,
+	# 7 + 4 for the bee, whose eighth walk frame is broken art the bake drops).
+	# It was 45 while these were per-spawn variants. If it drops, a biome,
+	# prop slot or enemy kind went missing, not "the assets are fine, just
+	# fewer of them".
+	assert_true(paths.size() == 49,
+		("expected 49 mipmap-chain imports (12 props + 2 endpoints + 35 " +
+		"enemy frames), got %d - a biome, prop slot or enemy kind is " +
 		"likely missing from Biomes or Enemies") % paths.size())
 	for path in paths:
 		var setting := _mipmap_setting(path)

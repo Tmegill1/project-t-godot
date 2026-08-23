@@ -1,5 +1,11 @@
 class_name Enemies
 
+## walk_frames and death_frames replaced variant_count when the enemy art
+## became drawn animation rather than a set of per-spawn variants. The first
+## sheet's rows were fifteen different goblins, not one goblin walking -
+## measured twice - so variety was all it could offer; this one is the other
+## way round, and the owner chose animation over variety knowingly.
+##
 ## sprite_px is a displayed HEIGHT, not a scale factor. It replaced
 ## sprite_scale, which only made sense against Kenney's uniform 48x48
 ## animation frames: the illustrated variants are not a uniform size (goblins
@@ -32,17 +38,17 @@ class_name Enemies
 const DEFS := {
 	&"slime": {
 		"label": "Slime", "base_speed": 100.0, "base_health": 5, "reward": 5,
-		"life_loss": 1, "variant_count": 15, "sprite_px": 34.0,
+		"life_loss": 1, "walk_frames": 8, "death_frames": 4, "sprite_px": 34.0,
 		"stride_px": 30.0, "flip_horizontally": false,
 	},
 	&"ogre": {
 		"label": "Ogre", "base_speed": 60.0, "base_health": 8, "reward": 20,
-		"life_loss": 5, "variant_count": 13, "sprite_px": 58.0,
+		"life_loss": 5, "walk_frames": 8, "death_frames": 4, "sprite_px": 58.0,
 		"stride_px": 46.0, "flip_horizontally": false,
 	},
 	&"bee": {
 		"label": "Bee", "base_speed": 150.0, "base_health": 3, "reward": 10,
-		"life_loss": 2, "variant_count": 3, "sprite_px": 28.0,
+		"life_loss": 2, "walk_frames": 7, "death_frames": 4, "sprite_px": 28.0,
 		"stride_px": 32.0, "flip_horizontally": false,
 	},
 }
@@ -57,9 +63,16 @@ static func scaled_health(kind: StringName, health_modifier: float) -> int:
 static func scaled_speed(kind: StringName, speed_modifier: float) -> float:
 	return maxf(1.0, float(DEFS[kind]["base_speed"]) * speed_modifier)
 
-## How many per-spawn variants this kind's art directory holds. Baked by
-## tools/bake_sheet.gd; pinned by test_enemy.gd against the files on disk, so a
-## re-bake that produces a different number cannot silently leave this table
-## pointing at a variant that is not there.
-static func variant_count(kind: StringName) -> int:
-	return int(DEFS[kind]["variant_count"])
+## How many frames each animation holds. Baked by tools/bake_sheet.gd and
+## pinned by test_enemy.gd against the files on disk, so a re-bake that
+## produces a different number cannot silently leave this table pointing at a
+## frame that is not there.
+##
+## The bat's walk is SEVEN where the others are eight: its eighth frame came
+## off the sheet as an orphaned wing with no body, and the bake drops broken
+## art on area rather than on index.
+static func walk_frames(kind: StringName) -> int:
+	return int(DEFS[kind]["walk_frames"])
+
+static func death_frames(kind: StringName) -> int:
+	return int(DEFS[kind]["death_frames"])

@@ -10,20 +10,12 @@ signal leaked(life_loss: int)
 
 ## How long a kill takes to leave the screen.
 ##
-## Replaces awaiting the death animation, which tied despawn timing to whatever
-## length the artist drew. The sheet has no death frames, so this file owns the
-## duration - short enough not to hold a corpse on screen, long enough that a
-## kill registers as feedback.
-const DEATH_TWEEN_MS := 250.0
+## 400ms across four drawn frames is 100ms each, which is a normal rate for
+## sprite animation. It was 250 when a death was a fade-and-shrink tween, where
+## the number set how fast one continuous motion ran; spread over four discrete
+## frames that is 62ms each and the fall reads as a blur rather than as a fall.
+const DEATH_MS := 400.0
 
-## How far the stride lifts, compresses and leans the sprite.
-##
-## All three are fractions of the sprite rather than pixel counts, because the
-## kinds are drawn at 28 to 58px tall and a fixed 2px lift - what this replaced -
-## is below the threshold where it registers on any of them.
-const BOB_FRACTION := 0.10
-const SQUASH_FRACTION := 0.10
-const LEAN_RADIANS := 0.08
 
 @onready var _sprite: Sprite2D = $Sprite
 @onready var _health_bar: ColorRect = $HealthBar
@@ -34,7 +26,6 @@ var _path: PackedVector2Array
 var _wave := 1
 var _travelled := 0.0
 var _flip := false
-var _base_scale := 1.0
 
 func setup(enemy_kind: StringName, path: PackedVector2Array, wave: int, rng: Rng = null) -> void:
 	kind = enemy_kind
@@ -55,53 +46,73 @@ func setup(enemy_kind: StringName, path: PackedVector2Array, wave: int, rng: Rng
 	}
 
 	position = path[0]
-	# One of this kind's variants, chosen per spawn. A wave of eight shows
-	# eight subtly different creatures rather than eight identical ones. The
-	# default keeps the three-argument call sites working and keeps a spawn
-	# reproducible either way.
-	if rng == null:
-		rng = Rng.new(Seeds.DEFAULT_SPAWN_SEED)
-	_sprite.texture = load("res://assets/art/enemies/%s/variant_%d.png"
-		% [kind, rng.int_range(0, Enemies.variant_count(kind) - 1)])
+	# The first frame of the walk cycle. _physics_process advances it from
+	# there; an enemy that never moves stays on this one, which is correct.
+	#
+	# `rng` is unused now and kept on purpose: GameBoard threads a per-wave one
+	# in, and the enemy-variety feature this art gave up is the obvious next
+	# caller for it. Removing it would mean re-plumbing the board to bring it
+	# back.
+	_sprite.texture = load("res://assets/art/enemies/%s/walk_0.png" % kind)
+	# walk_0 is the creature standing, so it is what sprite_px is a height OF.
+	# Every other frame - mid-stride, mid-fall, flat - is drawn at this same
+	# scale rather than renormalised to its own height.
+	_frame_scale = float(Enemies.DEFS[kind]["sprite_px"]) \
+		/ float(_sprite.texture.get_height())
 	apply_sprite_height()
 	_update_health_bar()
 
-## Scales the current variant to the kind's declared displayed height.
+## Draws the current frame at the kind's ONE scale, resting on the ground line
+## the creature stands on.
 ##
-## Derived per sprite rather than fixed, because the variants are not a
-## uniform size - see data/enemies.gd's note on sprite_px. Uniform on both
-## axes: these are creatures, and a stretched one reads as a bug.
+## The scale comes from the creature's STANDING height, taken once, and never
+## from the frame in hand. An earlier version divided sprite_px by each
+## frame's own height, which is only sensible while the creature is upright: a
+## death sequence ends lying down, so its last frames are short, and dividing
+## by a short height scales them UP. Measured on the committed art, the
+## goblin's final death frame drew 2.1x the standing creature and the ogre's
+## went from 57px wide to 147 - the corpse ballooned as it fell. Frame heights
+## vary across the walk cycle too, so the same arithmetic made the creature
+## pulse a few percent with every step.
+##
+## The vertical offset keeps the frame's BOTTOM on one line. The sprite is
+## centred, so without it a creature that lies down settles where its torso
+## used to be and appears to float; with it, the feet stay where the feet
+## were and the body goes down.
 func apply_sprite_height() -> void:
-	var factor := float(Enemies.DEFS[kind]["sprite_px"]) \
-		/ float(_sprite.texture.get_height())
-	_base_scale = factor
-	_sprite.scale = Vector2.ONE * factor
+	var standing := float(Enemies.DEFS[kind]["sprite_px"])
+	var drawn := float(_sprite.texture.get_height()) * _frame_scale
+	_sprite.scale = Vector2.ONE * _frame_scale
+	_sprite.position.y = (standing - drawn) / 2.0
 
-## How far through its stride the enemy is, in radians. Advanced by DISTANCE
-## TRAVELLED, not by elapsed time.
-##
-## This is the difference between running and sliding. A timed cycle makes a
-## 60px/s ogre bob at exactly the rate a 150px/s bat does, keeps cycling while
-## an enemy is slowed, and keeps cycling while it is stopped. A travelled one
-## cannot do any of those things - the same arithmetic that moves the enemy
-## drives the cycle, so the cycle is correct for free.
-func stride_phase() -> float:
-	return _travelled / float(Enemies.DEFS[kind]["stride_px"]) * TAU
+## The one scale every frame of this kind is drawn at, from its standing
+## height. Set in setup() off walk_0, which is the creature on its feet.
+var _frame_scale := 1.0
 
-## Draws one frame of the stride: two lifts per cycle, one per foot, with the
-## sprite compressing at each footfall and extending at the top of each lift.
+## Which frame of the walk cycle the enemy is showing.
 ##
-## The squash is what sells it. A sprite that only moves up and down is a
-## rigid cut-out being moved up and down; compressing it at the moment it
-## takes weight is what a run looks like without any frames to draw it with.
-func _apply_stride() -> void:
-	var lift: float = absf(sin(stride_phase()))
-	var height := float(Enemies.DEFS[kind]["sprite_px"])
-	_sprite.position.y = -lift * height * BOB_FRACTION
-	var squash := (1.0 - lift) * SQUASH_FRACTION
-	_sprite.scale = Vector2(_base_scale * (1.0 + squash * 0.6),
-		_base_scale * (1.0 - squash))
-	_sprite.rotation = (LEAN_RADIANS if _flip else -LEAN_RADIANS) * lift
+## Indexed by DISTANCE TRAVELLED, not by elapsed time. This is the difference
+## between running and sliding, and real frames need it exactly as much as the
+## synthesised stride they replaced did: a timed cycle moves a 60px/s ogre's
+## legs at the same rate as a 150px/s bat's, keeps cycling while an enemy is
+## slowed, and keeps cycling while it is stopped. A travelled one cannot do any
+## of those - the same arithmetic that moves the enemy drives the cycle, so the
+## cycle is correct for free. stride_px is the distance one full cycle covers.
+func walk_frame() -> int:
+	var frames := Enemies.walk_frames(kind)
+	var cycles := _travelled / float(Enemies.DEFS[kind]["stride_px"])
+	return int(floor(cycles * float(frames))) % frames
+
+## Draws the frame the cycle names, and rescales to it.
+##
+## The rescale is not optional: the frames are not a uniform size, so drawing
+## one at the previous frame's scale makes the creature pulse as it walks.
+func _apply_walk_frame() -> void:
+	var wanted := "res://assets/art/enemies/%s/walk_%d.png" % [kind, walk_frame()]
+	if _sprite.texture != null and _sprite.texture.resource_path == wanted:
+		return
+	_sprite.texture = load(wanted)
+	apply_sprite_height()
 
 func _physics_process(delta: float) -> void:
 	# sim starts as {}; a physics tick landing between the node entering the
@@ -128,9 +139,9 @@ func _physics_process(delta: float) -> void:
 		set_facing_from_travel(bool(result["moving_left"]))
 
 	# Distance actually covered this tick, not elapsed time - see
-	# stride_phase()'s doc comment for why that distinction is the whole point.
+	# walk_frame()'s doc comment for why that distinction is the whole point.
 	_travelled += before.distance_to(position)
-	_apply_stride()
+	_apply_walk_frame()
 
 	if result["reached_goal"]:
 		sim["alive"] = false
@@ -176,22 +187,26 @@ func get_sim_state() -> Dictionary:
 func _die(source: Dictionary) -> void:
 	sim["dying"] = true
 	sim["alive"] = false
-	# Emitted before the presentation, unchanged: economy timing must not move
-	# because the death animation became a tween.
+	# Emitted before the presentation, unchanged across three rewrites of what
+	# a death looks like: economy timing must not move because the art did.
 	died.emit(EconomySim.kill_reward(int(Enemies.DEFS[kind]["reward"]), source), kind)
 	_health_bar.visible = false
 	# Every enemy the test harness builds is outside the scene tree (see the
-	# header of test/test_enemy.gd) and create_tween() requires one. This is
-	# not a new limitation: today's `await _sprite.animation_finished` never
-	# resolves off-tree either, so nothing past this point has ever run in a
-	# test. Returning says so instead of parking a coroutine forever.
+	# header of test/test_enemy.gd), and both create_timer and the frames
+	# below need one. Not a new limitation: the tween this replaced could not
+	# run off-tree either, nor could the animation before that, so nothing past
+	# this point has ever run in a test. Returning says so instead of parking a
+	# coroutine forever.
 	if not is_inside_tree():
 		return
-	var tween := create_tween()
-	tween.set_parallel(true)
-	tween.tween_property(self, "scale", Vector2.ONE * 0.6, DEATH_TWEEN_MS / 1000.0)
-	tween.tween_property(self, "modulate:a", 0.0, DEATH_TWEEN_MS / 1000.0)
-	await tween.finished
+	# The artist drew the fall, so it is played rather than faked. Each frame
+	# gets an equal share of DEATH_MS.
+	var frames := Enemies.death_frames(kind)
+	var step := DEATH_MS / 1000.0 / float(frames)
+	for i in frames:
+		_sprite.texture = load("res://assets/art/enemies/%s/death_%d.png" % [kind, i])
+		apply_sprite_height()
+		await get_tree().create_timer(step).timeout
 	queue_free()
 
 ## Faces the way the enemy is travelling. Up and down both draw the side pose -
