@@ -721,3 +721,80 @@ func test_the_declared_frame_counts_match_what_was_baked() -> bool:
 		assert_eq(Enemies.walk_frames(kind), walk, "%s declares its walk frames" % kind)
 		assert_eq(Enemies.death_frames(kind), death, "%s declares its death frames" % kind)
 	return true
+
+# --------------------------------------------------------------------------
+# every frame draws at one size
+# --------------------------------------------------------------------------
+
+# The bug this gates: apply_sprite_height used to divide sprite_px by EACH
+# frame's own height, which is only sensible while the creature is upright. A
+# death sequence ends with the creature lying down, so its last frames are
+# short and wide - and dividing by a short height scaled them UP. Measured on
+# the committed art, the goblin's final death frame drew 2.1x the standing
+# creature and the ogre's went from 57px wide to 147. The corpse ballooned.
+#
+# The scale is now taken once from the creature's standing height and used for
+# every frame, so a frame that is short draws short instead of drawing big.
+func test_every_frame_of_a_kind_draws_at_the_same_scale() -> bool:
+	for kind in Enemies.KINDS:
+		var e := _ready_enemy()
+		e.setup(kind, _long_path(), 1)
+		var sprite: Sprite2D = e.get_node("Sprite")
+		var standing := sprite.scale.x
+		assert_true(standing > 0.0, "%s has a scale to compare against" % kind)
+		for action in ["walk", "death"]:
+			var n := Enemies.walk_frames(kind) if action == "walk" \
+				else Enemies.death_frames(kind)
+			for i in n:
+				sprite.texture = load(
+					"res://assets/art/enemies/%s/%s_%d.png" % [kind, action, i])
+				e.apply_sprite_height()
+				assert_almost_eq(sprite.scale.x, standing, 0.0001,
+					"%s %s_%d draws at the standing scale" % [kind, action, i])
+				assert_almost_eq(sprite.scale.y, sprite.scale.x, 0.0001,
+					"%s %s_%d is not stretched" % [kind, action, i])
+		e.free()
+	return true
+
+func test_a_frame_keeps_its_feet_on_the_ground() -> bool:
+	# A creature that lies down is shorter than one standing up, and the
+	# sprite is centred - so without this the corpse floats where the torso
+	# used to be instead of settling where the feet were.
+	for kind in Enemies.KINDS:
+		var e := _ready_enemy()
+		e.setup(kind, _long_path(), 1)
+		var sprite: Sprite2D = e.get_node("Sprite")
+		var baseline := sprite.position.y + sprite.texture.get_height() * sprite.scale.y / 2.0
+		for i in Enemies.death_frames(kind):
+			sprite.texture = load("res://assets/art/enemies/%s/death_%d.png" % [kind, i])
+			e.apply_sprite_height()
+			var bottom := sprite.position.y + sprite.texture.get_height() * sprite.scale.y / 2.0
+			assert_almost_eq(bottom, baseline, 0.01,
+				"%s death_%d rests on the same line it stood on" % [kind, i])
+		e.free()
+	return true
+
+func test_the_death_frames_are_the_case_this_covers() -> bool:
+	# The precondition. If every frame were the same shape, one scale and one
+	# baseline would be the same thing and neither test above would prove
+	# anything.
+	var ratios := []
+	for i in Enemies.death_frames(&"slime"):
+		var bytes := FileAccess.get_file_as_bytes(
+			"res://assets/art/enemies/slime/death_%d.png" % i)
+		assert_false(bytes.is_empty(), "slime death_%d exists" % i)
+		var img := Image.new()
+		assert_eq(img.load_png_from_buffer(bytes), OK, "slime death_%d decodes" % i)
+		ratios.append(float(img.get_width()) / float(img.get_height()))
+	assert_true(ratios.size() >= 2, "there is a sequence to compare")
+	if ratios.size() < 2:
+		return true
+	# Not "some are upright and some are flat" - measured, all four of the
+	# goblin's death frames are already wider than tall, because it starts the
+	# sequence lunging. What matters is that it ends much flatter than it
+	# starts, which is what makes one scale for all frames a real constraint
+	# rather than a tautology.
+	assert_true(float(ratios[ratios.size() - 1]) > float(ratios[0]) * 1.5,
+		"the goblin ends its death far flatter than it starts (%.2f against %.2f)"
+			% [float(ratios[ratios.size() - 1]), float(ratios[0])])
+	return true

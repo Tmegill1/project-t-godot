@@ -54,20 +54,40 @@ func setup(enemy_kind: StringName, path: PackedVector2Array, wave: int, rng: Rng
 	# caller for it. Removing it would mean re-plumbing the board to bring it
 	# back.
 	_sprite.texture = load("res://assets/art/enemies/%s/walk_0.png" % kind)
+	# walk_0 is the creature standing, so it is what sprite_px is a height OF.
+	# Every other frame - mid-stride, mid-fall, flat - is drawn at this same
+	# scale rather than renormalised to its own height.
+	_frame_scale = float(Enemies.DEFS[kind]["sprite_px"]) \
+		/ float(_sprite.texture.get_height())
 	apply_sprite_height()
 	_update_health_bar()
 
-## Scales the current frame to the kind's declared displayed height.
+## Draws the current frame at the kind's ONE scale, resting on the ground line
+## the creature stands on.
 ##
-## Derived per frame rather than fixed, because the frames are not a uniform
-## size - a walking creature's bounding box changes with its stride, and its
-## death frames are far wider than tall. Without this the sprite would jump in
-## size every time the frame changed. Uniform on both axes: these are
-## creatures, and a stretched one reads as a bug.
+## The scale comes from the creature's STANDING height, taken once, and never
+## from the frame in hand. An earlier version divided sprite_px by each
+## frame's own height, which is only sensible while the creature is upright: a
+## death sequence ends lying down, so its last frames are short, and dividing
+## by a short height scales them UP. Measured on the committed art, the
+## goblin's final death frame drew 2.1x the standing creature and the ogre's
+## went from 57px wide to 147 - the corpse ballooned as it fell. Frame heights
+## vary across the walk cycle too, so the same arithmetic made the creature
+## pulse a few percent with every step.
+##
+## The vertical offset keeps the frame's BOTTOM on one line. The sprite is
+## centred, so without it a creature that lies down settles where its torso
+## used to be and appears to float; with it, the feet stay where the feet
+## were and the body goes down.
 func apply_sprite_height() -> void:
-	var factor := float(Enemies.DEFS[kind]["sprite_px"]) \
-		/ float(_sprite.texture.get_height())
-	_sprite.scale = Vector2.ONE * factor
+	var standing := float(Enemies.DEFS[kind]["sprite_px"])
+	var drawn := float(_sprite.texture.get_height()) * _frame_scale
+	_sprite.scale = Vector2.ONE * _frame_scale
+	_sprite.position.y = (standing - drawn) / 2.0
+
+## The one scale every frame of this kind is drawn at, from its standing
+## height. Set in setup() off walk_0, which is the creature on its feet.
+var _frame_scale := 1.0
 
 ## Which frame of the walk cycle the enemy is showing.
 ##
