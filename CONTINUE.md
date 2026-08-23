@@ -21,127 +21,33 @@ merged**
 
 ---
 
-## 0. THE ILLUSTRATED ART SWAP — implemented, not yet merged
+## 0. THE ART OVERHAUL — merged and deployed
 
-**Branch `feat/illustrated-art-swap`, all ten tasks done, suite green at
-7143 checks across 37 files.** Every piece of art in the game — map, props,
-endpoints, enemies *and* towers — has been replaced with a single illustrated
-reference sheet, and the Kenney CC0 pack the previous branch installed is
-now fully retired: `assets/kenney/`, `tools/bake_kenney.gd` and the three
-tests that gated the Kenney bake are deleted. See §2's asset row for the
-current layout.
+Every asset in the game was replaced from an illustrated sprite sheet, and
+then again for the enemies from a second sheet carrying real walk and death
+animation. It is on `master` and live at
+<https://tmegill1.github.io/project-t-godot/>.
 
-Design and plan, useful if the rendering approach needs revisiting:
+**Read [`docs/art-overhaul.md`](docs/art-overhaul.md) before touching the art.**
+It records what changed and, more importantly, *why* — including the several
+things that looked obvious, were measured, and turned out to be wrong. The
+short list of facts you will otherwise re-derive:
 
-- [`docs/superpowers/specs/2026-08-20-illustrated-art-swap-design.md`](docs/superpowers/specs/2026-08-20-illustrated-art-swap-design.md) — the design, approved
-- [`docs/superpowers/plans/2026-08-20-illustrated-art-swap.md`](docs/superpowers/plans/2026-08-20-illustrated-art-swap.md) — the ten tasks, as built
-
-**Built with `superpowers:subagent-driven-development`** — a fresh subagent
-per task, an independent review between tasks, and a whole-branch review at
-the end; the controller finished two tails directly when an implementer ran
-out of session budget. Fifty-one rulings were made during execution and
-recorded in a git-ignored ledger that was deleted when the branch closed, as
-that skill prescribes. **The reasoning is not lost with it**: every measured
-value and every non-obvious decision was written into the code as it was
-made, which is why `tools/bake_sheet.gd`'s constants say what they were
-measured against and the asset gates say what they exist to catch. If you
-want to know why a number is what it is, the comment beside it is the
-authority.
-
-**Scope held to art plus per-spawn enemy variety.** Map 2/3 layouts,
-map-to-map progression and the five composable enemy properties are still a
-**later branch** — see §11. The Goblin Shaman and Troll rows are extracted
-under `assets/art/enemies/_unused/` but referenced by no code, waiting on an
-enemy-variety feature that needs its own stats, wave schedule and balance
-pass.
-
-**Towers were touched too, unlike the Kenney branch.** `assets/towers.png`
-is rebaked from this sheet's sixteen upgrade-level illustrations; `Tower`'s
-`SHEET_COLUMNS`/`FRAME_SIZE` geometry changed to match. Combat rules and the
-upgrade tables did not move.
-
-### Traps that cost real time to find
-
-**1. Extraction alignment is the single riskiest thing here.** The sheet is
-a labelled reference sheet, not a packed atlas — sections sit on different
-grids and carry row labels baked into the pixels — so every row is cut on a
-measured fixed pitch from a measured origin, never derived automatically
-(two automatic approaches were tried and both failed: a tight flood fill
-fragments sprites on their own outlines, a loose one merges the densely
-packed enemy rows into blobs). A few pixels of origin drift puts a sliver of
-the neighbouring sprite into every crop. The margin gates across
-`test_ground_tiles.gd`, `test_road_pieces.gd`, `test_prop_assets.gd` and
-others are what catch it — **if one goes red, move the origin, never the
-threshold.**
-
-**2. The card border bled through every tile seam, and only rendering the
-board at real size caught it (Task 8).** The sheet's terrain tiles are cards
-with a painted dark scalloped edge; drawn whole, every cell boundary carried
-two of those edges back to back and the map read as a grid of cards in
-black gutters — invisible in any per-tile PNG check, the single most visible
-defect once the demo map was actually composed and looked at. Cropping the
-border (`TILE_BLEED`, `region_enabled` in `_place_tile`) fixed the tile
-interior, but the masked road pieces' patched-in arm then carried the same
-border inward from the wrong side; the fix was mirroring the copy rather
-than sampling it directly (`_patch_arm` in `tools/bake_sheet.gd`). Screenshot
-verification is not optional for rendering work — see §8.
-
-**3. The mipmap-generation gap came back, across two separate branches.**
-The Kenney swap's own Task 10 found and fixed exactly this: a sprite filter
-set to sample a mipmap chain (`LINEAR_WITH_MIPMAPS`), with generation never
-turned on in the `.import` sidecar, so the filter silently fell back to the
-base level and aliased on every minified prop. This branch's Task 10 found
-the identical defect again, on the new art, present from Task 1 onward and
-invisible to every test because the old gate only walked `assets/kenney/`.
-`test/test_art_import.gd` now pins the fix as an explicit **split** rather
-than a blanket sweep — props, endpoints and enemy variants get a chain;
-ground/road tiles and `assets/towers.png` deliberately do not, because both
-are region-sampled and a mip level would average the sampled region's
-cropped or framed edge back into its neighbour. It pins **both** sides on
-purpose: a gate that only asserts the `true` half lets a later change flip
-the excluded assets on and nothing would notice. **If you add new
-mipmap-filtered art, generation is a second, separate flag — check it, don't
-assume the filter implies it.**
-
-**4. The road draws narrower than the pack it replaced, in the opposite
-direction from what the plan predicted.** The illustrated road is 20 source
-px of a 66px tile (measured directly off the committed, re-baked PNGs, not
-an earlier draft of them), giving a half-width of `9 ≈ round(8.89)` plus the
-standing 2px margin. `PATH_HALF_WIDTH` is now **11**, down from Kenney's 14
-— narrower, not the ~26px the plan initially guessed. `test/test_placement.gd`
-probes this exact boundary with literals derived from the constant; both
-move together if it ever does again (the Kenney swap's own history shows
-this coupling has broken once already).
-
-### Where the source art lives
-
-`reference/illustrated-sheet/sheet.png` — vendored, **gitignored**, already
-in place. `tools/bake_sheet.gd` is the tool that turns it into every
-committed asset under `assets/art/` and `assets/towers.png`:
-
-```bash
-godot --headless --script tools/bake_sheet.gd
-godot --headless --import
-git checkout -- project.godot
-```
-
-The sheet has **no alpha channel**, so extraction cannot read transparency
-directly — it keys a measured background colour instead
-(`tools/bake_sheet.gd`'s `BACKGROUND` and `KEY_TOLERANCE_SQ`).
-
-### One more thing that bites, still
-
-`prop_footprints()` derives a blocking radius from the texture's **full**
-dimensions, and `_place` normalises every prop's longest displayed axis to
-`TILE_SIZE`. So the radius is **always 24 whatever the source size is** —
-trimming cannot change it. That is precisely why props are trimmed to their
-alpha bbox at bake time: the radius cannot move, so the *art* has to grow to
-fill it. This constraint is what forced `_place_tile` to become a separate
-function from `_place` in Task 6/8 rather than a flag on it — ground and
-road tiles are stretched to fill their cell exactly, which would corrupt
-`prop_footprints`' radius maths if props went through the same path.
-
----
+- The towers were cut on the sheet's own "LVL n" captions, not on the tower
+  art, because the towers touch and cannot be separated by gaps.
+- All sixteen tower frames share ONE scale factor. Fitting each to its frame
+  independently makes a taller upgrade draw *smaller* than the level below it.
+- All sixteen road connection masks are composed from one cross per biome. The
+  sheet does not ship a usable set of connection pieces.
+- `MapRenderer.TILE_BLEED` crops 6px of painted card border off every tile.
+  Without it the board reads as cards in black gutters.
+- The ground reads as a grid because of PERIODICITY, not seams — the step
+  across a tile boundary is no larger than the step inside one. Ground tiles
+  are drawn at one of four orientations, which cuts it 61%.
+- Enemies animate on drawn frames indexed by DISTANCE TRAVELLED. A timed cycle
+  moves a slow enemy's legs as fast as a quick one's.
+- Towers draw at 2.4x and campfires at 0.8x their footprint. Both are display
+  only — every placement rule reads the underlying `size` field directly.
 
 ## 1. What this project is
 
