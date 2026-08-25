@@ -17,6 +17,7 @@ func bind(board: GameBoard) -> void:
 	_board = board
 	board.gold_changed.connect(_refresh)
 	board.tower_placed.connect(_on_tower_placed)
+	board.tower_sold.connect(_on_tower_sold)
 
 	# Butt the panel's left edge against the map's right edge; the scene
 	# anchors the other three sides to the viewport. The map is a fixed pixel
@@ -71,6 +72,15 @@ static func icon_for(kind: StringName) -> AtlasTexture:
 	atlas.region = Tower.frame_region(Towers.DEFS[kind]["upgrade_frames"][0])
 	return atlas
 
+## Selling frees a slot, so both the count and the asking price move.
+##
+## Connected explicitly rather than left to ride on gold_changed, which a sale
+## also emits: the panel cares about the sale, and depending on a coincidence
+## of emission order is how the count goes stale the day a refund is ever made
+## free.
+func _on_tower_sold(_kind: StringName) -> void:
+	_refresh(_board.get_gold())
+
 ## Placing consumes the board's selection, so the button must not stay lit.
 func _on_tower_placed(_kind: StringName) -> void:
 	clear_selection()
@@ -91,7 +101,13 @@ func _refresh(gold: int) -> void:
 		# The board owns the authoritative count; the panel shows the base
 		# price plus escalation is applied on placement, so display the
 		# current asking price by asking the board.
-		var price := EconomySim.tower_price(kind, _board.get_tower_count(kind))
+		var owned := _board.get_tower_count(kind)
+		var limit := EconomySim.tower_limit(kind, _board.get_map_name())
+		var price := EconomySim.tower_price(kind, owned)
 		var button: Button = _buttons[kind]
-		button.text = "%s\n%d gold" % [def["label"], price]
-		button.disabled = not EconomySim.can_afford(gold, price)
+		button.text = "%s %d/%d\n%d gold" % [def["label"], owned, limit, price]
+		# Two independent reasons a kind can be unbuildable. The limit is
+		# checked as well as the price because a maxed kind stays unbuildable
+		# however rich the player gets, and a button that looks affordable but
+		# is refused on tap is worse than one that reads as spent.
+		button.disabled = owned >= limit or not EconomySim.can_afford(gold, price)

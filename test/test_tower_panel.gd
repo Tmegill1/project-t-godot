@@ -47,8 +47,10 @@ func test_bind_creates_one_button_per_kind_with_base_price_and_label() -> bool:
 	for kind in Towers.KINDS:
 		var def: Dictionary = Towers.DEFS[kind]
 		var price := EconomySim.tower_price(kind, 0)
+		var limit := EconomySim.tower_limit(kind, b.get_map_name())
 		var button: Button = p._buttons[kind]
-		assert_eq(button.text, "%s\n%d gold" % [def["label"], price], "%s button shows its base price" % kind)
+		assert_eq(button.text, "%s 0/%d\n%d gold" % [def["label"], limit, price],
+			"%s button shows its base price and an empty count" % kind)
 	p.free(); b.free()
 	return true
 
@@ -253,8 +255,9 @@ func test_refresh_shows_the_current_escalated_price_after_a_placement_of_that_ki
 	b._try_place(pos)  # emits tower_placed and gold_changed for real
 
 	var button: Button = p._buttons[&"basic"]
-	assert_eq(button.text, "%s\n%d gold" % [Towers.DEFS[&"basic"]["label"], escalated_price],
-		"after one basic is placed the button shows the escalated price, not the base price")
+	var limit := EconomySim.tower_limit(&"basic", b.get_map_name())
+	assert_eq(button.text, "%s 1/%d\n%d gold" % [Towers.DEFS[&"basic"]["label"], limit, escalated_price],
+		"after one basic is placed the button shows the escalated price and a count of one")
 	p.free(); b.free()
 	return true
 
@@ -361,4 +364,44 @@ func test_pressing_a_build_button_selects_its_kind_through_the_wired_signal() ->
 	assert_eq(b._selected_kind, &"long", "pressing the button itself (not calling _on_selected directly) selects that kind")
 	assert_true(button.button_pressed, "the pressed button is toggled on")
 	p.free(); b.free()
+	return true
+
+# --------------------------------------------------------------------------
+# Per-kind counts against the limit (spec section 5)
+# --------------------------------------------------------------------------
+
+func test_each_button_shows_the_count_against_the_limit() -> bool:
+	var board := _ready_board()
+	var panel := _ready_panel()
+	panel.bind(board)
+	var text: String = panel._buttons[&"basic"].text
+	assert_true(text.contains("0/8"), "no basics built, eight allowed")
+	panel.free()
+	board.free()
+	return true
+
+func test_the_count_rises_when_a_tower_is_placed() -> bool:
+	var board := _ready_board()
+	var panel := _ready_panel()
+	panel.bind(board)
+	board.select_tower_kind(&"basic")
+	board._try_place(_find_placeable_position(board))
+	assert_true(panel._buttons[&"basic"].text.contains("1/8"),
+		"the panel followed the placement")
+	panel.free()
+	board.free()
+	return true
+
+# A kind at its limit is unbuildable however much gold the player holds, so
+# the button must be disabled for that reason and not only for price.
+func test_a_kind_at_its_limit_is_disabled_even_when_affordable() -> bool:
+	var board := _ready_board()
+	var panel := _ready_panel()
+	board.set_gold_for_test(100000)
+	board.set_tower_count_for_test(&"long", EconomySim.tower_limit(&"long", board.get_map_name()))
+	panel.bind(board)
+	assert_true(panel._buttons[&"long"].disabled,
+		"maxed out, so unbuildable regardless of gold")
+	panel.free()
+	board.free()
 	return true

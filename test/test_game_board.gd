@@ -1297,3 +1297,15 @@ func test_calling_early_clears_the_clock_rather_than_only_paying_for_it() -> boo
 	assert_almost_eq(board.get_prep_remaining_ms(), 0.0, 0.001, "and the clock is at zero")
 	board.free()
 	return true
+
+func test_selling_a_tower_announces_the_kind() -> bool:
+	var board := _ready_board()
+	var seen := []
+	board.tower_sold.connect(func(kind): seen.append(kind))
+	board.select_tower_kind(&"basic")
+	board._try_place(_find_placeable_positions(board, 1)[0])
+	board._select_tower(board._towers_root.get_child(0))
+	board.sell_selected_tower()
+	assert_eq(seen, [&"basic"], "the sale named the kind that was sold")
+	board.free()
+	return true

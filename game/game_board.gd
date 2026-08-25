@@ -21,6 +21,7 @@ signal tower_deselected()
 signal placement_rejected(reason: String)
 signal wave_reward(base: int, speed: int, interest: int)
 signal prep_changed(remaining_ms: float, bonus: int)
+signal tower_sold(kind: StringName)
 
 const ENEMY_SCENE := preload("res://game/enemy.tscn")
 const TOWER_SCENE := preload("res://game/tower.tscn")
@@ -113,6 +114,10 @@ func is_prepping() -> bool:
 ## Test seam: reaching the final wave otherwise means playing nineteen.
 func set_wave_for_test(wave: int) -> void:
 	_wave = wave
+
+## Test seam: reaching a kind's limit otherwise means placing eight towers.
+func set_tower_count_for_test(kind: StringName, count: int) -> void:
+	_counts[kind] = count
 
 ## Test seam: losing otherwise means leaking twenty lives.
 func force_game_over_for_test() -> void:
@@ -503,11 +508,16 @@ func sell_selected_tower() -> void:
 	if _selected_tower == null or not is_instance_valid(_selected_tower):
 		return
 	var tower := _selected_tower
+	# Read the kind BEFORE queue_free, and hold it in a local: the panel's
+	# handler runs during the emit below and must not reach into a tower that
+	# is already on its way out.
+	var sold_kind: StringName = tower.kind
 	_deselect_tower()
 	_gold += EconomySim.sell_refund(tower.price_paid)
-	_counts[tower.kind] -= 1
+	_counts[sold_kind] -= 1
 	tower.queue_free()
 	gold_changed.emit(_gold)
+	tower_sold.emit(sold_kind)
 	_play_sound(&"sell")
 
 # --- Audio ---------------------------------------------------------------
