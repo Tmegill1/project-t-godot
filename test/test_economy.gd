@@ -295,3 +295,90 @@ func test_the_flat_bonus_is_not_scaled_by_the_wave_modifier() -> bool:
 func test_kill_reward_still_never_pays_less_than_zero_with_a_modifier() -> bool:
 	assert_eq(EconomySim.kill_reward(-5, {}, 0.5), 0, "a bad reward stays inert")
 	return true
+
+# --------------------------------------------------------------------------
+# Wave-clear bonus
+# --------------------------------------------------------------------------
+
+func test_wave_clear_base_grows_with_the_wave_number() -> bool:
+	assert_eq(EconomySim.wave_clear_bonus(1, 0.0)["base"], 25, "20 + 1*5")
+	assert_eq(EconomySim.wave_clear_bonus(20, 0.0)["base"], 120, "20 + 20*5")
+	return true
+
+func test_a_fast_clear_pays_the_full_speed_bonus() -> bool:
+	assert_eq(EconomySim.wave_clear_bonus(1, 0.0)["speed"], 40, "instant clear")
+	assert_eq(EconomySim.wave_clear_bonus(1, 20000.0)["speed"], 40,
+		"exactly at the fast threshold still pays in full")
+	return true
+
+func test_a_slow_clear_pays_no_speed_bonus() -> bool:
+	assert_eq(EconomySim.wave_clear_bonus(1, 60000.0)["speed"], 0, "at the slow threshold")
+	assert_eq(EconomySim.wave_clear_bonus(1, 999999.0)["speed"], 0, "and beyond it")
+	return true
+
+func test_the_speed_bonus_is_linear_between_the_thresholds() -> bool:
+	assert_eq(EconomySim.wave_clear_bonus(1, 40000.0)["speed"], 20, "half the span, half the bonus")
+	return true
+
+func test_a_negative_clear_time_is_treated_as_instant() -> bool:
+	assert_eq(EconomySim.wave_clear_bonus(1, -5000.0)["speed"], 40,
+		"a nonsense clock reads as fast rather than paying nothing")
+	return true
+
+func test_wave_clear_base_never_goes_negative_on_a_bad_wave_number() -> bool:
+	assert_eq(EconomySim.wave_clear_bonus(-3, 0.0)["base"], 20,
+		"a negative wave clamps to the flat base rather than subtracting")
+	return true
+
+# --------------------------------------------------------------------------
+# Interest
+# --------------------------------------------------------------------------
+
+func test_no_interest_below_the_minimum_balance() -> bool:
+	assert_eq(EconomySim.interest_on(49), 0, "one short of the floor")
+	assert_eq(EconomySim.interest_on(0), 0, "and nothing at all")
+	return true
+
+func test_interest_pays_the_rate_at_and_above_the_minimum() -> bool:
+	assert_eq(EconomySim.interest_on(50), 2, "5% of 50 floors to 2")
+	assert_eq(EconomySim.interest_on(200), 10, "5% of 200")
+	return true
+
+# The cap is the load-bearing part: uncapped compounding makes hoarding
+# strictly better than building, which inverts the whole game.
+func test_interest_is_capped() -> bool:
+	assert_eq(EconomySim.interest_on(600), 30, "5% of 600 is exactly the cap")
+	assert_eq(EconomySim.interest_on(100000), 30, "and a huge bank pays no more")
+	return true
+
+func test_interest_floors_rather_than_rounding() -> bool:
+	assert_eq(EconomySim.interest_on(59), 2, "5% of 59 is 2.95, floors to 2")
+	return true
+
+# --------------------------------------------------------------------------
+# Calling a wave early
+# --------------------------------------------------------------------------
+
+func test_calling_early_pays_per_whole_second_given_up() -> bool:
+	assert_eq(EconomySim.call_early_bonus(10000.0), 30, "10s * 3 gold")
+	assert_eq(EconomySim.call_early_bonus(5000.0), 15, "5s * 3 gold")
+	return true
+
+func test_a_partial_second_does_not_pay() -> bool:
+	assert_eq(EconomySim.call_early_bonus(1999.0), 3, "1.999s floors to one second")
+	assert_eq(EconomySim.call_early_bonus(999.0), 0, "under a second pays nothing")
+	return true
+
+func test_calling_early_is_capped() -> bool:
+	assert_eq(EconomySim.call_early_bonus(20000.0), 45,
+		"the full 20s window would be 60 gold, capped to 45")
+	return true
+
+func test_a_remaining_time_beyond_the_window_is_clamped() -> bool:
+	assert_eq(EconomySim.call_early_bonus(999999.0), 45, "clamped to the window, then capped")
+	return true
+
+func test_letting_the_clock_run_out_pays_nothing() -> bool:
+	assert_eq(EconomySim.call_early_bonus(0.0), 0, "no time given up, no bonus")
+	assert_eq(EconomySim.call_early_bonus(-100.0), 0, "and a negative remainder is inert")
+	return true
