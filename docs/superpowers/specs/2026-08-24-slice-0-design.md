@@ -37,6 +37,15 @@ It does four things:
 Later slices, in dependency order: bosses and enemy properties, tactical
 powers, the versioned save and meta-progression, and a hero.
 
+**Recorded for the powers slice, decided by the owner on 2026-08-24 and not
+built here:** powers are to be **bought with gold and priced expensively**, as
+a late-run sink, and/or **tied to particular tower kinds** rather than bought
+from a separate currency. That diverges from upstream, where powers cost
+Insignia earned from lieutenants and bosses. It also changes the arithmetic in
+§4.6 when it lands — a large gold sink at the end of a run is exactly what the
+surplus analysis says is missing — so the gold curve should be re-measured
+then rather than assumed to still hold.
+
 ## 2. Goals and non-goals
 
 **Goals**
@@ -49,8 +58,10 @@ powers, the versioned save and meta-progression, and a hero.
 
 **Non-goals**
 
-- Rebalancing. Every number is ported from upstream, which is itself
-  unplaytested. "Matches upstream" does not mean "plays well."
+- Broad rebalancing. Tower costs, upgrade costs, enemy health and enemy speed
+  are all ported as-is and stay unplaytested. **The one exception is the gold
+  curve**, which this slice must touch because adding income on top of the
+  existing faucet measurably breaks it — see §4.6.
 - Persistence of any kind. No settings file, no save. Slice 3 owns that.
 - A map-select screen. Maps chain through `next` within a session, which is
   what the existing `Maps.DEFS` field already anticipates.
@@ -64,6 +75,7 @@ powers, the versioned save and meta-progression, and a hero.
 |---|---|
 | Economy data | `WAVE_CLEAR`, `CALL_EARLY`, `INTEREST` constant groups in `data/economy.gd` |
 | Economy rules | `wave_clear_bonus`, `interest_on`, `call_early_bonus` in `sim/economy.gd` |
+| Gold curve | Decreasing `gold_modifier` in `Waves.get_modifiers`, applied in `EconomySim.kill_reward` (§4.6) |
 | Prep timer | 20s countdown between waves, auto-starting the next; not before wave 1 |
 | HUD | Prep countdown, call-early button with live payout, `Towers n/N` budget readout, backing plate |
 | Build panel | Per-kind `n/N` count beside each price |
@@ -159,6 +171,96 @@ The ordering inside that method is load-bearing and gets its own test.
 
 `clear_ms` is measured with the existing `_wave_clock`, which already
 accumulates scaled delta from the wave's start.
+
+## 4.6 The gold curve
+
+**This slice cannot add income without also tuning the faucet.** Measured, not
+estimated — the scripts are throwaway but the numbers are exact.
+
+### What the economy does today
+
+| | Gold |
+|---|---|
+| Starting gold + kill rewards over 20 waves | **15,985** |
+| Most a player could possibly spend (16 towers, best mix, every tier the cross-path rule allows) | **17,170** |
+| Gap | **−1,185** |
+
+A run ends about 1,200 short of a maxed board. That is good: the player cannot
+have everything, so what they buy is a choice.
+
+### What Slice 0 would do to it, unmodified
+
+The wave economy adds ~3,555 gold (wave-clear 1,450, speed bonus up to 800,
+call-early up to 855, interest ~450) against **no new sink at all**. A 22%
+income rise turns the −1,185 deficit into a **+2,370 surplus**. Gold stops
+being a constraint for the last third of every run. Shipping the port
+unchanged would make the game worse, measurably.
+
+### The deeper problem: the curve, not the total
+
+| | Kill income | Share |
+|---|---|---|
+| Waves 1–10 | 3,185 | 20% |
+| Waves 16–20 | 7,600 | **48%** |
+
+Wave 20 pays 1,720 against wave 1's 25 — **68.8×**. Half the run's money
+arrives after the board is built and the upgrade paths are locked. The cause is
+structural: composition accumulates from wave 1 (161 enemies at wave 20 against
+5 at wave 1) while each kill pays a flat reward, so income tracks a compounding
+enemy count. Upstream's `20 + 5 × wave` wave-clear bonus escalates too, feeding
+the part of the run that is already drowning.
+
+### The fix
+
+A **decreasing gold modifier**, added to `Waves.get_modifiers` beside the
+health and speed modifiers that already scale per wave:
+
+```
+GOLD_PER_WAVE     = 0.025
+MIN_GOLD_MODIFIER = 0.40
+
+gold_modifier = max(MIN_GOLD_MODIFIER, 1.0 - GOLD_PER_WAVE * past)
+  where past = max(0, wave - LAST_AUTHORED_WAVE)
+```
+
+This is deliberately the same shape as `health_modifier` and `speed_modifier`,
+in the same function, so per-wave scaling stays in one place with one idiom.
+
+Chosen by sweeping decay and floor against the spend ceiling:
+
+| decay | floor | Grand total | vs ceiling | wave 20 / wave 1 |
+|---|---|---|---|---|
+| 0.000 | — | 19,540 | **+2,370** | 68.8× |
+| 0.020 | 0.45 | 16,532 | −638 | 26.5× |
+| **0.025** | **0.40** | **15,780** | **−1,390** | **23.9×** |
+| 0.030 | 0.40 | 15,028 | −2,142 | 21.3× |
+| 0.040 | 0.35 | 13,523 | −3,647 | 27.5× |
+
+0.025/0.40 lands the grand total at 15,780 against a 17,170 ceiling — a 1,390
+deficit, essentially the 1,185 the game ships with today — while cutting the
+back-loading ratio by nearly two thirds.
+
+Income still rises across the run, from about 50 gold on wave 1 to about 1,195
+on wave 20. That is intended. A wave fielding 161 enemies *should* pay more
+than one fielding five; the goal was never a flat curve, only to stop it being
+a 69× cliff.
+
+**One honest note: the 0.40 floor never binds inside twenty waves.** At wave 20
+the modifier is 0.625. The floor exists so endless play past roughly wave 29
+cannot drive a kill reward to zero or negative. It is a safety rail, not an
+active part of the tuning, and a test should pin it as such rather than
+implying it shapes the 20-wave run.
+
+**Kill rewards themselves are not touched.** Slime 5, Ogre 20, Bee 10 stay as
+they are; the modifier scales them at the point of payment. That keeps the
+per-enemy values readable as relative worth, and means one constant tunes the
+whole curve.
+
+`EconomySim.kill_reward` already applies a multiplier and a flat bonus from the
+killing tower's upgrades. The wave modifier composes with those, and the order
+matters: the **wave modifier applies to the base reward before the tower's gold
+multiplier**, so the Bounty Hunter branch multiplies what the wave actually
+pays rather than an unscaled figure. Pinned by its own test.
 
 ## 5. Visible limits
 
