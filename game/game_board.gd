@@ -38,9 +38,14 @@ var _run_finished := false
 var _selected_kind: StringName = &""
 var _selected_tower: Tower = null
 var _counts := {}            # StringName -> int
-var _spawn_queue: Array = []  # {kind, at_ms}
+## One queue and one cursor PER PATH. The full wave composition runs down every
+## path rather than being divided between them, matching upstream (GameScene.ts
+## computes totalEnemies * enemyPaths.length). A map with two entrances
+## therefore fields twice the wave, which is a difficulty lever carried in the
+## map's own starting gold and budget rather than anywhere in here.
+var _spawn_queues: Array = []      # Array of Array of {kind, at_ms}
+var _spawned_per_path: Array = []  # Array of int
 var _wave_clock := 0.0
-var _spawned := 0
 ## The most recent wave clear's payout, itemised, for the HUD and for tests.
 var _last_wave_reward := {"base": 0, "speed": 0, "interest": 0}
 ## Milliseconds left before the next wave starts on its own. Zero means no
@@ -119,6 +124,20 @@ func set_wave_for_test(wave: int) -> void:
 func set_tower_count_for_test(kind: StringName, count: int) -> void:
 	_counts[kind] = count
 
+## Test seam: the board otherwise always loads Maps.FIRST.
+##
+## Must be called BEFORE notification(NOTIFICATION_READY), because _ready is
+## what reads _map_name to build the tiles and the paths.
+func set_map_for_test(map_name: StringName) -> void:
+	_map_name = map_name
+
+## Total spawns issued this wave, across every path.
+func get_spawned_count() -> int:
+	var total := 0
+	for n in _spawned_per_path:
+		total += int(n)
+	return total
+
 ## Test seam: losing otherwise means leaking twenty lives.
 func force_game_over_for_test() -> void:
 	_run_finished = true
@@ -164,9 +183,20 @@ func start_next_wave() -> void:
 		return
 	_wave_active = true
 	_wave_clock = 0.0
-	_spawned = 0
 	_spawn_rng = Rng.new(Seeds.DEFAULT_SPAWN_SEED)
-	_spawn_queue = Waves.build_schedule(_wave)
+	var schedule := Waves.build_schedule(_wave)
+	_spawn_queues = []
+	_spawned_per_path = []
+	for i in maxi(1, _paths.size()):
+		# One shared schedule, one cursor each. Sharing is safe because the
+		# queue is only ever READ - progress lives entirely in
+		# _spawned_per_path - and build_schedule already returns fresh
+		# dictionaries per call. An earlier version deep-copied per path with
+		# a comment claiming a shared array would make one path skip the
+		# other's spawns; mutation testing showed that copy changed no
+		# observable behaviour, because the claim was simply false.
+		_spawn_queues.append(schedule)
+		_spawned_per_path.append(0)
 	wave_changed.emit(_wave, Waves.MAX_WAVES)
 	wave_state_changed.emit(true)
 	_play_sound(&"wave-start")
@@ -189,10 +219,13 @@ func _physics_process(delta: float) -> void:
 
 	if _wave_active:
 		_wave_clock += delta_ms
-		while _spawned < _spawn_queue.size() \
-				and _spawn_queue[_spawned]["at_ms"] <= _wave_clock:
-			_spawn(_spawn_queue[_spawned]["kind"])
-			_spawned += 1
+		for path_index in _spawn_queues.size():
+			var queue: Array = _spawn_queues[path_index]
+			var issued: int = _spawned_per_path[path_index]
+			while issued < queue.size() and queue[issued]["at_ms"] <= _wave_clock:
+				_spawn(queue[issued]["kind"], path_index)
+				issued += 1
+			_spawned_per_path[path_index] = issued
 
 	var candidates: Array = []
 	for enemy in _enemies_root.get_children():
@@ -203,16 +236,24 @@ func _physics_process(delta: float) -> void:
 		if tower is Tower:
 			tower.tick(delta_ms, candidates)
 
-	if _wave_active and _spawned >= _spawn_queue.size() \
+	if _wave_active and _all_spawns_issued() \
 			and _enemies_root.get_child_count() == 0:
 		_on_wave_cleared()
 
-func _spawn(kind: StringName) -> void:
+## Whether every path has issued its whole schedule. Checking one queue is not
+## enough: the wave is not over while any entrance still has enemies to send.
+func _all_spawns_issued() -> bool:
+	for i in _spawn_queues.size():
+		if int(_spawned_per_path[i]) < (_spawn_queues[i] as Array).size():
+			return false
+	return true
+
+func _spawn(kind: StringName, path_index: int) -> void:
 	if _paths.is_empty():
 		return
 	var enemy: Enemy = ENEMY_SCENE.instantiate()
 	_enemies_root.add_child(enemy)
-	enemy.setup(kind, _paths[0], _wave, _spawn_rng)
+	enemy.setup(kind, _paths[mini(path_index, _paths.size() - 1)], _wave, _spawn_rng)
 	enemy.died.connect(_on_enemy_died)
 	enemy.leaked.connect(_on_enemy_leaked)
 

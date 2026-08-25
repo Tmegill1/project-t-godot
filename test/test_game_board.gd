@@ -569,8 +569,9 @@ func test_start_next_wave_emits_wave_changed_and_wave_state_changed() -> bool:
 func test_physics_process_spawns_enemies_exactly_when_the_clock_reaches_at_ms() -> bool:
 	var b := _ready_board()
 	b.start_next_wave()  # wave 1: 5 slimes at at_ms 0, 500, 1000, 1500, 2000
-	assert_eq(b._spawn_queue[0]["at_ms"], 0.0, "precondition: the first slime spawns at t=0")
-	assert_eq(b._spawn_queue[1]["at_ms"], 500.0, "precondition: the second slime spawns at t=500")
+	# One queue per path; demoMap has a single entrance, so queue 0 is the wave.
+	assert_eq(b._spawn_queues[0][0]["at_ms"], 0.0, "precondition: the first slime spawns at t=0")
+	assert_eq(b._spawn_queues[0][1]["at_ms"], 500.0, "precondition: the second slime spawns at t=500")
 
 	b._physics_process(0.0)  # delta 0: _wave_clock stays at 0.0, only the t=0 spawn is due
 	assert_eq(b._enemies_root.get_child_count(), 1, "only the t=0 spawn has occurred")
@@ -588,9 +589,9 @@ func test_physics_process_spawns_enemies_exactly_when_the_clock_reaches_at_ms() 
 func test_wave_clears_only_after_every_spawn_has_left_the_board() -> bool:
 	var b := _ready_board()
 	b.start_next_wave()
-	b._spawn_queue = [{"kind": &"slime", "at_ms": 0.0}]
+	b._spawn_queues = [[{"kind": &"slime", "at_ms": 0.0}]]
 	b._wave_clock = 0.0
-	b._spawned = 0
+	b._spawned_per_path = [0]
 
 	var state_events: Array = []
 	b.wave_state_changed.connect(func(a): state_events.append(a))
@@ -657,9 +658,9 @@ func test_clearing_wave_nineteen_does_not_emit_victory() -> bool:
 func test_enemy_leak_subtracts_lives_by_the_value_leak_resolve_produces() -> bool:
 	var b := _ready_board()
 	b.start_next_wave()
-	b._spawn_queue = [{"kind": &"bee", "at_ms": 0.0}]
+	b._spawn_queues = [[{"kind": &"bee", "at_ms": 0.0}]]
 	b._wave_clock = 0.0
-	b._spawned = 0
+	b._spawned_per_path = [0]
 	b._physics_process(0.0)  # spawns the bee and wires its died/leaked signals to the board
 	var enemy: Enemy = b._enemies_root.get_child(0)
 
@@ -679,9 +680,9 @@ func test_enemy_leak_subtracts_lives_by_the_value_leak_resolve_produces() -> boo
 func test_enemy_died_signal_adds_its_reward_to_gold() -> bool:
 	var b := _ready_board()
 	b.start_next_wave()
-	b._spawn_queue = [{"kind": &"ogre", "at_ms": 0.0}]
+	b._spawn_queues = [[{"kind": &"ogre", "at_ms": 0.0}]]
 	b._wave_clock = 0.0
-	b._spawned = 0
+	b._spawned_per_path = [0]
 	b._physics_process(0.0)  # spawns the ogre and wires its died/leaked signals to the board
 	var enemy: Enemy = b._enemies_root.get_child(0)
 
@@ -1308,4 +1309,80 @@ func test_selling_a_tower_announces_the_kind() -> bool:
 	board.sell_selected_tower()
 	assert_eq(seen, [&"basic"], "the sale named the kind that was sold")
 	board.free()
+	return true
+
+# --------------------------------------------------------------------------
+# Multi-spawn (spec section 6.2)
+# --------------------------------------------------------------------------
+
+## Like _ready_board, but on a named map rather than Maps.FIRST.
+func _ready_board_for_map(map_name: StringName) -> GameBoard:
+	var b := _instantiate_board()
+	b.set_map_for_test(map_name)
+	b.notification(Node.NOTIFICATION_READY)
+	return b
+
+# The full wave composition runs down EVERY path, not divided between them.
+# Ported faithfully from upstream, which computes totalEnemies * paths.length.
+# That is what makes The Fork harder than The Pass at the same wave number,
+# and why it opens with 250 gold rather than 100.
+func test_a_two_path_map_spawns_the_whole_wave_down_each_path() -> bool:
+	var one := _ready_board_for_map(&"demoMap")
+	var two := _ready_board_for_map(&"map2")
+	one.start_next_wave()
+	two.start_next_wave()
+	for i in 600:
+		one._physics_process(0.05)
+		two._physics_process(0.05)
+	assert_true(one.get_spawned_count() > 0, "precondition: the one-path map spawned at all")
+	assert_eq(two.get_spawned_count(), one.get_spawned_count() * 2,
+		"two entrances field twice the wave")
+	one.free()
+	two.free()
+	return true
+
+func test_enemies_enter_from_both_entrances() -> bool:
+	var board := _ready_board_for_map(&"map2")
+	board.start_next_wave()
+	for i in 60:
+		board._physics_process(0.05)
+	var starts := {}
+	for child in board._enemies_root.get_children():
+		starts[child.position] = true
+	assert_true(starts.size() >= 2,
+		"enemies entered from more than one place on the board")
+	board.free()
+	return true
+
+func test_a_one_path_map_is_unchanged_by_the_per_path_queues() -> bool:
+	var board := _ready_board_for_map(&"demoMap")
+	board.start_next_wave()
+	for i in 600:
+		board._physics_process(0.05)
+	assert_eq(board.get_spawned_count(), Waves.build_schedule(1).size(),
+		"one path issues exactly one schedule, as it always did")
+	board.free()
+	return true
+
+# _all_spawns_issued must check EVERY queue, not just the first.
+#
+# Today's two paths always finish together - identical schedules, one clock -
+# so a queue-0-only check passes the whole suite. Mutation testing showed
+# exactly that. This test stages queues of different lengths directly, which
+# is the only way to tell the two implementations apart, and it matters the
+# moment anything gives one entrance a different composition from another.
+func test_the_wave_does_not_clear_while_any_path_still_has_spawns_pending() -> bool:
+	var b := _ready_board_for_map(&"map2")
+	b.start_next_wave()
+	# Path 0 is finished; path 1 still has one enemy to send.
+	b._spawn_queues = [
+		[{"kind": &"slime", "at_ms": 0.0}],
+		[{"kind": &"slime", "at_ms": 0.0}, {"kind": &"slime", "at_ms": 999999.0}],
+	]
+	b._spawned_per_path = [1, 1]
+	assert_false(b._all_spawns_issued(),
+		"path 1 has an enemy left, so the wave is not done issuing")
+	b._spawned_per_path = [1, 2]
+	assert_true(b._all_spawns_issued(), "and it is once every path has finished")
+	b.free()
 	return true
