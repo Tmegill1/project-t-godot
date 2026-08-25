@@ -217,3 +217,38 @@ func test_build_schedule_breaks_ties_by_push_order() -> bool:
 	# passing over a schedule with none (e.g. if get_composition regressed).
 	assert_eq(tie_groups_checked, 10, "wave 6 has exactly ten tied at_ms instants to check")
 	return true
+
+# --------------------------------------------------------------------------
+# The gold modifier (spec 2026-08-24-slice-0-design.md section 4.6)
+# --------------------------------------------------------------------------
+
+func test_gold_modifier_is_flat_through_wave_five() -> bool:
+	for w in range(1, 6):
+		var m := Waves.get_modifiers(w)
+		assert_almost_eq(m["gold_modifier"], 1.0, 0.0001, "wave %d gold flat" % w)
+	return true
+
+func test_gold_modifier_decays_past_wave_five() -> bool:
+	var m10 := Waves.get_modifiers(10)
+	assert_almost_eq(m10["gold_modifier"], 0.875, 0.0001, "wave 10: 1.0 - 5*0.025")
+	var m20 := Waves.get_modifiers(20)
+	assert_almost_eq(m20["gold_modifier"], 0.625, 0.0001, "wave 20: 1.0 - 15*0.025")
+	return true
+
+# The floor is a safety rail for endless play, not part of the 20-wave tuning:
+# at wave 20 the modifier is 0.625, well clear of it. This test exists so that
+# stays true, and so nobody "simplifies" the maxf away.
+func test_gold_modifier_never_falls_below_the_floor() -> bool:
+	var deep := Waves.get_modifiers(100)
+	assert_almost_eq(deep["gold_modifier"], Waves.MIN_GOLD_MODIFIER, 0.0001,
+		"a very deep wave clamps at the floor rather than going negative")
+	assert_true(Waves.get_modifiers(20)["gold_modifier"] > Waves.MIN_GOLD_MODIFIER,
+		"but the floor does not bind anywhere inside the twenty-wave run")
+	return true
+
+func test_gold_modifier_shrinks_where_health_and_speed_grow() -> bool:
+	var m := Waves.get_modifiers(15)
+	assert_true(m["health_modifier"] > 1.0, "health scales up")
+	assert_true(m["speed_modifier"] > 1.0, "speed scales up")
+	assert_true(m["gold_modifier"] < 1.0, "and gold scales down")
+	return true
