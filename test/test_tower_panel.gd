@@ -49,7 +49,7 @@ func test_bind_creates_one_button_per_kind_with_base_price_and_label() -> bool:
 		var price := EconomySim.tower_price(kind, 0)
 		var limit := EconomySim.tower_limit(kind, b.get_map_name())
 		var button: Button = p._buttons[kind]
-		assert_eq(button.text, "%s 0/%d\n%d gold" % [def["label"], limit, price],
+		assert_eq(button.text, "%s\n0/%d · %d gold" % [def["label"], limit, price],
 			"%s button shows its base price and an empty count" % kind)
 	p.free(); b.free()
 	return true
@@ -256,7 +256,7 @@ func test_refresh_shows_the_current_escalated_price_after_a_placement_of_that_ki
 
 	var button: Button = p._buttons[&"basic"]
 	var limit := EconomySim.tower_limit(&"basic", b.get_map_name())
-	assert_eq(button.text, "%s 1/%d\n%d gold" % [Towers.DEFS[&"basic"]["label"], limit, escalated_price],
+	assert_eq(button.text, "%s\n1/%d · %d gold" % [Towers.DEFS[&"basic"]["label"], limit, escalated_price],
 		"after one basic is placed the button shows the escalated price and a count of one")
 	p.free(); b.free()
 	return true

@@ -105,7 +105,12 @@ func _refresh(gold: int) -> void:
 		var limit := EconomySim.tower_limit(kind, _board.get_map_name())
 		var price := EconomySim.tower_price(kind, owned)
 		var button: Button = _buttons[kind]
-		button.text = "%s %d/%d\n%d gold" % [def["label"], owned, limit, price]
+		# Name on its own line, the two numbers grouped on the second. Putting
+		# the count beside the name instead pushed "Long Range 0/5" past the
+		# 140px button and squeezed its icon to zero width - visible only in a
+		# screenshot, since the icon was still set and the button still
+		# measured 140x56.
+		button.text = "%s\n%d/%d · %d gold" % [def["label"], owned, limit, price]
 		# Two independent reasons a kind can be unbuildable. The limit is
 		# checked as well as the price because a maxed kind stays unbuildable
 		# however rich the player gets, and a button that looks affordable but

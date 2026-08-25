@@ -27,6 +27,13 @@ const ENEMY_SCENE := preload("res://game/enemy.tscn")
 const TOWER_SCENE := preload("res://game/tower.tscn")
 const PROJECTILE_SCENE := preload("res://game/projectile.tscn")
 
+## Width the build panel needs beside the map.
+##
+## 140 is what the design viewport reserved: 1244 total minus map 1's 1104.
+## TowerPanel anchors its left edge to the map's right edge and absorbs any
+## surplus beyond this, so it is a MINIMUM rather than a fixed width.
+const PANEL_WIDTH := 140
+
 var _map_name: StringName = Maps.FIRST
 var _tiles: Array = []
 var _paths: Array[PackedVector2Array] = []
@@ -79,6 +86,30 @@ func _ready() -> void:
 	gold_changed.emit(_gold)
 	lives_changed.emit(_lives)
 	wave_changed.emit(_wave, Waves.MAX_WAVES)
+
+	# Applied here rather than in project.godot because it is per map. Guarded
+	# because the test harness has no window: nodes there are never inside a
+	# live tree, so get_window() is not available to them.
+	if is_inside_tree():
+		var window := get_window()
+		if window != null:
+			window.content_scale_size = required_content_size(_map_name)
+
+## The base resolution a map needs: the map itself plus room for the panel.
+##
+## The window's content_scale_size is set to this rather than a Camera2D being
+## added, and that choice is load-bearing. Both maps past the first are larger
+## than the 1244x672 design box in both axes, so something has to give - but a
+## camera, or a scale on this node, would put a transform between
+## get_global_mouse_position() and every rule that consumes it. Placement,
+## targeting, splash geometry and TowerPanel.offset_left all assume world
+## space IS map pixel space, and this project's own history says geometry bugs
+## are found by screenshots rather than by the suite. Changing the base
+## resolution reaches the same result with no transform at all: the stretch
+## system does the downscaling, and a map pixel stays a world unit.
+static func required_content_size(map_name: StringName) -> Vector2i:
+	var map_px := Maps.pixel_size(map_name)
+	return Vector2i(map_px.x + PANEL_WIDTH, map_px.y)
 
 func get_gold() -> int: return _gold
 func get_lives() -> int: return _lives

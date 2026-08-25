@@ -1386,3 +1386,45 @@ func test_the_wave_does_not_clear_while_any_path_still_has_spawns_pending() -> b
 	assert_true(b._all_spawns_issued(), "and it is once every path has finished")
 	b.free()
 	return true
+
+# --------------------------------------------------------------------------
+# Per-map base resolution (spec section 6.3)
+# --------------------------------------------------------------------------
+
+func test_the_content_size_is_the_map_plus_the_panel() -> bool:
+	var size := GameBoard.required_content_size(&"demoMap")
+	assert_eq(size.x, 1104 + GameBoard.PANEL_WIDTH, "map width plus the build panel")
+	assert_eq(size.y, 672, "and the map's own height")
+	return true
+
+func test_larger_maps_ask_for_a_larger_content_size() -> bool:
+	var pass_size := GameBoard.required_content_size(&"demoMap")
+	var fork := GameBoard.required_content_size(&"map2")
+	var coils := GameBoard.required_content_size(&"map3")
+	assert_true(fork.y > pass_size.y, "The Fork is taller than the design box")
+	assert_true(coils.x > pass_size.x, "The Coils is wider")
+	return true
+
+# The whole point of resizing the base viewport rather than adding a camera:
+# a tower's world position stays a map-pixel position, so every placement,
+# targeting and splash calculation is untouched by which map is loaded.
+func test_world_space_still_equals_map_pixel_space_on_a_large_map() -> bool:
+	var board := _ready_board_for_map(&"map3")
+	board.select_tower_kind(&"basic")
+	var spot := _find_placeable_positions(board, 1)[0]
+	board._try_place(spot)
+	assert_eq(board._towers_root.get_child_count(), 1, "the tower was placed")
+	assert_eq(board._towers_root.get_child(0).position, spot,
+		"at exactly the world coordinate asked for, on a map larger than the viewport")
+	board.free()
+	return true
+
+# Every map must fit its own declared pixel size, or the panel overlaps the
+# board on one of them.
+func test_every_map_asks_for_room_for_its_own_pixels() -> bool:
+	for name in Maps.DEFS:
+		var px := Maps.pixel_size(name)
+		var need := GameBoard.required_content_size(name)
+		assert_eq(need.y, px.y, "%s height is the map's own" % name)
+		assert_true(need.x > px.x, "%s leaves room for the panel" % name)
+	return true
