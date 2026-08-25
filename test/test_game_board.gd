@@ -1195,3 +1195,105 @@ func test_the_wave_reward_signal_carries_all_three_parts() -> bool:
 	assert_eq(seen[0][2], 10, "interest")
 	board.free()
 	return true
+
+# --------------------------------------------------------------------------
+# The prep timer (spec section 4.5)
+# --------------------------------------------------------------------------
+
+# The clock does NOT run before wave 1. A countdown on an empty board, with
+# 100 gold and no information, is hostile to a new player, and the payout is
+# meaningless when there is nothing yet to spend it on.
+func test_no_prep_timer_before_the_first_wave() -> bool:
+	var board := _ready_board()
+	assert_false(board.is_prepping(), "a fresh board is not counting down")
+	board.free()
+	return true
+
+func test_clearing_a_wave_starts_the_prep_timer() -> bool:
+	var board := _ready_board()
+	board.start_next_wave()
+	board.force_wave_cleared_for_test()
+	assert_true(board.is_prepping(), "the clock runs between waves")
+	assert_almost_eq(board.get_prep_remaining_ms(), 20000.0, 0.001, "a full window")
+	board.free()
+	return true
+
+func test_the_prep_timer_counts_down() -> bool:
+	var board := _ready_board()
+	board.start_next_wave()
+	board.force_wave_cleared_for_test()
+	board._physics_process(1.0)
+	assert_almost_eq(board.get_prep_remaining_ms(), 19000.0, 0.001, "a second gone")
+	board.free()
+	return true
+
+func test_the_prep_timer_starts_the_next_wave_on_its_own() -> bool:
+	var board := _ready_board()
+	board.start_next_wave()
+	board.force_wave_cleared_for_test()
+	assert_eq(board.get_wave(), 1, "still on wave 1 while prepping")
+	board._physics_process(21.0)
+	assert_eq(board.get_wave(), 2, "the timer started the next wave")
+	assert_false(board.is_prepping(), "and the clock stopped")
+	board.free()
+	return true
+
+func test_calling_early_pays_for_the_time_given_up() -> bool:
+	var board := _ready_board()
+	board.start_next_wave()
+	board.force_wave_cleared_for_test()
+	var before := board.get_gold()
+	board._physics_process(10.0)
+	board.start_next_wave()
+	assert_eq(board.get_gold() - before, 30, "10 seconds left * 3 gold")
+	board.free()
+	return true
+
+func test_letting_the_clock_expire_pays_no_call_early_bonus() -> bool:
+	var board := _ready_board()
+	board.start_next_wave()
+	board.force_wave_cleared_for_test()
+	var before := board.get_gold()
+	board._physics_process(21.0)
+	assert_eq(board.get_gold(), before, "the timer's own start earns nothing")
+	board.free()
+	return true
+
+# Winning must not arm the clock. _on_wave_cleared sets _run_finished and
+# emits victory BEFORE arming, or a won run starts a twenty-first wave.
+func test_clearing_the_final_wave_does_not_start_a_prep_timer() -> bool:
+	var board := _ready_board()
+	board.set_wave_for_test(Waves.MAX_WAVES)
+	board.force_wave_cleared_for_test()
+	assert_false(board.is_prepping(), "a won run is not counting down to wave 21")
+	board.free()
+	return true
+
+func test_losing_stops_the_prep_timer() -> bool:
+	var board := _ready_board()
+	board.start_next_wave()
+	board.force_wave_cleared_for_test()
+	assert_true(board.is_prepping(), "prepping before the loss")
+	board.force_game_over_for_test()
+	board._physics_process(1.0)
+	assert_false(board.is_prepping(), "a lost run is not counting down")
+	board.free()
+	return true
+
+# Calling early must CLEAR the clock, not merely pay for it.
+#
+# Found by mutation testing, and by nothing else: deleting the reset in
+# start_next_wave left every other test green. The damage is not a double
+# spawn - start_next_wave's own _wave_active guard stops that - it is that
+# the countdown keeps running underneath the live wave, so is_prepping()
+# stays true and the HUD counts down during a fight.
+func test_calling_early_clears_the_clock_rather_than_only_paying_for_it() -> bool:
+	var board := _ready_board()
+	board.start_next_wave()
+	board.force_wave_cleared_for_test()
+	board._physics_process(10.0)
+	board.start_next_wave()
+	assert_false(board.is_prepping(), "the countdown stopped when the wave started")
+	assert_almost_eq(board.get_prep_remaining_ms(), 0.0, 0.001, "and the clock is at zero")
+	board.free()
+	return true

@@ -20,6 +20,7 @@ signal tower_selected(tower: Tower)
 signal tower_deselected()
 signal placement_rejected(reason: String)
 signal wave_reward(base: int, speed: int, interest: int)
+signal prep_changed(remaining_ms: float, bonus: int)
 
 const ENEMY_SCENE := preload("res://game/enemy.tscn")
 const TOWER_SCENE := preload("res://game/tower.tscn")
@@ -41,6 +42,10 @@ var _wave_clock := 0.0
 var _spawned := 0
 ## The most recent wave clear's payout, itemised, for the HUD and for tests.
 var _last_wave_reward := {"base": 0, "speed": 0, "interest": 0}
+## Milliseconds left before the next wave starts on its own. Zero means no
+## countdown is running - the game is either mid-wave, finished, or waiting
+## for the player's very first Start press.
+var _prep_remaining_ms := 0.0
 ## Which variant each spawn draws. Reset per wave so replaying a wave shows
 ## the same creatures, and separate from every other random system so enemy
 ## variety does not move when they do.
@@ -99,6 +104,23 @@ func set_gold_for_test(amount: int) -> void:
 func force_wave_cleared_for_test() -> void:
 	_on_wave_cleared()
 
+func get_prep_remaining_ms() -> float:
+	return _prep_remaining_ms
+
+func is_prepping() -> bool:
+	return _prep_remaining_ms > 0.0
+
+## Test seam: reaching the final wave otherwise means playing nineteen.
+func set_wave_for_test(wave: int) -> void:
+	_wave = wave
+
+## Test seam: losing otherwise means leaking twenty lives.
+func force_game_over_for_test() -> void:
+	_run_finished = true
+	_wave_active = false
+	_prep_remaining_ms = 0.0
+	game_over.emit()
+
 func select_tower_kind(kind: StringName) -> void:
 	_selected_kind = kind
 	# Rules state before anything visual - same reasoning as Tower.setup
@@ -120,6 +142,18 @@ func select_tower_kind(kind: StringName) -> void:
 func start_next_wave() -> void:
 	if _wave_active or _run_finished:
 		return
+
+	# Whether the player pressed the button or the clock ran out, one path
+	# starts a wave. call_early_bonus returns 0 for an expired clock, so the
+	# timeout case needs no special handling here.
+	if _prep_remaining_ms > 0.0:
+		var early_bonus := EconomySim.call_early_bonus(_prep_remaining_ms)
+		if early_bonus > 0:
+			_gold += early_bonus
+			gold_changed.emit(_gold)
+	_prep_remaining_ms = 0.0
+	prep_changed.emit(0.0, 0)
+
 	_wave += 1
 	if _wave > Waves.MAX_WAVES:
 		return
@@ -136,6 +170,17 @@ func _physics_process(delta: float) -> void:
 	if _run_finished:
 		return
 	var delta_ms := delta * 1000.0
+
+	# Deliberately inside _physics_process rather than on a Timer node, so
+	# Engine.time_scale scales it: fast-forwarding must not buy the player
+	# more real thinking time. It also stops on its own when the run ends,
+	# because the _run_finished guard above already returned.
+	if _prep_remaining_ms > 0.0:
+		_prep_remaining_ms = maxf(0.0, _prep_remaining_ms - delta_ms)
+		prep_changed.emit(_prep_remaining_ms,
+			EconomySim.call_early_bonus(_prep_remaining_ms))
+		if _prep_remaining_ms <= 0.0:
+			start_next_wave()
 
 	if _wave_active:
 		_wave_clock += delta_ms
@@ -203,6 +248,15 @@ func _on_wave_cleared() -> void:
 		_run_finished = true
 		victory.emit()
 		_play_sound(&"victory")
+		return
+
+	# Armed only PAST the victory check above, and the ordering is
+	# load-bearing: winning must not start a countdown to a twenty-first wave
+	# that cannot exist. test_clearing_the_final_wave_does_not_start_a_prep_timer
+	# is what holds it.
+	_prep_remaining_ms = float(Economy.CALL_EARLY["prep_duration_ms"])
+	prep_changed.emit(_prep_remaining_ms,
+		EconomySim.call_early_bonus(_prep_remaining_ms))
 
 # --- Input -------------------------------------------------------------
 
