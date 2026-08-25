@@ -248,7 +248,13 @@ func test_splash_radius_boundary_at_wave_ten() -> bool:
 	assert_eq(r["kills"], 12, "exact: a bystander at exactly the splash radius is hit (<= not <)")
 	assert_eq(r["leaks"], 59, "exact: three fewer leaks than the < mutant")
 	assert_eq(r["lives_lost"], 222, "exact: lives lost at this exact leak count")
-	assert_eq(r["gold_earned"], 120, "exact: gold from exactly these kills")
+	# 108, not the 120 this paid before the wave gold modifier landed. Wave 10
+	# pays at 0.875, and kill_reward rounds PER KILL rather than on the total,
+	# so this is not simply 120 * 0.875 (which would be 105) - it is the sum of
+	# twelve individually rounded payouts. Kills, leaks and lives_lost are all
+	# unchanged, which is the point: the modifier changes what a kill pays and
+	# nothing about the fight.
+	assert_eq(r["gold_earned"], 108, "exact: gold from exactly these kills, at wave 10's rate")
 	return true
 
 # Ported: "stops even under a heavy wave with a weak defence" (termination).

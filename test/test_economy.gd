@@ -264,3 +264,34 @@ func test_kill_reward_ignores_a_negative_reward_rather_than_netting_it_off() -> 
 	assert_eq(EconomySim.kill_reward(-5, {&"bonus_gold_per_kill": 10}), 10,
 		"the bonus is paid in full, not reduced to 5")
 	return true
+
+# --------------------------------------------------------------------------
+# The wave gold modifier (spec 2026-08-24-slice-0-design.md section 4.6)
+# --------------------------------------------------------------------------
+
+func test_kill_reward_defaults_to_an_unmodified_wave() -> bool:
+	assert_eq(EconomySim.kill_reward(20, {}), 20,
+		"omitting the modifier pays the base reward, so old call sites are safe")
+	return true
+
+func test_kill_reward_applies_the_wave_gold_modifier() -> bool:
+	assert_eq(EconomySim.kill_reward(20, {}, 0.625), 13, "20 * 0.625 = 12.5, rounds to 13")
+	assert_eq(EconomySim.kill_reward(20, {}, 0.875), 18, "20 * 0.875 = 17.5, rounds to 18")
+	return true
+
+# The ORDER is the point: the wave modifier scales the base reward, and the
+# tower's own gold multiplier then applies to that scaled figure.
+func test_the_wave_modifier_applies_before_the_towers_gold_multiplier() -> bool:
+	# base 20, wave 0.5 -> 10, tower x2 -> 20, flat +2 -> 22.
+	assert_eq(EconomySim.kill_reward(20, {&"gold_multiplier": 2.0, &"bonus_gold_per_kill": 2}, 0.5),
+		22, "wave modifier first, then the tower multiplier, then the flat bonus")
+	return true
+
+func test_the_flat_bonus_is_not_scaled_by_the_wave_modifier() -> bool:
+	assert_eq(EconomySim.kill_reward(0, {&"bonus_gold_per_kill": 5}, 0.4), 5,
+		"a flat bonus survives the wave modifier intact")
+	return true
+
+func test_kill_reward_still_never_pays_less_than_zero_with_a_modifier() -> bool:
+	assert_eq(EconomySim.kill_reward(-5, {}, 0.5), 0, "a bad reward stays inert")
+	return true

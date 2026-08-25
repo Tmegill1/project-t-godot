@@ -189,7 +189,9 @@ func _die(source: Dictionary) -> void:
 	sim["alive"] = false
 	# Emitted before the presentation, unchanged across three rewrites of what
 	# a death looks like: economy timing must not move because the art did.
-	died.emit(EconomySim.kill_reward(int(Enemies.DEFS[kind]["reward"]), source), kind)
+	died.emit(EconomySim.kill_reward(
+		int(Enemies.DEFS[kind]["reward"]), source,
+		float(Waves.get_modifiers(_wave)["gold_modifier"])), kind)
 	_health_bar.visible = false
 	# Every enemy the test harness builds is outside the scene tree (see the
 	# header of test/test_enemy.gd), and both create_timer and the frames
