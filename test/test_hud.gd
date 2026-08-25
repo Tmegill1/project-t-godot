@@ -499,3 +499,45 @@ func test_the_wave_reward_is_announced_itemised() -> bool:
 	assert_true(text.contains("10"), "and the interest is shown")
 	h.free(); b.free()
 	return true
+
+# --------------------------------------------------------------------------
+# The backing plate (spec section 6.4)
+# --------------------------------------------------------------------------
+
+# The white HUD text was confirmed illegible on ice and desert, with
+# screenshots. A plate is chosen over per-biome text tints because it is
+# biome-independent: it cannot be wrong on a fourth biome someone adds later.
+func test_the_hud_has_a_backing_plate() -> bool:
+	var h := _ready_hud()
+	assert_true(h.get_node("Plate") != null, "the plate exists")
+	assert_true(h.get_node("Plate").color.a > 0.3,
+		"and it is opaque enough to actually back the text")
+	h.free()
+	return true
+
+func test_the_plate_spans_the_bar_and_sits_behind_it() -> bool:
+	var h := _ready_hud()
+	assert_eq(h.get_node("Plate").anchor_left, 0.0, "anchored to the left edge")
+	assert_eq(h.get_node("Plate").anchor_right, 1.0, "and the right, so it spans any width")
+	assert_true(h.get_node("Plate").get_index() < h.get_node("Top").get_index(),
+		"drawn before the bar, so the text sits on top of it")
+	h.free()
+	return true
+
+# The plate covers the whole bar, so a click anywhere along the top would be
+# swallowed if it accepted input - including clicks meant for the board.
+func test_the_plate_never_eats_a_click() -> bool:
+	var h := _ready_hud()
+	assert_eq(h.get_node("Plate").mouse_filter, Control.MOUSE_FILTER_IGNORE,
+		"the plate is decoration and must not take input")
+	h.free()
+	return true
+
+# The plate is as tall as the bar it backs. A shorter one leaves the text's
+# descenders over bare map; a taller one darkens board the player needs.
+func test_the_plate_matches_the_bars_height() -> bool:
+	var h := _ready_hud()
+	assert_eq(h.get_node("Plate").offset_bottom, h.get_node("Top").offset_bottom,
+		"plate and bar end at the same line")
+	h.free()
+	return true

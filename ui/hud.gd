@@ -37,6 +37,17 @@ const FAST_TIME_SCALE := 1.5
 ## test_hud.gd pins both against each other.
 const EDGE_INSET := 12.0
 
+# The scene also carries a `Plate` ColorRect behind `Top`. It has no field
+# here on purpose - it is pure decoration the script never touches, and a dead
+# @onready earns a "declared but never used" warning. test_hud.gd reaches it
+# with get_node("Plate").
+#
+# It exists because the white Gold/Lives/Wave text is illegible on the ice and
+# desert biomes - confirmed live on both, screenshots at
+# docs/screenshots/board-map{2,3}.png. A plate rather than a per-biome text
+# tint or a shadow: it is the only one of the three that is biome-independent,
+# so a fourth biome cannot arrive and break it. Its mouse_filter is IGNORE, so
+# it never eats a click meant for the board underneath.
 @onready var _gold: Label = $Top/GoldLabel
 @onready var _lives: Label = $Top/LivesLabel
 @onready var _wave: Label = $Top/WaveLabel
