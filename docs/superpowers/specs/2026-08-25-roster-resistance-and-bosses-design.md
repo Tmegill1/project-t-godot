@@ -104,9 +104,51 @@ ogres and trolls and shields on bats and shamans gives every tower a job:
 | Tower | Is the answer to | Because |
 |---|---|---|
 | Magic (was Fast) | bats, shamans | fastest cadence in the game strips shield charges cheapest |
-| Long Range | ogres, trolls | biggest per-hit damage, and the only pierce in the game |
+| Long Range | ogres, trolls | biggest per-hit damage, and the deepest pierce |
 | Mortar | packed waves | splash hits several shield-bearers at once |
 | Basic | everything, adequately | the generalist, beaten at both ends |
+
+### 3.1 Damage types, with soft edges
+
+**Amended 2026-08-25 on the owner's instruction, and the amendment matters:**
+an earlier draft made the walls hard, which would have let armour reduce a
+4-damage Magic tower to *nothing*. The rule now is rock-paper-scissors with
+**soft edges** — every tower stays useful everywhere while still having a
+speciality.
+
+| | vs **armour** | vs **shield** |
+|---|---|---|
+| **Physical** — Basic, Mortar, Long Range | **strong** | reduced, but still damages |
+| **Magic** — the Magic tower | reduced, but still damages | **strong** |
+
+Two mechanisms, numbers set by the measurement pass:
+
+- **Armour** is flat reduction per hit, biting physical at full rate and magic
+  at a higher one, with a **minimum-damage floor** so magic is never reduced to
+  zero.
+- **Shields** absorb most of a hit and cost a charge. Magic leaks a far larger
+  fraction through than physical, so magic strips shields fastest — but
+  physical gets *something* through rather than being wholly absorbed.
+
+⚠ **That last point changes existing tested behaviour.** `Damage.resolve`
+currently has a shield absorb the **whole** hit, and several of the 68
+assertions in `test/test_damage.gd` pin exactly that. They move deliberately.
+
+### 3.2 Penetration scales with tower level
+
+**Owner's instruction, 2026-08-25.** Every tower gains penetration as it
+upgrades, not just the two Long Range tiers that grant `pierce_bonus` today.
+
+- Derived from **total tiers bought across both branches**, so investment in
+  any direction improves a tower's ability to get through.
+- The explicit `pierce_bonus` tiers stack **on top**, so Long Range remains the
+  pierce specialist rather than being levelled down to everyone else.
+- This is the second guarantee that no tower is ever walled: a maxed Magic
+  tower carries penetration although neither of its branches mentions pierce.
+
+`UpgradesSim.resolve_tower_stats` already computes `pierce` and
+`Damage.resolve` already subtracts it from armour, so this is a new **term in
+an existing calculation**, not new machinery.
 
 **This redeems the weakest tower.** Measured: a maxed Fast does 14 DPS against
 Long Range's 72, the worst ratio in the game. It is bad at damage and always
@@ -153,11 +195,14 @@ for 4. Armour of 4 or more reduces that to nothing — not "less", *nothing* —
 and Magic has no pierce in either of its branches. If ogres and trolls carry
 meaningful armour, Magic becomes literally useless against them.
 
-That is acceptable *as counterplay* (Magic is the shield answer, not the armour
-answer) and unacceptable *as a dead tower*. The plan must check both, and the
-fallback if it reads badly is a small innate pierce on every tower, or a
-minimum-damage floor in `Damage.resolve`. Neither is chosen here; the
-measurement decides.
+That is acceptable *as counterplay* and unacceptable *as a dead tower*.
+
+**Both fallbacks the first draft listed are now design, not contingency** —
+§3.1's minimum-damage floor and §3.2's level-scaled penetration exist precisely
+to stop this. The measurement pass still has to confirm they are *enough*: a
+Magic tower that technically deals 1 damage to an ogre is not walled, but it is
+not a choice either. The task reports whether Magic reads as a useful
+generalist, a specialist, or a token.
 
 ## 5. The shaman's shield aura
 

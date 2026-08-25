@@ -533,6 +533,240 @@ git commit -m "Give ogres armour and bats shields, and scale both by wave"
 
 ---
 
+## Task 5b: Damage types, with soft edges
+
+**Files:**
+- Modify: `data/towers.gd` (a `damage_type` per tower), `sim/damage.gd`, `game/tower.gd` (put it in the fired `source`), `sim/harness.gd`
+- Test: `test/test_damage.gd`, `test/test_data_tables.gd`
+
+**Interfaces:**
+- Consumes: armour and shields from Task 5.
+- Produces: `Towers.DEFS[kind]["damage_type"]` of `&"physical"` or `&"magic"`; `Damage.ARMOR_VS_MAGIC`, `Damage.MIN_DAMAGE_FRACTION`, `Damage.SHIELD_LEAK_MAGIC`, `Damage.SHIELD_LEAK_PHYSICAL`. `source[&"damage_type"]` is read by `Damage.resolve`, defaulting to `&"physical"` so every existing caller keeps its current behaviour on the armour path.
+
+**This changes tested behaviour on purpose.** A shield currently absorbs the *whole* hit and several of the 68 assertions in `test_damage.gd` pin exactly that. They move. **Update them deliberately — do not delete them**, and keep the ones that pin the parts which do not change (a corpse absorbing nothing, negative damage not healing, a zero-damage source not stripping a charge).
+
+- [ ] **Step 1: Write the failing tests**
+
+```gdscript
+# Rock-paper-scissors with SOFT edges. The whole point of the owner's rule is
+# that neither damage type is ever reduced to nothing - a tower with a
+# speciality is a choice, a tower that reads zero is a dead button.
+
+func test_magic_is_stronger_against_shields_than_physical() -> bool:
+	var target := {"health": 100.0, "shield": 1, "armor": 0, "alive": true}
+	var magic := Damage.resolve({"damage": 20.0, "damage_type": &"magic"}, target)
+	var physical := Damage.resolve({"damage": 20.0, "damage_type": &"physical"}, target)
+	assert_true(magic["damage_dealt"] > physical["damage_dealt"],
+		"magic leaks more through a shield")
+	return true
+
+func test_physical_still_damages_a_shielded_target() -> bool:
+	var target := {"health": 100.0, "shield": 1, "armor": 0, "alive": true}
+	var r := Damage.resolve({"damage": 20.0, "damage_type": &"physical"}, target)
+	assert_true(r["damage_dealt"] > 0.0,
+		"reduced, not absorbed outright - the owner's soft-edge rule")
+	return true
+
+func test_both_damage_types_still_cost_the_shield_a_charge() -> bool:
+	var target := {"health": 100.0, "shield": 2, "armor": 0, "alive": true}
+	for kind in [&"magic", &"physical"]:
+		var r := Damage.resolve({"damage": 20.0, "damage_type": kind}, target)
+		assert_eq(int(r["remaining_shield"]), 1, "%s spent a charge" % kind)
+	return true
+
+func test_physical_is_stronger_against_armour_than_magic() -> bool:
+	var target := {"health": 100.0, "shield": 0, "armor": 10, "alive": true}
+	var physical := Damage.resolve({"damage": 20.0, "damage_type": &"physical"}, target)
+	var magic := Damage.resolve({"damage": 20.0, "damage_type": &"magic"}, target)
+	assert_true(physical["damage_dealt"] > magic["damage_dealt"],
+		"armour bites magic harder")
+	return true
+
+# The guarantee that makes the whole design safe.
+func test_armour_can_never_reduce_a_hit_to_nothing() -> bool:
+	var target := {"health": 100.0, "shield": 0, "armor": 9999, "alive": true}
+	for kind in [&"magic", &"physical"]:
+		var r := Damage.resolve({"damage": 4.0, "damage_type": kind}, target)
+		assert_true(r["damage_dealt"] > 0.0,
+			"%s still gets through absurd armour" % kind)
+	return true
+
+func test_the_damage_floor_is_a_fraction_of_the_incoming_hit() -> bool:
+	# A floor that is flat would make a 1-damage tower and a 100-damage tower
+	# equal against a wall. It scales with the hit instead.
+	var target := {"health": 1000.0, "shield": 0, "armor": 9999, "alive": true}
+	var small := Damage.resolve({"damage": 4.0, "damage_type": &"magic"}, target)
+	var large := Damage.resolve({"damage": 80.0, "damage_type": &"magic"}, target)
+	assert_true(large["damage_dealt"] > small["damage_dealt"],
+		"a bigger hit still gets more through the floor")
+	return true
+
+func test_an_absent_damage_type_reads_as_physical() -> bool:
+	var target := {"health": 100.0, "shield": 0, "armor": 10, "alive": true}
+	var typed := Damage.resolve({"damage": 20.0, "damage_type": &"physical"}, target)
+	var untyped := Damage.resolve({"damage": 20.0}, target)
+	assert_eq(untyped["damage_dealt"], typed["damage_dealt"],
+		"every pre-existing caller keeps its behaviour")
+	return true
+
+func test_every_tower_declares_a_damage_type() -> bool:
+	for kind in Towers.KINDS:
+		var t: StringName = Towers.DEFS[kind]["damage_type"]
+		assert_true(t == &"physical" or t == &"magic", "%s declares one" % kind)
+	assert_eq(Towers.DEFS[&"fast"]["damage_type"], &"magic", "the Magic tower is magic")
+	assert_eq(Towers.DEFS[&"long"]["damage_type"], &"physical", "Long Range is physical")
+	return true
+```
+
+- [ ] **Step 2: Run to verify they fail**
+
+Run: `godot --headless --quit --script test/run_tests.gd 2>&1 | tail -20`
+Expected: FAIL, and **several pre-existing shield assertions fail too** — that is the intended behaviour change, not a mistake. Note which, so Step 4 updates exactly those.
+
+- [ ] **Step 3: Implement**
+
+In `data/towers.gd` add `"damage_type": &"magic"` to `&"fast"` and `"damage_type": &"physical"` to the other three.
+
+In `sim/damage.gd`:
+
+```gdscript
+## How much harder armour bites magic than physical. Physical is the armour
+## answer; magic is reduced against it but never stopped (see MIN_DAMAGE_FRACTION).
+const ARMOR_VS_MAGIC := 1.6
+
+## The floor under every hit, as a FRACTION of the incoming damage.
+##
+## A fraction, not a flat number: a flat floor would make a 4-damage tower and
+## an 80-damage tower equally good against a wall, which inverts the whole
+## point of building the big one. This is what guarantees no tower is ever a
+## dead button, whatever armour it faces.
+const MIN_DAMAGE_FRACTION := 0.15
+
+## How much of a hit leaks past a shield charge. Magic strips shields fastest;
+## physical still gets something through rather than being wholly absorbed.
+const SHIELD_LEAK_MAGIC := 0.5
+const SHIELD_LEAK_PHYSICAL := 0.15
+```
+
+Replace the shield branch so it leaks rather than absorbing everything, and the armour branch so it scales by type and respects the floor. Both read
+`source.get(&"damage_type", &"physical")`, so every existing caller is unchanged on the armour path.
+
+In `game/tower.gd`'s `wants_to_fire` payload add `"damage_type": get_def()["damage_type"]`, and add the same key to the harness's `source` dictionary. Both must carry it or the harness and the board disagree, which is the one thing this project's whole structure exists to prevent.
+
+- [ ] **Step 4: Update the pre-existing shield assertions**
+
+Read each failure from Step 2. The ones pinning "a shield absorbs the whole hit" now pin "a shield leaks this fraction". The ones pinning corpse handling, negative damage, and zero-damage-does-not-strip-a-charge must still pass untouched — if any of those broke, the implementation is wrong, not the test.
+
+- [ ] **Step 5: Run to verify everything passes**
+
+Expected: PASS, exit 0.
+
+- [ ] **Step 6: Mutation-test**
+
+At minimum: set `MIN_DAMAGE_FRACTION` to 0 (the never-reduced-to-nothing test must fail); swap `SHIELD_LEAK_MAGIC` and `SHIELD_LEAK_PHYSICAL` (the magic-beats-shields test must fail); set `ARMOR_VS_MAGIC` to 1.0 (the physical-beats-armour test must fail); drop the `damage_type` from the tower's payload (a board-level test must fail — if none does, add one). Report survivors.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add data/towers.gd sim/damage.gd game/tower.gd sim/harness.gd test/
+git commit -m "Give damage a type, and give every wall a way through"
+```
+
+---
+
+## Task 5c: Penetration scales with tower level
+
+**Files:**
+- Modify: `sim/upgrades.gd`
+- Test: `test/test_upgrades.gd`
+
+**Interfaces:**
+- Consumes: Task 5b.
+- Produces: `UpgradesSim.PIERCE_PER_TIER`; `resolve_tower_stats(...)["pierce"]` includes a term derived from total tiers bought.
+
+- [ ] **Step 1: Write the failing tests**
+
+```gdscript
+# The owner's rule: every tower gets better at getting through as it levels,
+# not just the two Long Range tiers that name pierce explicitly.
+
+func test_an_unupgraded_tower_has_no_penetration() -> bool:
+	var s := UpgradesSim.resolve_tower_stats(&"fast", UpgradesSim.empty_tiers())
+	assert_eq(int(s["pierce"]), 0, "level one pierces nothing")
+	return true
+
+func test_penetration_grows_with_total_tiers_bought() -> bool:
+	var one := UpgradesSim.resolve_tower_stats(&"fast", {&"sustained": 1, &"burst": 0})
+	var many := UpgradesSim.resolve_tower_stats(&"fast", {&"sustained": 4, &"burst": 2})
+	assert_true(int(many["pierce"]) > int(one["pierce"]),
+		"a maxed tower gets through more than a barely-upgraded one")
+	return true
+
+# The point of the rule: the Magic tower has no pierce tier in either branch
+# and must still end up able to hurt an armoured target.
+func test_a_maxed_magic_tower_carries_penetration_it_never_bought() -> bool:
+	var s := UpgradesSim.resolve_tower_stats(&"fast", {&"sustained": 4, &"burst": 2})
+	assert_true(int(s["pierce"]) > 0,
+		"neither Magic branch mentions pierce, but levelling still grants it")
+	return true
+
+# Long Range must stay the specialist rather than being levelled down to
+# everyone else: its explicit tiers stack ON TOP of the scaling term.
+func test_the_pierce_tiers_stack_on_top_of_the_level_term() -> bool:
+	var specialist := UpgradesSim.resolve_tower_stats(&"long", {&"burst": 4, &"sustained": 2})
+	var generalist := UpgradesSim.resolve_tower_stats(&"fast", {&"sustained": 4, &"burst": 2})
+	assert_true(int(specialist["pierce"]) > int(generalist["pierce"]),
+		"same tier count, but Long Range bought pierce as well")
+	return true
+
+func test_penetration_counts_both_branches() -> bool:
+	var lopsided := UpgradesSim.resolve_tower_stats(&"basic", {&"sustained": 4, &"burst": 0})
+	var spread := UpgradesSim.resolve_tower_stats(&"basic", {&"sustained": 2, &"burst": 2})
+	assert_eq(int(lopsided["pierce"]), int(spread["pierce"]),
+		"four tiers is four tiers, however they were spent")
+	return true
+```
+
+- [ ] **Step 2: Run to verify they fail**
+
+Expected: FAIL — pierce is 0 for everything without an explicit `pierce_bonus`.
+
+- [ ] **Step 3: Implement**
+
+In `sim/upgrades.gd`:
+
+```gdscript
+## Penetration every tower gains per tier bought, in either branch.
+##
+## Owner's rule: levelling a tower should make it better at getting THROUGH,
+## not only at hitting harder. It is what stops a low-damage tower being walled
+## by late-game armour when neither of its branches mentions pierce - the Magic
+## tower is the case this exists for.
+##
+## The explicit pierce_bonus tiers stack on top, so Long Range stays the
+## specialist rather than being levelled down to everyone else.
+const PIERCE_PER_TIER := 1
+```
+
+Add `total_tiers * PIERCE_PER_TIER` to the resolved `pierce`, where `total_tiers` is the sum across both branches. `total_invested` already walks both branches — read it before writing a second walker.
+
+- [ ] **Step 4: Run to verify they pass**
+
+Expected: PASS, exit 0. `test_upgrade_tables.gd`'s `EXPECTED_EFFECTS` pins all thirty-two tiers' effect values — it should be unaffected, since this adds a term at resolution rather than changing any tier. If it fails, that is a real signal: read it before changing it.
+
+- [ ] **Step 5: Mutation-test**
+
+Set `PIERCE_PER_TIER` to 0 (three tests must fail); count only one branch (the both-branches test must fail); apply the term *instead of* the explicit bonus rather than in addition (the specialist test must fail). Report survivors.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add sim/upgrades.gd test/test_upgrades.gd
+git commit -m "Let every tower level into penetration"
+```
+
+---
+
 ## Task 6: The shaman's shield aura
 
 **Files:**
@@ -1102,10 +1336,12 @@ git commit -m "Bring the orientation doc up to the roster and the bosses"
 
 ## Self-review notes
 
-**Spec coverage:** §3 roster → Tasks 2, 3, 7. §4 health/speed → Task 4; rebalance → Task 9. §5 aura → Task 6. §6 bosses → Task 7. §7 visuals → Task 8. §8 towers → Task 1. §9 non-goals → Task 10 records them.
+**Spec coverage:** §3 roster → Tasks 2, 3, 7. §3.1 damage types → Task 5b. §3.2 penetration → Task 5c. §4 health/speed → Task 4; rebalance → Task 9. §5 aura → Task 6. §6 bosses → Task 7. §7 visuals → Task 8. §8 towers → Task 1. §9 non-goals → Task 10 records them.
 
 **Ordering constraints:** Task 4 depends on 2 and 3 (all four kinds must exist before their ordering can be asserted). Task 6 depends on 5 (shields must exist before an aura can grant them). Task 7 depends on 5 (bosses carry armour). Tasks 8 and 9 depend on everything before them. Task 1 is independent and can be done first or last.
 
 **Interface consistency:** `armor` (US spelling) is the key everywhere, matching `sim/damage.gd`'s existing `target.get("armor")` — prose says "armour", code says `armor`. `Aura.grant` returns ids, never mutates. `Bosses.on_wave` returns `{}` for no boss, never null.
 
-**Known risk carried from the spec:** flat armour can zero the Magic tower. Task 9 step 3 measures it and reports; it is deliberately not pre-solved.
+**The Magic-tower risk is now addressed by design, not left open.** Task 5b's damage floor and Task 5c's level-scaled penetration are both there to stop armour zeroing it. Task 9 step 3 still measures whether they are *enough* — a tower technically dealing 1 damage is not walled, but it is not a choice either.
+
+**Ordering:** 5b depends on 5 (resistance must exist to be typed against). 5c depends on 5b (penetration is only meaningful once armour scales by type). 6 depends on 5. 7 depends on 5. 8 and 9 depend on everything before them.
