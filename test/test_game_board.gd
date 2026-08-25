@@ -569,8 +569,9 @@ func test_start_next_wave_emits_wave_changed_and_wave_state_changed() -> bool:
 func test_physics_process_spawns_enemies_exactly_when_the_clock_reaches_at_ms() -> bool:
 	var b := _ready_board()
 	b.start_next_wave()  # wave 1: 5 slimes at at_ms 0, 500, 1000, 1500, 2000
-	assert_eq(b._spawn_queue[0]["at_ms"], 0.0, "precondition: the first slime spawns at t=0")
-	assert_eq(b._spawn_queue[1]["at_ms"], 500.0, "precondition: the second slime spawns at t=500")
+	# One queue per path; demoMap has a single entrance, so queue 0 is the wave.
+	assert_eq(b._spawn_queues[0][0]["at_ms"], 0.0, "precondition: the first slime spawns at t=0")
+	assert_eq(b._spawn_queues[0][1]["at_ms"], 500.0, "precondition: the second slime spawns at t=500")
 
 	b._physics_process(0.0)  # delta 0: _wave_clock stays at 0.0, only the t=0 spawn is due
 	assert_eq(b._enemies_root.get_child_count(), 1, "only the t=0 spawn has occurred")
@@ -588,9 +589,9 @@ func test_physics_process_spawns_enemies_exactly_when_the_clock_reaches_at_ms() 
 func test_wave_clears_only_after_every_spawn_has_left_the_board() -> bool:
 	var b := _ready_board()
 	b.start_next_wave()
-	b._spawn_queue = [{"kind": &"slime", "at_ms": 0.0}]
+	b._spawn_queues = [[{"kind": &"slime", "at_ms": 0.0}]]
 	b._wave_clock = 0.0
-	b._spawned = 0
+	b._spawned_per_path = [0]
 
 	var state_events: Array = []
 	b.wave_state_changed.connect(func(a): state_events.append(a))
@@ -657,9 +658,9 @@ func test_clearing_wave_nineteen_does_not_emit_victory() -> bool:
 func test_enemy_leak_subtracts_lives_by_the_value_leak_resolve_produces() -> bool:
 	var b := _ready_board()
 	b.start_next_wave()
-	b._spawn_queue = [{"kind": &"bee", "at_ms": 0.0}]
+	b._spawn_queues = [[{"kind": &"bee", "at_ms": 0.0}]]
 	b._wave_clock = 0.0
-	b._spawned = 0
+	b._spawned_per_path = [0]
 	b._physics_process(0.0)  # spawns the bee and wires its died/leaked signals to the board
 	var enemy: Enemy = b._enemies_root.get_child(0)
 
@@ -679,9 +680,9 @@ func test_enemy_leak_subtracts_lives_by_the_value_leak_resolve_produces() -> boo
 func test_enemy_died_signal_adds_its_reward_to_gold() -> bool:
 	var b := _ready_board()
 	b.start_next_wave()
-	b._spawn_queue = [{"kind": &"ogre", "at_ms": 0.0}]
+	b._spawn_queues = [[{"kind": &"ogre", "at_ms": 0.0}]]
 	b._wave_clock = 0.0
-	b._spawned = 0
+	b._spawned_per_path = [0]
 	b._physics_process(0.0)  # spawns the ogre and wires its died/leaked signals to the board
 	var enemy: Enemy = b._enemies_root.get_child(0)
 
@@ -1137,4 +1138,293 @@ func test_cycling_priority_with_nothing_selected_is_a_no_op() -> bool:
 	assert_eq(b.get_gold(), Maps.get_def(Maps.FIRST)["starting_gold"],
 		"a fresh board with nothing selected was left untouched")
 	b.free()
+	return true
+
+# --------------------------------------------------------------------------
+# Wave-clear payout (spec 2026-08-24-slice-0-design.md section 4)
+# --------------------------------------------------------------------------
+
+func test_clearing_a_wave_pays_the_base_bonus() -> bool:
+	var board := _ready_board()
+	var before := board.get_gold()
+	board.start_next_wave()
+	board.force_wave_cleared_for_test()
+	assert_eq(board.get_last_wave_reward()["base"], 25, "wave 1 base bonus is 20 + 1*5")
+	assert_true(board.get_gold() > before, "and the gold actually landed")
+	board.free()
+	return true
+
+func test_clearing_a_wave_pays_interest_on_the_bank() -> bool:
+	var board := _ready_board()
+	board.set_gold_for_test(200)
+	board.start_next_wave()
+	board.force_wave_cleared_for_test()
+	assert_eq(board.get_last_wave_reward()["interest"], 10, "5% of 200")
+	board.free()
+	return true
+
+func test_a_thin_bank_earns_no_interest() -> bool:
+	var board := _ready_board()
+	board.set_gold_for_test(10)
+	board.start_next_wave()
+	board.force_wave_cleared_for_test()
+	assert_eq(board.get_last_wave_reward()["interest"], 0, "below the minimum balance")
+	board.free()
+	return true
+
+# Interest is computed on the bank BEFORE the clear bonus is added, or the
+# player earns interest on money they were paid in the same instant.
+func test_interest_is_taken_on_the_bank_before_the_clear_bonus_lands() -> bool:
+	var board := _ready_board()
+	board.set_gold_for_test(200)
+	board.start_next_wave()
+	board.force_wave_cleared_for_test()
+	assert_eq(board.get_last_wave_reward()["interest"], 10,
+		"5% of the 200 held going in, not of 200 plus the bonus")
+	board.free()
+	return true
+
+func test_the_wave_reward_signal_carries_all_three_parts() -> bool:
+	var board := _ready_board()
+	board.set_gold_for_test(200)
+	var seen := []
+	board.wave_reward.connect(func(b, s, i): seen.append([b, s, i]))
+	board.start_next_wave()
+	board.force_wave_cleared_for_test()
+	assert_eq(seen.size(), 1, "emitted exactly once")
+	assert_eq(seen[0][0], 25, "base")
+	assert_eq(seen[0][2], 10, "interest")
+	board.free()
+	return true
+
+# --------------------------------------------------------------------------
+# The prep timer (spec section 4.5)
+# --------------------------------------------------------------------------
+
+# The clock does NOT run before wave 1. A countdown on an empty board, with
+# 100 gold and no information, is hostile to a new player, and the payout is
+# meaningless when there is nothing yet to spend it on.
+func test_no_prep_timer_before_the_first_wave() -> bool:
+	var board := _ready_board()
+	assert_false(board.is_prepping(), "a fresh board is not counting down")
+	board.free()
+	return true
+
+func test_clearing_a_wave_starts_the_prep_timer() -> bool:
+	var board := _ready_board()
+	board.start_next_wave()
+	board.force_wave_cleared_for_test()
+	assert_true(board.is_prepping(), "the clock runs between waves")
+	assert_almost_eq(board.get_prep_remaining_ms(), 20000.0, 0.001, "a full window")
+	board.free()
+	return true
+
+func test_the_prep_timer_counts_down() -> bool:
+	var board := _ready_board()
+	board.start_next_wave()
+	board.force_wave_cleared_for_test()
+	board._physics_process(1.0)
+	assert_almost_eq(board.get_prep_remaining_ms(), 19000.0, 0.001, "a second gone")
+	board.free()
+	return true
+
+func test_the_prep_timer_starts_the_next_wave_on_its_own() -> bool:
+	var board := _ready_board()
+	board.start_next_wave()
+	board.force_wave_cleared_for_test()
+	assert_eq(board.get_wave(), 1, "still on wave 1 while prepping")
+	board._physics_process(21.0)
+	assert_eq(board.get_wave(), 2, "the timer started the next wave")
+	assert_false(board.is_prepping(), "and the clock stopped")
+	board.free()
+	return true
+
+func test_calling_early_pays_for_the_time_given_up() -> bool:
+	var board := _ready_board()
+	board.start_next_wave()
+	board.force_wave_cleared_for_test()
+	var before := board.get_gold()
+	board._physics_process(10.0)
+	board.start_next_wave()
+	assert_eq(board.get_gold() - before, 30, "10 seconds left * 3 gold")
+	board.free()
+	return true
+
+func test_letting_the_clock_expire_pays_no_call_early_bonus() -> bool:
+	var board := _ready_board()
+	board.start_next_wave()
+	board.force_wave_cleared_for_test()
+	var before := board.get_gold()
+	board._physics_process(21.0)
+	assert_eq(board.get_gold(), before, "the timer's own start earns nothing")
+	board.free()
+	return true
+
+# Winning must not arm the clock. _on_wave_cleared sets _run_finished and
+# emits victory BEFORE arming, or a won run starts a twenty-first wave.
+func test_clearing_the_final_wave_does_not_start_a_prep_timer() -> bool:
+	var board := _ready_board()
+	board.set_wave_for_test(Waves.MAX_WAVES)
+	board.force_wave_cleared_for_test()
+	assert_false(board.is_prepping(), "a won run is not counting down to wave 21")
+	board.free()
+	return true
+
+func test_losing_stops_the_prep_timer() -> bool:
+	var board := _ready_board()
+	board.start_next_wave()
+	board.force_wave_cleared_for_test()
+	assert_true(board.is_prepping(), "prepping before the loss")
+	board.force_game_over_for_test()
+	board._physics_process(1.0)
+	assert_false(board.is_prepping(), "a lost run is not counting down")
+	board.free()
+	return true
+
+# Calling early must CLEAR the clock, not merely pay for it.
+#
+# Found by mutation testing, and by nothing else: deleting the reset in
+# start_next_wave left every other test green. The damage is not a double
+# spawn - start_next_wave's own _wave_active guard stops that - it is that
+# the countdown keeps running underneath the live wave, so is_prepping()
+# stays true and the HUD counts down during a fight.
+func test_calling_early_clears_the_clock_rather_than_only_paying_for_it() -> bool:
+	var board := _ready_board()
+	board.start_next_wave()
+	board.force_wave_cleared_for_test()
+	board._physics_process(10.0)
+	board.start_next_wave()
+	assert_false(board.is_prepping(), "the countdown stopped when the wave started")
+	assert_almost_eq(board.get_prep_remaining_ms(), 0.0, 0.001, "and the clock is at zero")
+	board.free()
+	return true
+
+func test_selling_a_tower_announces_the_kind() -> bool:
+	var board := _ready_board()
+	var seen := []
+	board.tower_sold.connect(func(kind): seen.append(kind))
+	board.select_tower_kind(&"basic")
+	board._try_place(_find_placeable_positions(board, 1)[0])
+	board._select_tower(board._towers_root.get_child(0))
+	board.sell_selected_tower()
+	assert_eq(seen, [&"basic"], "the sale named the kind that was sold")
+	board.free()
+	return true
+
+# --------------------------------------------------------------------------
+# Multi-spawn (spec section 6.2)
+# --------------------------------------------------------------------------
+
+## Like _ready_board, but on a named map rather than Maps.FIRST.
+func _ready_board_for_map(map_name: StringName) -> GameBoard:
+	var b := _instantiate_board()
+	b.set_map_for_test(map_name)
+	b.notification(Node.NOTIFICATION_READY)
+	return b
+
+# The full wave composition runs down EVERY path, not divided between them.
+# Ported faithfully from upstream, which computes totalEnemies * paths.length.
+# That is what makes The Fork harder than The Pass at the same wave number,
+# and why it opens with 250 gold rather than 100.
+func test_a_two_path_map_spawns_the_whole_wave_down_each_path() -> bool:
+	var one := _ready_board_for_map(&"demoMap")
+	var two := _ready_board_for_map(&"map2")
+	one.start_next_wave()
+	two.start_next_wave()
+	for i in 600:
+		one._physics_process(0.05)
+		two._physics_process(0.05)
+	assert_true(one.get_spawned_count() > 0, "precondition: the one-path map spawned at all")
+	assert_eq(two.get_spawned_count(), one.get_spawned_count() * 2,
+		"two entrances field twice the wave")
+	one.free()
+	two.free()
+	return true
+
+func test_enemies_enter_from_both_entrances() -> bool:
+	var board := _ready_board_for_map(&"map2")
+	board.start_next_wave()
+	for i in 60:
+		board._physics_process(0.05)
+	var starts := {}
+	for child in board._enemies_root.get_children():
+		starts[child.position] = true
+	assert_true(starts.size() >= 2,
+		"enemies entered from more than one place on the board")
+	board.free()
+	return true
+
+func test_a_one_path_map_is_unchanged_by_the_per_path_queues() -> bool:
+	var board := _ready_board_for_map(&"demoMap")
+	board.start_next_wave()
+	for i in 600:
+		board._physics_process(0.05)
+	assert_eq(board.get_spawned_count(), Waves.build_schedule(1).size(),
+		"one path issues exactly one schedule, as it always did")
+	board.free()
+	return true
+
+# _all_spawns_issued must check EVERY queue, not just the first.
+#
+# Today's two paths always finish together - identical schedules, one clock -
+# so a queue-0-only check passes the whole suite. Mutation testing showed
+# exactly that. This test stages queues of different lengths directly, which
+# is the only way to tell the two implementations apart, and it matters the
+# moment anything gives one entrance a different composition from another.
+func test_the_wave_does_not_clear_while_any_path_still_has_spawns_pending() -> bool:
+	var b := _ready_board_for_map(&"map2")
+	b.start_next_wave()
+	# Path 0 is finished; path 1 still has one enemy to send.
+	b._spawn_queues = [
+		[{"kind": &"slime", "at_ms": 0.0}],
+		[{"kind": &"slime", "at_ms": 0.0}, {"kind": &"slime", "at_ms": 999999.0}],
+	]
+	b._spawned_per_path = [1, 1]
+	assert_false(b._all_spawns_issued(),
+		"path 1 has an enemy left, so the wave is not done issuing")
+	b._spawned_per_path = [1, 2]
+	assert_true(b._all_spawns_issued(), "and it is once every path has finished")
+	b.free()
+	return true
+
+# --------------------------------------------------------------------------
+# Per-map base resolution (spec section 6.3)
+# --------------------------------------------------------------------------
+
+func test_the_content_size_is_the_map_plus_the_panel() -> bool:
+	var size := GameBoard.required_content_size(&"demoMap")
+	assert_eq(size.x, 1104 + GameBoard.PANEL_WIDTH, "map width plus the build panel")
+	assert_eq(size.y, 672, "and the map's own height")
+	return true
+
+func test_larger_maps_ask_for_a_larger_content_size() -> bool:
+	var pass_size := GameBoard.required_content_size(&"demoMap")
+	var fork := GameBoard.required_content_size(&"map2")
+	var coils := GameBoard.required_content_size(&"map3")
+	assert_true(fork.y > pass_size.y, "The Fork is taller than the design box")
+	assert_true(coils.x > pass_size.x, "The Coils is wider")
+	return true
+
+# The whole point of resizing the base viewport rather than adding a camera:
+# a tower's world position stays a map-pixel position, so every placement,
+# targeting and splash calculation is untouched by which map is loaded.
+func test_world_space_still_equals_map_pixel_space_on_a_large_map() -> bool:
+	var board := _ready_board_for_map(&"map3")
+	board.select_tower_kind(&"basic")
+	var spot := _find_placeable_positions(board, 1)[0]
+	board._try_place(spot)
+	assert_eq(board._towers_root.get_child_count(), 1, "the tower was placed")
+	assert_eq(board._towers_root.get_child(0).position, spot,
+		"at exactly the world coordinate asked for, on a map larger than the viewport")
+	board.free()
+	return true
+
+# Every map must fit its own declared pixel size, or the panel overlaps the
+# board on one of them.
+func test_every_map_asks_for_room_for_its_own_pixels() -> bool:
+	for name in Maps.DEFS:
+		var px := Maps.pixel_size(name)
+		var need := GameBoard.required_content_size(name)
+		assert_eq(need.y, px.y, "%s height is the map's own" % name)
+		assert_true(need.x > px.x, "%s leaves room for the panel" % name)
 	return true

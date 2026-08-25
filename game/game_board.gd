@@ -19,10 +19,20 @@ signal tower_upgraded(branch: StringName)
 signal tower_selected(tower: Tower)
 signal tower_deselected()
 signal placement_rejected(reason: String)
+signal wave_reward(base: int, speed: int, interest: int)
+signal prep_changed(remaining_ms: float, bonus: int)
+signal tower_sold(kind: StringName)
 
 const ENEMY_SCENE := preload("res://game/enemy.tscn")
 const TOWER_SCENE := preload("res://game/tower.tscn")
 const PROJECTILE_SCENE := preload("res://game/projectile.tscn")
+
+## Width the build panel needs beside the map.
+##
+## 140 is what the design viewport reserved: 1244 total minus map 1's 1104.
+## TowerPanel anchors its left edge to the map's right edge and absorbs any
+## surplus beyond this, so it is a MINIMUM rather than a fixed width.
+const PANEL_WIDTH := 140
 
 var _map_name: StringName = Maps.FIRST
 var _tiles: Array = []
@@ -35,9 +45,20 @@ var _run_finished := false
 var _selected_kind: StringName = &""
 var _selected_tower: Tower = null
 var _counts := {}            # StringName -> int
-var _spawn_queue: Array = []  # {kind, at_ms}
+## One queue and one cursor PER PATH. The full wave composition runs down every
+## path rather than being divided between them, matching upstream (GameScene.ts
+## computes totalEnemies * enemyPaths.length). A map with two entrances
+## therefore fields twice the wave, which is a difficulty lever carried in the
+## map's own starting gold and budget rather than anywhere in here.
+var _spawn_queues: Array = []      # Array of Array of {kind, at_ms}
+var _spawned_per_path: Array = []  # Array of int
 var _wave_clock := 0.0
-var _spawned := 0
+## The most recent wave clear's payout, itemised, for the HUD and for tests.
+var _last_wave_reward := {"base": 0, "speed": 0, "interest": 0}
+## Milliseconds left before the next wave starts on its own. Zero means no
+## countdown is running - the game is either mid-wave, finished, or waiting
+## for the player's very first Start press.
+var _prep_remaining_ms := 0.0
 ## Which variant each spawn draws. Reset per wave so replaying a wave shows
 ## the same creatures, and separate from every other random system so enemy
 ## variety does not move when they do.
@@ -66,6 +87,30 @@ func _ready() -> void:
 	lives_changed.emit(_lives)
 	wave_changed.emit(_wave, Waves.MAX_WAVES)
 
+	# Applied here rather than in project.godot because it is per map. Guarded
+	# because the test harness has no window: nodes there are never inside a
+	# live tree, so get_window() is not available to them.
+	if is_inside_tree():
+		var window := get_window()
+		if window != null:
+			window.content_scale_size = required_content_size(_map_name)
+
+## The base resolution a map needs: the map itself plus room for the panel.
+##
+## The window's content_scale_size is set to this rather than a Camera2D being
+## added, and that choice is load-bearing. Both maps past the first are larger
+## than the 1244x672 design box in both axes, so something has to give - but a
+## camera, or a scale on this node, would put a transform between
+## get_global_mouse_position() and every rule that consumes it. Placement,
+## targeting, splash geometry and TowerPanel.offset_left all assume world
+## space IS map pixel space, and this project's own history says geometry bugs
+## are found by screenshots rather than by the suite. Changing the base
+## resolution reaches the same result with no transform at all: the stretch
+## system does the downscaling, and a map pixel stays a world unit.
+static func required_content_size(map_name: StringName) -> Vector2i:
+	var map_px := Maps.pixel_size(map_name)
+	return Vector2i(map_px.x + PANEL_WIDTH, map_px.y)
+
 func get_gold() -> int: return _gold
 func get_lives() -> int: return _lives
 func get_wave() -> int: return _wave
@@ -79,6 +124,57 @@ func get_map_name() -> StringName: return _map_name
 
 func get_tower_count(kind: StringName) -> int:
 	return _counts.get(kind, 0)
+
+## The itemised payout from the most recent wave clear, for the HUD and tests.
+## Duplicated so a caller cannot edit the board's own record.
+func get_last_wave_reward() -> Dictionary:
+	return _last_wave_reward.duplicate()
+
+## Test seam. The board owns gold and there is no other way to arrange a
+## specific bank before a clear; the alternative is playing a whole wave.
+func set_gold_for_test(amount: int) -> void:
+	_gold = amount
+	gold_changed.emit(_gold)
+
+## Test seam. _on_wave_cleared is otherwise only reachable by running a wave
+## to completion, which a frameless test cannot do.
+func force_wave_cleared_for_test() -> void:
+	_on_wave_cleared()
+
+func get_prep_remaining_ms() -> float:
+	return _prep_remaining_ms
+
+func is_prepping() -> bool:
+	return _prep_remaining_ms > 0.0
+
+## Test seam: reaching the final wave otherwise means playing nineteen.
+func set_wave_for_test(wave: int) -> void:
+	_wave = wave
+
+## Test seam: reaching a kind's limit otherwise means placing eight towers.
+func set_tower_count_for_test(kind: StringName, count: int) -> void:
+	_counts[kind] = count
+
+## Test seam: the board otherwise always loads Maps.FIRST.
+##
+## Must be called BEFORE notification(NOTIFICATION_READY), because _ready is
+## what reads _map_name to build the tiles and the paths.
+func set_map_for_test(map_name: StringName) -> void:
+	_map_name = map_name
+
+## Total spawns issued this wave, across every path.
+func get_spawned_count() -> int:
+	var total := 0
+	for n in _spawned_per_path:
+		total += int(n)
+	return total
+
+## Test seam: losing otherwise means leaking twenty lives.
+func force_game_over_for_test() -> void:
+	_run_finished = true
+	_wave_active = false
+	_prep_remaining_ms = 0.0
+	game_over.emit()
 
 func select_tower_kind(kind: StringName) -> void:
 	_selected_kind = kind
@@ -101,14 +197,37 @@ func select_tower_kind(kind: StringName) -> void:
 func start_next_wave() -> void:
 	if _wave_active or _run_finished:
 		return
+
+	# Whether the player pressed the button or the clock ran out, one path
+	# starts a wave. call_early_bonus returns 0 for an expired clock, so the
+	# timeout case needs no special handling here.
+	if _prep_remaining_ms > 0.0:
+		var early_bonus := EconomySim.call_early_bonus(_prep_remaining_ms)
+		if early_bonus > 0:
+			_gold += early_bonus
+			gold_changed.emit(_gold)
+	_prep_remaining_ms = 0.0
+	prep_changed.emit(0.0, 0)
+
 	_wave += 1
 	if _wave > Waves.MAX_WAVES:
 		return
 	_wave_active = true
 	_wave_clock = 0.0
-	_spawned = 0
 	_spawn_rng = Rng.new(Seeds.DEFAULT_SPAWN_SEED)
-	_spawn_queue = Waves.build_schedule(_wave)
+	var schedule := Waves.build_schedule(_wave)
+	_spawn_queues = []
+	_spawned_per_path = []
+	for i in maxi(1, _paths.size()):
+		# One shared schedule, one cursor each. Sharing is safe because the
+		# queue is only ever READ - progress lives entirely in
+		# _spawned_per_path - and build_schedule already returns fresh
+		# dictionaries per call. An earlier version deep-copied per path with
+		# a comment claiming a shared array would make one path skip the
+		# other's spawns; mutation testing showed that copy changed no
+		# observable behaviour, because the claim was simply false.
+		_spawn_queues.append(schedule)
+		_spawned_per_path.append(0)
 	wave_changed.emit(_wave, Waves.MAX_WAVES)
 	wave_state_changed.emit(true)
 	_play_sound(&"wave-start")
@@ -118,12 +237,26 @@ func _physics_process(delta: float) -> void:
 		return
 	var delta_ms := delta * 1000.0
 
+	# Deliberately inside _physics_process rather than on a Timer node, so
+	# Engine.time_scale scales it: fast-forwarding must not buy the player
+	# more real thinking time. It also stops on its own when the run ends,
+	# because the _run_finished guard above already returned.
+	if _prep_remaining_ms > 0.0:
+		_prep_remaining_ms = maxf(0.0, _prep_remaining_ms - delta_ms)
+		prep_changed.emit(_prep_remaining_ms,
+			EconomySim.call_early_bonus(_prep_remaining_ms))
+		if _prep_remaining_ms <= 0.0:
+			start_next_wave()
+
 	if _wave_active:
 		_wave_clock += delta_ms
-		while _spawned < _spawn_queue.size() \
-				and _spawn_queue[_spawned]["at_ms"] <= _wave_clock:
-			_spawn(_spawn_queue[_spawned]["kind"])
-			_spawned += 1
+		for path_index in _spawn_queues.size():
+			var queue: Array = _spawn_queues[path_index]
+			var issued: int = _spawned_per_path[path_index]
+			while issued < queue.size() and queue[issued]["at_ms"] <= _wave_clock:
+				_spawn(queue[issued]["kind"], path_index)
+				issued += 1
+			_spawned_per_path[path_index] = issued
 
 	var candidates: Array = []
 	for enemy in _enemies_root.get_children():
@@ -134,16 +267,24 @@ func _physics_process(delta: float) -> void:
 		if tower is Tower:
 			tower.tick(delta_ms, candidates)
 
-	if _wave_active and _spawned >= _spawn_queue.size() \
+	if _wave_active and _all_spawns_issued() \
 			and _enemies_root.get_child_count() == 0:
 		_on_wave_cleared()
 
-func _spawn(kind: StringName) -> void:
+## Whether every path has issued its whole schedule. Checking one queue is not
+## enough: the wave is not over while any entrance still has enemies to send.
+func _all_spawns_issued() -> bool:
+	for i in _spawn_queues.size():
+		if int(_spawned_per_path[i]) < (_spawn_queues[i] as Array).size():
+			return false
+	return true
+
+func _spawn(kind: StringName, path_index: int) -> void:
 	if _paths.is_empty():
 		return
 	var enemy: Enemy = ENEMY_SCENE.instantiate()
 	_enemies_root.add_child(enemy)
-	enemy.setup(kind, _paths[0], _wave, _spawn_rng)
+	enemy.setup(kind, _paths[mini(path_index, _paths.size() - 1)], _wave, _spawn_rng)
 	enemy.died.connect(_on_enemy_died)
 	enemy.leaked.connect(_on_enemy_leaked)
 
@@ -165,11 +306,34 @@ func _on_enemy_leaked(life_loss: int) -> void:
 func _on_wave_cleared() -> void:
 	_wave_active = false
 	wave_state_changed.emit(false)
+
+	# Interest is taken on the bank as it stands BEFORE the clear bonus is
+	# added, or the player earns interest on money paid in the same instant.
+	var earned_interest := EconomySim.interest_on(_gold)
+	var bonus := EconomySim.wave_clear_bonus(_wave, _wave_clock)
+	_last_wave_reward = {
+		"base": int(bonus["base"]),
+		"speed": int(bonus["speed"]),
+		"interest": earned_interest,
+	}
+	_gold += int(bonus["base"]) + int(bonus["speed"]) + earned_interest
+	gold_changed.emit(_gold)
+	wave_reward.emit(int(bonus["base"]), int(bonus["speed"]), earned_interest)
+
 	_play_sound(&"wave-clear")
 	if _wave >= Waves.MAX_WAVES and not _run_finished:
 		_run_finished = true
 		victory.emit()
 		_play_sound(&"victory")
+		return
+
+	# Armed only PAST the victory check above, and the ordering is
+	# load-bearing: winning must not start a countdown to a twenty-first wave
+	# that cannot exist. test_clearing_the_final_wave_does_not_start_a_prep_timer
+	# is what holds it.
+	_prep_remaining_ms = float(Economy.CALL_EARLY["prep_duration_ms"])
+	prep_changed.emit(_prep_remaining_ms,
+		EconomySim.call_early_bonus(_prep_remaining_ms))
 
 # --- Input -------------------------------------------------------------
 
@@ -416,11 +580,16 @@ func sell_selected_tower() -> void:
 	if _selected_tower == null or not is_instance_valid(_selected_tower):
 		return
 	var tower := _selected_tower
+	# Read the kind BEFORE queue_free, and hold it in a local: the panel's
+	# handler runs during the emit below and must not reach into a tower that
+	# is already on its way out.
+	var sold_kind: StringName = tower.kind
 	_deselect_tower()
 	_gold += EconomySim.sell_refund(tower.price_paid)
-	_counts[tower.kind] -= 1
+	_counts[sold_kind] -= 1
 	tower.queue_free()
 	gold_changed.emit(_gold)
+	tower_sold.emit(sold_kind)
 	_play_sound(&"sell")
 
 # --- Audio ---------------------------------------------------------------

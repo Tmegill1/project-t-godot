@@ -146,7 +146,8 @@ static func run_wave(config: Dictionary) -> Dictionary:
 					e["alive"] = false
 					kills += 1
 					gold_earned += EconomySim.kill_reward(
-						int(Enemies.DEFS[e["kind"]]["reward"]), source)
+						int(Enemies.DEFS[e["kind"]]["reward"]), source,
+						float(modifiers["gold_modifier"]))
 
 		enemies = enemies.filter(func(e): return e["alive"])
 

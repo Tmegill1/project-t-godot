@@ -3,11 +3,22 @@
 **Point an assistant at this file and say "continue this project."** It contains
 everything needed to resume with no prior conversation.
 
-Last updated: 2026-08-21 · Branch `feat/illustrated-art-swap` · **core slice,
-tower upgrades, free placement and the Kenney art swap all merged to
-`master`; the illustrated art swap is implemented on this branch — all ten
-tasks done, suite green at 7143 checks across 37 files — and not yet
-merged**
+Last updated: 2026-08-24 · Branch `feat/slice-0-economy-and-maps` · **core
+slice, tower upgrades, free placement and both art swaps are all merged to
+`master`. Slice 0 — the wave economy, the measured gold curve, visible tower
+limits, and The Fork and The Coils — is implemented on this branch, all
+fifteen tasks done, suite green at 9495 checks across 39 files, and not yet
+merged.**
+
+> **Slice 0's spec and plan are
+> [`docs/superpowers/specs/2026-08-24-slice-0-design.md`](docs/superpowers/specs/2026-08-24-slice-0-design.md)
+> and
+> [`docs/superpowers/plans/2026-08-24-slice-0.md`](docs/superpowers/plans/2026-08-24-slice-0.md).**
+> Later slices, in dependency order: bosses and enemy properties, tactical
+> powers, the versioned save and meta-progression, and a hero. The owner has
+> decided powers will be **bought with gold and priced expensively** as a
+> late-run sink, rather than costing the Insignia they cost upstream — which
+> will move the gold curve again, so re-measure it then.
 
 > **Picking this up after the illustrated art swap? Read §0 — it now covers
 > what shipped and the traps that are still true.** Read §5 and §6 too,
@@ -80,7 +91,10 @@ win or lose → retry or menu, with sound.
 | `audio/` — pooled playback, 17 core-slice events | ✅ complete |
 | Web export | ✅ preset + build; **boots and renders in a browser; not yet played in one** |
 | Deploy | ✅ live at **https://tmegill1.github.io/project-t-godot/** — every push to `master` republishes, at the address GitHub assigns (no custom domain) |
-| Tests | ✅ 7143 checks across 37 files, exit 0 |
+| Tests | ✅ 9495 checks across 39 files, exit 0 |
+| Maps | ✅ three — The Pass (forest), The Fork (ice, **two entrances**), The Coils (desert) |
+| Wave economy | ✅ clear bonus, speed bonus, interest, 20s prep timer, call-early |
+| Gold curve | ✅ measured, not guessed — see §9.2 |
 | Tower upgrades | ✅ **all 11 tasks done** — rules, tower, board, harness, inspector, verified in the running game. See §4 |
 
 **The repo is public** and the game is deployed from it.
@@ -279,6 +293,23 @@ read in a doc.
   height exactly, so a uniform upscale crops the bottom rows and a width-only
   stretch distorts the tiles. README §"How the layout responds to window size"
   has the full model.
+- **`content_scale_size` is set PER MAP, in `GameBoard._ready`.** Both maps past
+  the first are larger than the 1244×672 design box in both axes (The Fork
+  1248×816, The Coils 1344×768), so the base resolution becomes the map's pixels
+  plus `GameBoard.PANEL_WIDTH` and the stretch system does the downscaling.
+  **The point is that world space stays identical to map pixel space** — every
+  placement, targeting and splash calculation, and `TowerPanel.offset_left`, all
+  assume that. A `Camera2D`, or a scale on the board node, would put a transform
+  between `get_global_mouse_position()` and `Placement.can_place`, which is
+  exactly the code where a coordinate-space mismatch passes tests and fails at
+  the corners. Verified live: three towers placed at (408,360), (456,360) and
+  (504,360) on The Coils landed at exactly those coordinates.
+- **A map whose aspect differs from the window's leaves a band nothing draws
+  into**, and that band is now filled by
+  `rendering/environment/defaults/default_clear_color`, matched to
+  `TowerPanel`'s `bg_color`. The Coils leaves about 28px under the board at the
+  design window size. This was invisible before slice 0 because map 1 fits the
+  design viewport exactly and never produced any surplus.
 - **A screenshot is the only way to catch a layout regression here.** The test
   harness never puts nodes in a live tree, so containers never lay out and every
   child's computed rect stays at its unlaid-out default. Layout tests therefore
@@ -384,6 +415,26 @@ read in a doc.
   test aborts the method and trips the crash sentinel rather than failing
   cleanly. Trusting the code remains the right instinct; that is how this was
   caught.
+- **The full wave composition runs down EVERY spawn path**, not divided between
+  them — ported from the reference, which computes
+  `totalEnemies * enemyPaths.length`. A two-entrance map therefore fields twice
+  the wave at the same wave number, which is why The Fork opens with 250 gold
+  and a budget of 20 against The Pass's 100 and 16. `GameBoard` keeps one queue
+  and one cursor per path; the queues share one schedule array, which is safe
+  because they are only ever read.
+- **A kill's reward is scaled by the wave's `gold_modifier`**, which DECREASES
+  where health and speed increase. Composition accumulates from wave 1, so a
+  flat per-kill reward made income compound with enemy count: 48% of a run's
+  gold used to land in the last five waves, and wave 20 paid 68.8× wave 1. The
+  order in `EconomySim.kill_reward` is load-bearing — wave modifier, then the
+  tower's gold multiplier, then the flat bonus, which is never scaled.
+- **The prep timer lives in `_physics_process`, deliberately**, so
+  `Engine.time_scale` scales it and fast-forwarding cannot buy real thinking
+  time. It is armed only PAST the victory branch in `_on_wave_cleared`, or
+  winning starts a countdown to a twenty-first wave; and `start_next_wave`
+  must CLEAR it as well as pay for it, or the countdown keeps running
+  underneath the live wave. Both orderings have their own test, and the second
+  was found only by mutation testing.
 - **`test/case.gd`'s `_values_equal` cannot distinguish `20` from `20.0`**, so no
   data-table test detects a *type* change. Known limitation.
 
@@ -435,9 +486,16 @@ the player runs, not only in the thing the tests run.
    one of sandstone would read better and make each map feel authored, but
    triple the endpoint art and add two assets per future biome. **Decide
    whether that's worth it** when maps 2 and 3 are actually built.
-2. **The balance is unplaytested.** The original's own handoff notes say every
-   number is a placeholder. "Matches Phaser" will not mean "plays well." Tune with
-   the harness, which is exactly what it is for.
+2. **The balance is unplaytested, with one measured exception.** The
+   original's own handoff notes say every number is a placeholder, and
+   "Matches Phaser" will not mean "plays well." The exception is the **gold
+   curve**: `Waves.GOLD_PER_WAVE` was swept against the most a player could
+   possibly spend (16 towers at the budget, best mix, every tier the
+   cross-path rule allows = 17,170 gold on map 1) rather than guessed. Slice 0
+   had to touch it — the wave economy adds ~3,555 gold against no new sink,
+   which would have turned a 1,185 deficit into a 2,370 surplus. See
+   `docs/superpowers/specs/2026-08-24-slice-0-design.md` §4.6 for the full
+   measurement and the sweep table. Everything else still wants the harness.
 3. **Volume and mute do not persist between runs.** The HUD's two audio
    controls drive `AudioManager` directly and nothing writes them to disk, so
    a player who mutes the game gets sound back next launch. Deliberately not
@@ -450,17 +508,17 @@ the player runs, not only in the thing the tests run.
    build's 368 KB gzipped — so the game data itself is roughly 1.8× larger, but
    that difference is noise beside the engine. Trimming art or audio cannot
    meaningfully move the total; only a different engine would.
-5. **The HUD's white "Gold / Lives / Wave" text has no backing plate, and it
-   is illegible on ice and on desert.** This was nearly illegible over the
-   Kenney pack's snow biome and it did not improve: re-checked live at the end
-   of this branch, with the board re-rendered under each biome and captured,
-   the white text disappears into both the pale ice and the tan sand. An
-   earlier note on this branch claimed both "read fine at a glance"; the
-   screenshots say otherwise, and the screenshots win. Not fixed here: only
-   forest is wired to a playable map today, so ice and desert are unreachable
-   in game, and the right fix — a backing plate, a text shadow, or a per-biome
-   tint — is a design call rather than a bug fix. Whoever wires up the ice map
-   will meet this immediately.
+5. **RESOLVED — the HUD text now has a backing plate.** The white
+   Gold/Lives/Wave text had no backing and was confirmed illegible on both
+   ice and desert, with screenshots. It stayed open because only forest was
+   reachable; the two new maps make both pale biomes reachable, and slice 0's
+   own additions (the tower budget and the prep countdown) made it worse by
+   putting more text up there. Fixed with a semi-transparent plate behind the
+   whole `Top` bar (`ui/hud.tscn`, node `Plate`), chosen over a per-biome tint
+   or a text shadow because it is the only one of the three that is
+   biome-independent — a fourth biome cannot arrive and break it. Verified
+   live on ice and desert; screenshots re-taken at
+   `docs/screenshots/board-map{2,3}.png`.
 
 6. **RESOLVED — towers now draw at 2.4x their footprint.** They were the
    least prominent thing on the board: a placed tower drew about 19 x 26px of

@@ -27,5 +27,13 @@ window/stretch/aspect="expand"
 
 [rendering]
 
+; Fills any viewport area no map claims. window/stretch/aspect="expand" hands
+; surplus on one axis to the viewport, and a map whose aspect differs from the
+; window's leaves a band nothing draws into - The Coils (1344x768 plus the
+; panel) leaves about 28px under the board at the design window size. Matched
+; to TowerPanel's bg_color so the band reads as frame rather than as a
+; rendering gap. Only visible since maps other than The Pass exist; map 1 fits
+; the design viewport exactly and never produced any surplus.
+environment/defaults/default_clear_color=Color(0.09, 0.1, 0.09, 1)
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"

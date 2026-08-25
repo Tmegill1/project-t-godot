@@ -166,3 +166,59 @@ func test_the_first_map_is_the_forest() -> bool:
 	assert_eq(Maps.get_def(Maps.FIRST)["biome"], &"forest",
 		"The Pass is a forest map")
 	return true
+
+# --------------------------------------------------------------------------
+# The map registry (spec 2026-08-24-slice-0-design.md section 6)
+# --------------------------------------------------------------------------
+
+func test_every_map_is_registered_with_its_dimensions() -> bool:
+	assert_eq(int(Maps.DEFS[&"map2"]["cols"]), 26, "The Fork's columns")
+	assert_eq(int(Maps.DEFS[&"map2"]["rows"]), 17, "The Fork's rows")
+	assert_eq(int(Maps.DEFS[&"map3"]["cols"]), 28, "The Coils' columns")
+	assert_eq(int(Maps.DEFS[&"map3"]["rows"]), 16, "The Coils' rows")
+	return true
+
+# The registry and the builder are two statements of one fact, and this is
+# what stops them drifting.
+func test_the_registry_dimensions_match_what_the_builders_produce() -> bool:
+	for name in [&"demoMap", &"map2", &"map3"]:
+		var tiles := Maps.build_tiles(name)
+		var d: Dictionary = Maps.DEFS[name]
+		assert_eq(tiles.size(), int(d["rows"]), "%s rows agree" % name)
+		assert_eq(tiles[0].size(), int(d["cols"]), "%s cols agree" % name)
+	return true
+
+func test_each_map_draws_in_its_own_biome() -> bool:
+	assert_eq(Maps.DEFS[&"demoMap"]["biome"], &"forest", "The Pass is forest")
+	assert_eq(Maps.DEFS[&"map2"]["biome"], &"ice", "The Fork is ice")
+	assert_eq(Maps.DEFS[&"map3"]["biome"], &"desert", "The Coils is desert")
+	return true
+
+func test_every_biome_a_map_names_actually_exists() -> bool:
+	for name in Maps.DEFS:
+		var biome: StringName = Maps.DEFS[name]["biome"]
+		assert_true(Biomes.DEFS.has(biome), "%s names a real biome" % name)
+	return true
+
+func test_the_maps_chain_and_the_last_one_terminates() -> bool:
+	assert_eq(Maps.DEFS[&"demoMap"]["next"], &"map2", "The Pass leads to The Fork")
+	assert_eq(Maps.DEFS[&"map2"]["next"], &"map3", "The Fork leads to The Coils")
+	assert_eq(Maps.DEFS[&"map3"]["next"], &"", "and The Coils is the last")
+	return true
+
+func test_budgets_and_starting_gold_are_ported() -> bool:
+	assert_eq(int(Maps.DEFS[&"map2"]["tower_budget"]), 20, "The Fork's budget")
+	assert_eq(int(Maps.DEFS[&"map2"]["starting_gold"]), 250,
+		"and its opening gold, doubled waves needing a doubled opening")
+	assert_eq(int(Maps.DEFS[&"map3"]["tower_budget"]), 18,
+		"The Coils is wider but its folds double up, so it needs fewer towers")
+	assert_eq(int(Maps.DEFS[&"map3"]["starting_gold"]), 200, "and its opening gold")
+	return true
+
+# Every map must be reachable by build_tiles, or the registry advertises a
+# board the game cannot load.
+func test_every_registered_map_can_actually_be_built() -> bool:
+	for name in Maps.DEFS:
+		var tiles := Maps.build_tiles(name)
+		assert_true(tiles.size() > 0, "%s builds to a real grid" % name)
+	return true

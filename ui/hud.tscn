@@ -5,6 +5,14 @@
 [node name="Hud" type="CanvasLayer"]
 script = ExtResource("1_hud")
 
+[node name="Plate" type="ColorRect" parent="."]
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 44.0
+grow_horizontal = 2
+color = Color(0, 0, 0, 0.55)
+mouse_filter = 2
+
 [node name="Top" type="HBoxContainer" parent="."]
 anchors_preset = 10
 anchor_right = 1.0
@@ -25,6 +33,14 @@ text = "Lives 0"
 [node name="WaveLabel" type="Label" parent="Top"]
 layout_mode = 2
 text = "Wave 0 / 0"
+
+[node name="BudgetLabel" type="Label" parent="Top"]
+layout_mode = 2
+text = "Towers 0/0"
+
+[node name="PrepLabel" type="Label" parent="Top"]
+layout_mode = 2
+text = ""
 
 [node name="StartButton" type="Button" parent="Top"]
 custom_minimum_size = Vector2(44, 44)

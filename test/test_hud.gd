@@ -426,3 +426,118 @@ func test_the_volume_slider_shows_the_volume_already_set() -> bool:
 	AudioServer.set_bus_volume_db(0, before_bus)
 	h.free()
 	return true
+
+# --------------------------------------------------------------------------
+# Prep countdown, call-early payout, tower budget (spec sections 4.5 and 5)
+# --------------------------------------------------------------------------
+
+func test_the_start_button_shows_the_call_early_payout_while_prepping() -> bool:
+	var h := _ready_hud()
+	var b := _ready_board()
+	h.bind(b)
+	h._on_prep_changed(10000.0, 30)
+	assert_true(h._start.text.contains("30"),
+		"the button advertises what calling now is worth")
+	h.free(); b.free()
+	return true
+
+func test_the_start_button_returns_to_its_plain_label_when_not_prepping() -> bool:
+	var h := _ready_hud()
+	var b := _ready_board()
+	h.bind(b)
+	h._on_prep_changed(10000.0, 30)
+	h._on_prep_changed(0.0, 0)
+	assert_eq(h._start.text, "Start wave", "back to the plain label")
+	h.free(); b.free()
+	return true
+
+func test_the_countdown_shows_whole_seconds_remaining() -> bool:
+	var h := _ready_hud()
+	var b := _ready_board()
+	h.bind(b)
+	h._on_prep_changed(7400.0, 21)
+	assert_true(h._prep.text.contains("7"), "7.4s reads as 7")
+	h.free(); b.free()
+	return true
+
+func test_the_countdown_is_hidden_when_no_wave_is_pending() -> bool:
+	var h := _ready_hud()
+	var b := _ready_board()
+	h.bind(b)
+	h._on_prep_changed(0.0, 0)
+	assert_false(h._prep.visible, "nothing to count down to")
+	h.free(); b.free()
+	return true
+
+func test_the_tower_budget_readout_shows_used_over_total() -> bool:
+	var h := _ready_hud()
+	var b := _ready_board()
+	h.bind(b)
+	h._on_budget_changed(3, 16)
+	assert_eq(h._budget.text, "Towers 3/16", "used over total")
+	h.free(); b.free()
+	return true
+
+func test_the_budget_readout_is_seeded_from_the_maps_own_budget() -> bool:
+	var h := _ready_hud()
+	var b := _ready_board()
+	h.bind(b)
+	var expected := int(Maps.get_def(b.get_map_name())["tower_budget"])
+	assert_eq(h._budget.text, "Towers 0/%d" % expected,
+		"an empty board reads zero against the map's budget")
+	h.free(); b.free()
+	return true
+
+func test_the_wave_reward_is_announced_itemised() -> bool:
+	var h := _ready_hud()
+	var b := _ready_board()
+	h.bind(b)
+	h._on_wave_reward(25, 40, 10)
+	var text := h._message.text
+	assert_true(text.contains("25"), "the base is shown")
+	assert_true(text.contains("40"), "the speed bonus is shown")
+	assert_true(text.contains("10"), "and the interest is shown")
+	h.free(); b.free()
+	return true
+
+# --------------------------------------------------------------------------
+# The backing plate (spec section 6.4)
+# --------------------------------------------------------------------------
+
+# The white HUD text was confirmed illegible on ice and desert, with
+# screenshots. A plate is chosen over per-biome text tints because it is
+# biome-independent: it cannot be wrong on a fourth biome someone adds later.
+func test_the_hud_has_a_backing_plate() -> bool:
+	var h := _ready_hud()
+	assert_true(h.get_node("Plate") != null, "the plate exists")
+	assert_true(h.get_node("Plate").color.a > 0.3,
+		"and it is opaque enough to actually back the text")
+	h.free()
+	return true
+
+func test_the_plate_spans_the_bar_and_sits_behind_it() -> bool:
+	var h := _ready_hud()
+	assert_eq(h.get_node("Plate").anchor_left, 0.0, "anchored to the left edge")
+	assert_eq(h.get_node("Plate").anchor_right, 1.0, "and the right, so it spans any width")
+	assert_true(h.get_node("Plate").get_index() < h.get_node("Top").get_index(),
+		"drawn before the bar, so the text sits on top of it")
+	h.free()
+	return true
+
+# The plate covers the whole bar, so a click anywhere along the top would be
+# swallowed if it accepted input - including clicks meant for the board.
+func test_the_plate_never_eats_a_click() -> bool:
+	var h := _ready_hud()
+	assert_eq(h.get_node("Plate").mouse_filter, Control.MOUSE_FILTER_IGNORE,
+		"the plate is decoration and must not take input")
+	h.free()
+	return true
+
+# The plate is as tall as the bar it backs. A shorter one leaves the text's
+# descenders over bare map; a taller one darkens board the player needs.
+func test_the_plate_matches_the_bars_height() -> bool:
+	var h := _ready_hud()
+	assert_eq(h.get_node("Plate").offset_bottom, h.get_node("Top").offset_bottom,
+		"plate and bar end at the same line")
+	h.free()
+	return true

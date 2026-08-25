@@ -798,3 +798,15 @@ func test_the_death_frames_are_the_case_this_covers() -> bool:
 		"the goblin ends its death far flatter than it starts (%.2f against %.2f)"
 			% [float(ratios[ratios.size() - 1]), float(ratios[0])])
 	return true
+
+# A late-wave enemy pays less than the same enemy early, because the wave's
+# gold modifier reaches the payout. The pure function is tested in
+# test_economy.gd; this pins that the enemy threads its own wave through to it.
+func test_a_late_wave_kill_pays_less_than_an_early_one() -> bool:
+	var base := int(Enemies.DEFS[&"slime"]["reward"])
+	var early := EconomySim.kill_reward(base, {},
+		float(Waves.get_modifiers(1)["gold_modifier"]))
+	var late := EconomySim.kill_reward(base, {},
+		float(Waves.get_modifiers(20)["gold_modifier"]))
+	assert_true(late < early, "the same slime is worth less on wave 20 than on wave 1")
+	return true

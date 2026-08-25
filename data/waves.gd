@@ -26,6 +26,32 @@ const _ENDLESS_BUNDLE := [
 const HEALTH_PER_WAVE := 0.1
 const SPEED_PER_WAVE := 0.05
 
+## How much of a kill's reward each wave past LAST_AUTHORED_WAVE removes.
+##
+## Gold decays where health and speed grow, because the two problems have
+## opposite shapes. Composition ACCUMULATES from wave 1, so a late wave fields
+## far more enemies than an early one - 161 at wave 20 against 5 at wave 1 -
+## and a flat per-kill reward turns that into compounding income. Measured
+## before this constant existed: 48% of a run's kill income landed in the last
+## five waves and wave 20 paid 68.8x wave 1, which put the money where the
+## player had already finished building and their upgrade paths were locked by
+## the cross-path rule.
+##
+## 0.025 was chosen by sweeping decay against the most a player could possibly
+## spend (16 towers at the map budget, best mix, every tier the cross-path rule
+## allows = 17,170 gold). It brings a full run to 15,780 against that ceiling -
+## the same tightness the game shipped with before the wave economy was added -
+## while cutting the back-loading ratio to 23.9x. See
+## docs/superpowers/specs/2026-08-24-slice-0-design.md section 4.6.
+const GOLD_PER_WAVE := 0.025
+
+## Floor under the gold modifier.
+##
+## A safety rail for endless play, NOT part of the twenty-wave tuning: at wave
+## 20 the modifier is 0.625 and this never binds. It exists so a run past
+## roughly wave 29 cannot drive a kill reward to zero or negative.
+const MIN_GOLD_MODIFIER := 0.40
+
 const INTERVAL_MS := 500.0
 const BEE_START_DELAY_MS := 5000.0
 const OGRE_DELAY_AFTER_LAST_SLIME_MS := 3000.0
@@ -56,12 +82,16 @@ static func _add(composition: Array[Dictionary], entry: Dictionary) -> void:
 			return
 	composition.append({"kind": entry["kind"], "count": entry["count"]})
 
-## Health and speed multipliers. Both are 1.0 through wave 5.
+## Health, speed and gold multipliers. All three are 1.0 through wave 5.
+##
+## Health and speed scale UP with the wave; gold scales DOWN. See
+## GOLD_PER_WAVE for why the third one runs the other way.
 static func get_modifiers(wave_number: int) -> Dictionary:
 	var past: int = maxi(0, wave_number - LAST_AUTHORED_WAVE)
 	return {
 		"health_modifier": 1.0 + float(past) * HEALTH_PER_WAVE,
 		"speed_modifier": 1.0 + float(past) * SPEED_PER_WAVE,
+		"gold_modifier": maxf(MIN_GOLD_MODIFIER, 1.0 - float(past) * GOLD_PER_WAVE),
 	}
 
 ## When the ogre column starts, given how many slimes precede it. Ogres trail

@@ -248,7 +248,13 @@ func test_splash_radius_boundary_at_wave_ten() -> bool:
 	assert_eq(r["kills"], 12, "exact: a bystander at exactly the splash radius is hit (<= not <)")
 	assert_eq(r["leaks"], 59, "exact: three fewer leaks than the < mutant")
 	assert_eq(r["lives_lost"], 222, "exact: lives lost at this exact leak count")
-	assert_eq(r["gold_earned"], 120, "exact: gold from exactly these kills")
+	# 108, not the 120 this paid before the wave gold modifier landed. Wave 10
+	# pays at 0.875, and kill_reward rounds PER KILL rather than on the total,
+	# so this is not simply 120 * 0.875 (which would be 105) - it is the sum of
+	# twelve individually rounded payouts. Kills, leaks and lives_lost are all
+	# unchanged, which is the point: the modifier changes what a kill pays and
+	# nothing about the fight.
+	assert_eq(r["gold_earned"], 108, "exact: gold from exactly these kills, at wave 10's rate")
 	return true
 
 # Ported: "stops even under a heavy wave with a weak defence" (termination).
@@ -546,4 +552,59 @@ func test_kills_pay_through_the_killing_towers_gold_effects() -> bool:
 	assert_eq(plain["gold_earned"], plain["kills"] * 5, "a slime pays its table reward")
 	assert_true(rich["kills"] > 0, "precondition: the upgraded build kills something too")
 	assert_eq(rich["gold_earned"], rich["kills"] * 12, "5 * 2 + 2 per slime, through kill_reward")
+	return true
+
+# --------------------------------------------------------------------------
+# The new maps, swept for the waypoint oscillation (spec section 8, risk 1)
+# --------------------------------------------------------------------------
+#
+# The waves 19/20 soft-lock was PATH-GEOMETRY dependent: a constant step above
+# 4.0 px/tick can oscillate forever around a waypoint, and it took the clamp in
+# sim/movement.gd to fix. Read the comment at the arrival test there before
+# touching any of this.
+#
+# New maps mean new geometry, and The Coils folds back on itself three times,
+# so it has far more bends than The Pass. These sweeps are what stand between
+# that fix and a map it was never checked against. They run at DOUBLE the
+# default tick size, matching the existing sweep - a bound above what the HUD's
+# 1.5x fast-play button applies, deliberately, so the setting keeps headroom.
+#
+# If one of these ever fails, do NOT raise the tick cap to make it pass. The
+# tick cap is exactly what contained this bug last time and let it ship to a
+# game that had no such cap.
+
+func test_every_wave_terminates_on_the_fork_at_the_doubled_tick_size() -> bool:
+	var paths := PathFinder.get_all_spawn_paths(Map2.build(Rng.new(Seeds.DEFAULT_MAP2_SEED)))
+	assert_eq(paths.size(), 2, "precondition: The Fork has two routes to sweep")
+	for i in paths.size():
+		for wave in range(1, Waves.MAX_WAVES + 1):
+			var r := Harness.run_wave({"wave": wave, "towers": [], "path": paths[i],
+				"tick_ms": Harness.DEFAULT_TICK_MS * 2.0})
+			assert_false(r["timed_out"],
+				"The Fork route %d wave %d terminates at 2x speed" % [i, wave])
+			assert_eq(r["kills"] + r["leaks"], _total_spawn_count(wave),
+				"The Fork route %d wave %d: every enemy reached an ending" % [i, wave])
+	return true
+
+func test_every_wave_terminates_on_the_coils_at_the_doubled_tick_size() -> bool:
+	var paths := PathFinder.get_all_spawn_paths(Map3.build(Rng.new(Seeds.DEFAULT_MAP3_SEED)))
+	assert_eq(paths.size(), 1, "precondition: The Coils has one route to sweep")
+	for wave in range(1, Waves.MAX_WAVES + 1):
+		var r := Harness.run_wave({"wave": wave, "towers": [], "path": paths[0],
+			"tick_ms": Harness.DEFAULT_TICK_MS * 2.0})
+		assert_false(r["timed_out"], "The Coils wave %d terminates at 2x speed" % wave)
+		assert_eq(r["kills"] + r["leaks"], _total_spawn_count(wave),
+			"The Coils wave %d: every enemy reached an ending" % wave)
+	return true
+
+# The default tick size too, matching how The Pass is covered at both.
+func test_every_wave_terminates_on_the_new_maps_at_the_default_tick_size() -> bool:
+	var routes: Array[PackedVector2Array] = []
+	routes.append_array(PathFinder.get_all_spawn_paths(Map2.build(Rng.new(Seeds.DEFAULT_MAP2_SEED))))
+	routes.append_array(PathFinder.get_all_spawn_paths(Map3.build(Rng.new(Seeds.DEFAULT_MAP3_SEED))))
+	assert_eq(routes.size(), 3, "precondition: three routes across the two new maps")
+	for i in routes.size():
+		for wave in range(1, Waves.MAX_WAVES + 1):
+			var r := Harness.run_wave({"wave": wave, "towers": [], "path": routes[i]})
+			assert_false(r["timed_out"], "route %d wave %d terminates at 1x" % [i, wave])
 	return true
