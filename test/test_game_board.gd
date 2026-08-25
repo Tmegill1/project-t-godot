@@ -1138,3 +1138,60 @@ func test_cycling_priority_with_nothing_selected_is_a_no_op() -> bool:
 		"a fresh board with nothing selected was left untouched")
 	b.free()
 	return true
+
+# --------------------------------------------------------------------------
+# Wave-clear payout (spec 2026-08-24-slice-0-design.md section 4)
+# --------------------------------------------------------------------------
+
+func test_clearing_a_wave_pays_the_base_bonus() -> bool:
+	var board := _ready_board()
+	var before := board.get_gold()
+	board.start_next_wave()
+	board.force_wave_cleared_for_test()
+	assert_eq(board.get_last_wave_reward()["base"], 25, "wave 1 base bonus is 20 + 1*5")
+	assert_true(board.get_gold() > before, "and the gold actually landed")
+	board.free()
+	return true
+
+func test_clearing_a_wave_pays_interest_on_the_bank() -> bool:
+	var board := _ready_board()
+	board.set_gold_for_test(200)
+	board.start_next_wave()
+	board.force_wave_cleared_for_test()
+	assert_eq(board.get_last_wave_reward()["interest"], 10, "5% of 200")
+	board.free()
+	return true
+
+func test_a_thin_bank_earns_no_interest() -> bool:
+	var board := _ready_board()
+	board.set_gold_for_test(10)
+	board.start_next_wave()
+	board.force_wave_cleared_for_test()
+	assert_eq(board.get_last_wave_reward()["interest"], 0, "below the minimum balance")
+	board.free()
+	return true
+
+# Interest is computed on the bank BEFORE the clear bonus is added, or the
+# player earns interest on money they were paid in the same instant.
+func test_interest_is_taken_on_the_bank_before_the_clear_bonus_lands() -> bool:
+	var board := _ready_board()
+	board.set_gold_for_test(200)
+	board.start_next_wave()
+	board.force_wave_cleared_for_test()
+	assert_eq(board.get_last_wave_reward()["interest"], 10,
+		"5% of the 200 held going in, not of 200 plus the bonus")
+	board.free()
+	return true
+
+func test_the_wave_reward_signal_carries_all_three_parts() -> bool:
+	var board := _ready_board()
+	board.set_gold_for_test(200)
+	var seen := []
+	board.wave_reward.connect(func(b, s, i): seen.append([b, s, i]))
+	board.start_next_wave()
+	board.force_wave_cleared_for_test()
+	assert_eq(seen.size(), 1, "emitted exactly once")
+	assert_eq(seen[0][0], 25, "base")
+	assert_eq(seen[0][2], 10, "interest")
+	board.free()
+	return true

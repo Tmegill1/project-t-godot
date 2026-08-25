@@ -19,6 +19,7 @@ signal tower_upgraded(branch: StringName)
 signal tower_selected(tower: Tower)
 signal tower_deselected()
 signal placement_rejected(reason: String)
+signal wave_reward(base: int, speed: int, interest: int)
 
 const ENEMY_SCENE := preload("res://game/enemy.tscn")
 const TOWER_SCENE := preload("res://game/tower.tscn")
@@ -38,6 +39,8 @@ var _counts := {}            # StringName -> int
 var _spawn_queue: Array = []  # {kind, at_ms}
 var _wave_clock := 0.0
 var _spawned := 0
+## The most recent wave clear's payout, itemised, for the HUD and for tests.
+var _last_wave_reward := {"base": 0, "speed": 0, "interest": 0}
 ## Which variant each spawn draws. Reset per wave so replaying a wave shows
 ## the same creatures, and separate from every other random system so enemy
 ## variety does not move when they do.
@@ -79,6 +82,22 @@ func get_map_name() -> StringName: return _map_name
 
 func get_tower_count(kind: StringName) -> int:
 	return _counts.get(kind, 0)
+
+## The itemised payout from the most recent wave clear, for the HUD and tests.
+## Duplicated so a caller cannot edit the board's own record.
+func get_last_wave_reward() -> Dictionary:
+	return _last_wave_reward.duplicate()
+
+## Test seam. The board owns gold and there is no other way to arrange a
+## specific bank before a clear; the alternative is playing a whole wave.
+func set_gold_for_test(amount: int) -> void:
+	_gold = amount
+	gold_changed.emit(_gold)
+
+## Test seam. _on_wave_cleared is otherwise only reachable by running a wave
+## to completion, which a frameless test cannot do.
+func force_wave_cleared_for_test() -> void:
+	_on_wave_cleared()
 
 func select_tower_kind(kind: StringName) -> void:
 	_selected_kind = kind
@@ -165,6 +184,20 @@ func _on_enemy_leaked(life_loss: int) -> void:
 func _on_wave_cleared() -> void:
 	_wave_active = false
 	wave_state_changed.emit(false)
+
+	# Interest is taken on the bank as it stands BEFORE the clear bonus is
+	# added, or the player earns interest on money paid in the same instant.
+	var earned_interest := EconomySim.interest_on(_gold)
+	var bonus := EconomySim.wave_clear_bonus(_wave, _wave_clock)
+	_last_wave_reward = {
+		"base": int(bonus["base"]),
+		"speed": int(bonus["speed"]),
+		"interest": earned_interest,
+	}
+	_gold += int(bonus["base"]) + int(bonus["speed"]) + earned_interest
+	gold_changed.emit(_gold)
+	wave_reward.emit(int(bonus["base"]), int(bonus["speed"]), earned_interest)
+
 	_play_sound(&"wave-clear")
 	if _wave >= Waves.MAX_WAVES and not _run_finished:
 		_run_finished = true
