@@ -173,11 +173,12 @@ func test_min_tap_size_constant_matches_the_brief() -> bool:
 func test_icon_for_cuts_each_kinds_own_frame_from_the_tower_sheet() -> bool:
 	# The same 96px grid and upgrade_frames[0] the placed tower uses, so the
 	# button shows the thing you are actually buying. Frames: basic 8 -> (3,1),
-	# fast 1 -> (1,0), mortar 5 -> (0,1), long 2 -> (2,0).
+	# fast 5 -> (0,1), mortar 1 -> (1,0), long 2 -> (2,0). Fast and mortar are
+	# swapped from the reference - see data/towers.gd's header.
 	var expected := {
 		&"basic": Rect2(3 * 96, 1 * 96, 96, 96),
-		&"fast": Rect2(1 * 96, 0 * 96, 96, 96),
-		&"mortar": Rect2(0 * 96, 1 * 96, 96, 96),
+		&"fast": Rect2(0 * 96, 1 * 96, 96, 96),
+		&"mortar": Rect2(1 * 96, 0 * 96, 96, 96),
 		&"long": Rect2(2 * 96, 0 * 96, 96, 96),
 	}
 	for kind in Towers.KINDS:

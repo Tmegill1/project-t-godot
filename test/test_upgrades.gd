@@ -282,8 +282,8 @@ func test_sprite_frame_for_indexes_the_kinds_own_frame_list() -> bool:
 	return true
 
 func test_sprite_frame_for_uses_each_kinds_distinct_frames() -> bool:
-	assert_eq(UpgradesSim.sprite_frame_for(&"fast", _tiers(0, 0)), 1, "fast starts at frame 1")
-	assert_eq(UpgradesSim.sprite_frame_for(&"mortar", _tiers(0, 0)), 5, "mortar at 5")
+	assert_eq(UpgradesSim.sprite_frame_for(&"fast", _tiers(0, 0)), 5, "Magic starts at frame 5")
+	assert_eq(UpgradesSim.sprite_frame_for(&"mortar", _tiers(0, 0)), 1, "mortar at 1")
 	assert_eq(UpgradesSim.sprite_frame_for(&"long", _tiers(0, 0)), 2, "long at 2")
 	return true
 

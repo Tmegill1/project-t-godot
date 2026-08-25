@@ -1,5 +1,19 @@
 class_name Towers
 
+## The `fast` key is a JOIN, not a name. It ties this table to Upgrades.DEFS,
+## to the `fire-fast` audio event, to the sprite lookup and to every test that
+## names a kind. The tower the player sees is called "Magic", which lives in
+## the `label` field - the only one of the two a player ever reads. Renaming
+## the key would be a rename across five files for no visible gain.
+##
+## DELIBERATE DIVERGENCE from the Phaser reference, the fourth this port
+## carries: Fast and Mortar have swapped sprite_frame and upgrade_frames,
+## because they were wearing each other's art. Measured by cropping
+## assets/towers.png - frames 1/0/7/16 draw a CANNON and 5/6/12/13 draw
+## CRYSTALS, and upstream had the cannon on the rapid-fire tower and the
+## crystals on the artillery piece. No stat, cost, range or rate moved with
+## them; test_data_tables.gd pins that separately.
+
 const DEFS := {
 	&"basic": {
 		"label": "Basic", "cost": 20, "cost_escalation": 10, "range": 100.0,
@@ -10,11 +24,11 @@ const DEFS := {
 		"base_limit": 8, "limit_bonus_map2": 2,
 	},
 	&"fast": {
-		"label": "Fast", "cost": 50, "cost_escalation": 15, "range": 80.0,
+		"label": "Magic", "cost": 50, "cost_escalation": 15, "range": 80.0,
 		"fire_rate": 500.0, "damage": 2, "pierce": 0, "detection": false,
 		"base_splash_radius": 0.0, "projectile_speed": 500.0,
 		"projectile_arcs": false, "color": Color8(0x00, 0xff, 0x00),
-		"size": 0.75, "sprite_frame": 1, "upgrade_frames": [1, 0, 7, 16],
+		"size": 0.75, "sprite_frame": 5, "upgrade_frames": [5, 6, 12, 13],
 		"base_limit": 8, "limit_bonus_map2": 2,
 	},
 	&"mortar": {
@@ -22,7 +36,7 @@ const DEFS := {
 		"fire_rate": 2000.0, "damage": 5, "pierce": 0, "detection": false,
 		"base_splash_radius": 55.0, "projectile_speed": 350.0,
 		"projectile_arcs": true, "color": Color8(0xb0, 0x7a, 0x3a),
-		"size": 0.85, "sprite_frame": 5, "upgrade_frames": [5, 6, 12, 13],
+		"size": 0.85, "sprite_frame": 1, "upgrade_frames": [1, 0, 7, 16],
 		"base_limit": 5, "limit_bonus_map2": 2,
 	},
 	&"long": {

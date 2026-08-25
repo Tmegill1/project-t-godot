@@ -33,8 +33,9 @@ func test_setup_atlas_region_for_each_tower_kind() -> bool:
 	Grid.set_active(23, 14)
 	var expectations := [
 		{"kind": &"basic", "col": 3, "row": 1},
-		{"kind": &"fast", "col": 1, "row": 0},
-		{"kind": &"mortar", "col": 0, "row": 1},
+		# Swapped with mortar: Magic wears the crystals at frame 5 now.
+		{"kind": &"fast", "col": 0, "row": 1},
+		{"kind": &"mortar", "col": 1, "row": 0},
 		{"kind": &"long", "col": 2, "row": 0},
 	]
 	for entry in expectations:

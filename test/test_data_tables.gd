@@ -60,14 +60,17 @@ func test_tower_cosmetic_and_progression_fields_match_the_phaser_build() -> bool
 			"sprite_frame": 8, "upgrade_frames": [8, 9, 11, 17],
 			"limit_bonus_map2": 2, "projectile_speed": 500.0,
 		},
+		# label, sprite_frame and upgrade_frames DIVERGE from the reference for
+		# these two kinds, deliberately - see the swap tests at the bottom of
+		# this file. Every other field here is still Phaser parity.
 		&"fast": {
-			"label": "Fast", "color": Color8(0x00, 0xff, 0x00), "size": 0.75,
-			"sprite_frame": 1, "upgrade_frames": [1, 0, 7, 16],
+			"label": "Magic", "color": Color8(0x00, 0xff, 0x00), "size": 0.75,
+			"sprite_frame": 5, "upgrade_frames": [5, 6, 12, 13],
 			"limit_bonus_map2": 2, "projectile_speed": 500.0,
 		},
 		&"mortar": {
 			"label": "Mortar", "color": Color8(0xb0, 0x7a, 0x3a), "size": 0.85,
-			"sprite_frame": 5, "upgrade_frames": [5, 6, 12, 13],
+			"sprite_frame": 1, "upgrade_frames": [1, 0, 7, 16],
 			"limit_bonus_map2": 2, "projectile_speed": 350.0,
 		},
 		&"long": {
@@ -221,4 +224,52 @@ func test_every_registered_map_can_actually_be_built() -> bool:
 	for name in Maps.DEFS:
 		var tiles := Maps.build_tiles(name)
 		assert_true(tiles.size() > 0, "%s builds to a real grid" % name)
+	return true
+
+# --------------------------------------------------------------------------
+# Tower art swap and the Magic rename
+# (spec 2026-08-25-roster-resistance-and-bosses-design.md section 8)
+# --------------------------------------------------------------------------
+#
+# A DELIBERATE DIVERGENCE from the Phaser reference, and the fourth this port
+# carries. Measured on assets/towers.png by cropping the frames: the ones Fast
+# pointed at draw a CANNON and the ones Mortar pointed at draw CRYSTALS. They
+# were simply on the wrong towers, upstream included. A parity test would
+# faithfully preserve the mistake, so these assertions replace parity for
+# these two fields.
+
+func test_the_magic_tower_wears_the_crystal_frames() -> bool:
+	assert_eq(Towers.DEFS[&"fast"]["upgrade_frames"], [5, 6, 12, 13],
+		"Magic wears what Mortar used to")
+	assert_eq(int(Towers.DEFS[&"fast"]["sprite_frame"]), 5, "and its base frame")
+	return true
+
+func test_the_mortar_tower_wears_the_cannon_frames() -> bool:
+	assert_eq(Towers.DEFS[&"mortar"]["upgrade_frames"], [1, 0, 7, 16],
+		"Mortar wears what Fast used to")
+	assert_eq(int(Towers.DEFS[&"mortar"]["sprite_frame"]), 1, "and its base frame")
+	return true
+
+func test_the_fast_tower_is_labelled_magic() -> bool:
+	assert_eq(Towers.DEFS[&"fast"]["label"], "Magic",
+		"renamed for the crystals it now wears")
+	return true
+
+# The key is the join to the upgrade table, the fire-fast audio event and the
+# sprite lookup. Renaming the label is one word; renaming the key is five files.
+func test_the_fast_key_survives_the_rename() -> bool:
+	assert_true(Towers.DEFS.has(&"fast"), "the key is unchanged")
+	assert_true(Upgrades.DEFS.has(&"fast"), "so the upgrade table still joins")
+	assert_true(Towers.KINDS.has(&"fast"), "and so does KINDS")
+	return true
+
+# Art and a name only. Nothing about how either tower PLAYS moves.
+func test_swapping_the_art_moved_no_stats() -> bool:
+	assert_eq(int(Towers.DEFS[&"fast"]["cost"]), 50, "Magic still costs 50")
+	assert_eq(float(Towers.DEFS[&"fast"]["fire_rate"]), 500.0, "and still fires every 500ms")
+	assert_eq(float(Towers.DEFS[&"fast"]["range"]), 80.0, "and still reaches 80")
+	assert_eq(float(Towers.DEFS[&"fast"]["base_splash_radius"]), 0.0, "and still does not splash")
+	assert_eq(float(Towers.DEFS[&"mortar"]["base_splash_radius"]), 55.0, "Mortar still splashes")
+	assert_eq(float(Towers.DEFS[&"mortar"]["fire_rate"]), 2000.0, "and still fires every 2000ms")
+	assert_eq(int(Towers.DEFS[&"mortar"]["cost"]), 70, "and still costs 70")
 	return true
