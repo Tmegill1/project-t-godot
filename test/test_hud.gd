@@ -426,3 +426,76 @@ func test_the_volume_slider_shows_the_volume_already_set() -> bool:
 	AudioServer.set_bus_volume_db(0, before_bus)
 	h.free()
 	return true
+
+# --------------------------------------------------------------------------
+# Prep countdown, call-early payout, tower budget (spec sections 4.5 and 5)
+# --------------------------------------------------------------------------
+
+func test_the_start_button_shows_the_call_early_payout_while_prepping() -> bool:
+	var h := _ready_hud()
+	var b := _ready_board()
+	h.bind(b)
+	h._on_prep_changed(10000.0, 30)
+	assert_true(h._start.text.contains("30"),
+		"the button advertises what calling now is worth")
+	h.free(); b.free()
+	return true
+
+func test_the_start_button_returns_to_its_plain_label_when_not_prepping() -> bool:
+	var h := _ready_hud()
+	var b := _ready_board()
+	h.bind(b)
+	h._on_prep_changed(10000.0, 30)
+	h._on_prep_changed(0.0, 0)
+	assert_eq(h._start.text, "Start wave", "back to the plain label")
+	h.free(); b.free()
+	return true
+
+func test_the_countdown_shows_whole_seconds_remaining() -> bool:
+	var h := _ready_hud()
+	var b := _ready_board()
+	h.bind(b)
+	h._on_prep_changed(7400.0, 21)
+	assert_true(h._prep.text.contains("7"), "7.4s reads as 7")
+	h.free(); b.free()
+	return true
+
+func test_the_countdown_is_hidden_when_no_wave_is_pending() -> bool:
+	var h := _ready_hud()
+	var b := _ready_board()
+	h.bind(b)
+	h._on_prep_changed(0.0, 0)
+	assert_false(h._prep.visible, "nothing to count down to")
+	h.free(); b.free()
+	return true
+
+func test_the_tower_budget_readout_shows_used_over_total() -> bool:
+	var h := _ready_hud()
+	var b := _ready_board()
+	h.bind(b)
+	h._on_budget_changed(3, 16)
+	assert_eq(h._budget.text, "Towers 3/16", "used over total")
+	h.free(); b.free()
+	return true
+
+func test_the_budget_readout_is_seeded_from_the_maps_own_budget() -> bool:
+	var h := _ready_hud()
+	var b := _ready_board()
+	h.bind(b)
+	var expected := int(Maps.get_def(b.get_map_name())["tower_budget"])
+	assert_eq(h._budget.text, "Towers 0/%d" % expected,
+		"an empty board reads zero against the map's budget")
+	h.free(); b.free()
+	return true
+
+func test_the_wave_reward_is_announced_itemised() -> bool:
+	var h := _ready_hud()
+	var b := _ready_board()
+	h.bind(b)
+	h._on_wave_reward(25, 40, 10)
+	var text := h._message.text
+	assert_true(text.contains("25"), "the base is shown")
+	assert_true(text.contains("40"), "the speed bonus is shown")
+	assert_true(text.contains("10"), "and the interest is shown")
+	h.free(); b.free()
+	return true

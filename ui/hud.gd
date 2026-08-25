@@ -40,6 +40,8 @@ const EDGE_INSET := 12.0
 @onready var _gold: Label = $Top/GoldLabel
 @onready var _lives: Label = $Top/LivesLabel
 @onready var _wave: Label = $Top/WaveLabel
+@onready var _budget: Label = $Top/BudgetLabel
+@onready var _prep: Label = $Top/PrepLabel
 @onready var _start: Button = $Top/StartButton
 @onready var _speed: Button = $Top/SpeedButton
 @onready var _mute: Button = $Top/MuteButton
@@ -67,6 +69,10 @@ func bind(board: GameBoard) -> void:
 	board.wave_changed.connect(_on_wave_changed)
 	board.wave_state_changed.connect(_on_wave_state_changed)
 	board.placement_rejected.connect(_show_message)
+	board.prep_changed.connect(_on_prep_changed)
+	board.wave_reward.connect(_on_wave_reward)
+	board.tower_placed.connect(func(_kind): _refresh_budget())
+	board.tower_sold.connect(func(_kind): _refresh_budget())
 	_start.pressed.connect(board.start_next_wave)
 	_speed.pressed.connect(_toggle_speed)
 
@@ -80,6 +86,9 @@ func bind(board: GameBoard) -> void:
 	_on_lives_changed(board.get_lives())
 	_on_wave_changed(board.get_wave(), Waves.MAX_WAVES)
 	_message.text = ""
+	_refresh_budget()
+	_on_prep_changed(board.get_prep_remaining_ms(),
+		EconomySim.call_early_bonus(board.get_prep_remaining_ms()))
 	refresh_audio_controls()
 
 func _process(delta: float) -> void:
@@ -101,6 +110,46 @@ func _on_wave_changed(wave: int, max_waves: int) -> void:
 func _on_wave_state_changed(active: bool) -> void:
 	_start.disabled = active
 	_start.text = "In progress" if active else "Start wave"
+
+## The Start button doubles as the call-early button. One control, because
+## they are one action: starting the next wave. The payout is on the label so
+## the player can see what the decision is worth without a hover - this game
+## is touch-first and hover does not exist on a phone.
+func _on_prep_changed(remaining_ms: float, bonus: int) -> void:
+	if remaining_ms <= 0.0:
+		_prep.visible = false
+		_prep.text = ""
+		if _board != null and not _board.is_wave_active():
+			_start.text = "Start wave"
+		return
+	_prep.visible = true
+	_prep.text = "Next in %ds" % int(floor(remaining_ms / 1000.0))
+	_start.text = "Call wave (+%d)" % bonus if bonus > 0 else "Call wave"
+
+## Itemised, so the player can see WHY they were paid. A single total hides
+## the fact that clearing fast and banking gold are two separate incentives.
+func _on_wave_reward(base: int, speed: int, earned_interest: int) -> void:
+	var parts := ["Wave cleared: +%d" % base]
+	if speed > 0:
+		parts.append("+%d fast" % speed)
+	if earned_interest > 0:
+		parts.append("+%d interest" % earned_interest)
+	_show_message(" ".join(parts))
+
+## The map budget is a cap across every kind, where the build panel shows the
+## per-kind ones. Both are already enforced in GameBoard._try_place; this is
+## the half the player could not see.
+func _refresh_budget() -> void:
+	if _board == null:
+		return
+	var total := int(Maps.get_def(_board.get_map_name())["tower_budget"])
+	var used := 0
+	for kind in Towers.KINDS:
+		used += _board.get_tower_count(kind)
+	_on_budget_changed(used, total)
+
+func _on_budget_changed(used: int, total: int) -> void:
+	_budget.text = "Towers %d/%d" % [used, total]
 
 func _toggle_speed() -> void:
 	_fast = not _fast

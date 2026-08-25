@@ -26,6 +26,14 @@ text = "Lives 0"
 layout_mode = 2
 text = "Wave 0 / 0"
 
+[node name="BudgetLabel" type="Label" parent="Top"]
+layout_mode = 2
+text = "Towers 0/0"
+
+[node name="PrepLabel" type="Label" parent="Top"]
+layout_mode = 2
+text = ""
+
 [node name="StartButton" type="Button" parent="Top"]
 custom_minimum_size = Vector2(44, 44)
 layout_mode = 2
