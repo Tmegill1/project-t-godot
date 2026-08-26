@@ -15,7 +15,7 @@ const SOUNDS := [
 	&"place", &"sell", &"denied", &"ui-click", &"wave-start", &"wave-clear",
 	&"leak", &"victory", &"defeat", &"fire-basic", &"fire-fast",
 	&"fire-mortar", &"fire-long", &"death-goblin", &"death-ogre",
-	&"death-bat", &"explosion",
+	&"death-bat", &"death-shaman", &"explosion",
 ]
 
 const POOL_SIZE := 12

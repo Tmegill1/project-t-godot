@@ -17,10 +17,21 @@ const _ADDITIONS := {
 	5: [{"kind": &"goblin", "count": 3}, {"kind": &"bat", "count": 3}, {"kind": &"ogre", "count": 1}],
 }
 
+## Shamans ride in here rather than in an authored wave, which is what puts
+## them from wave 6 onward without moving LAST_AUTHORED_WAVE: `endless` is
+## max(0, wave - LAST_AUTHORED_WAVE), so this bundle first contributes at
+## wave 6 already. Moving the boundary instead would have shifted the health,
+## speed and gold modifier onset and every composition total pinned against
+## them, for no gain.
+##
+## One per bundle, against two goblins and five bats, because a shaman is an
+## escort rather than a wave - it is dangerous for what it grants the things
+## around it, not for its own numbers.
 const _ENDLESS_BUNDLE := [
 	{"kind": &"goblin", "count": 2},
 	{"kind": &"bat", "count": 5},
 	{"kind": &"ogre", "count": 2},
+	{"kind": &"shaman", "count": 1},
 ]
 
 const HEALTH_PER_WAVE := 0.1

@@ -143,15 +143,23 @@ func _mipmap_setting(path: String) -> String:
 func test_props_endpoints_and_enemy_frames_generate_a_mipmap_chain() -> bool:
 	var paths := _prop_import_paths() + _endpoint_import_paths() + _enemy_frame_import_paths()
 	# Pinned, not just "> 0": 49 is 12 props (4 slots x 3 biomes) + 2
-	# endpoints + 35 enemy frames (8 walk + 4 death for goblin and for ogre,
+	# endpoints + every enemy frame. DERIVED from Enemies rather than hardcoded:
+	# the count's job is catching art that is missing or imported without
+	# mipmaps, and a hardcoded total also fails every time a kind is legitimately
+	# added, which teaches the reader to bump the number rather than investigate.
+	# (Historically 35 enemy frames: 8 walk + 4 death for goblin and for ogre,
 	# 7 + 4 for the bat, whose eighth walk frame is broken art the bake drops).
 	# It was 45 while these were per-spawn variants. If it drops, a biome,
 	# prop slot or enemy kind went missing, not "the assets are fine, just
 	# fewer of them".
-	assert_true(paths.size() == 49,
-		("expected 49 mipmap-chain imports (12 props + 2 endpoints + 35 " +
+	var enemy_frames := 0
+	for kind in Enemies.KINDS:
+		enemy_frames += Enemies.walk_frames(kind) + Enemies.death_frames(kind)
+	var expected_total := 12 + 2 + enemy_frames
+	assert_eq(paths.size(), expected_total,
+		("expected %d mipmap-chain imports (12 props + 2 endpoints + %d " +
 		"enemy frames), got %d - a biome, prop slot or enemy kind is " +
-		"likely missing from Biomes or Enemies") % paths.size())
+		"likely missing from Biomes or Enemies") % [expected_total, enemy_frames, paths.size()])
 	for path in paths:
 		var setting := _mipmap_setting(path)
 		assert_true(setting != "", "%s reads as text and sets mipmaps/generate" % path)

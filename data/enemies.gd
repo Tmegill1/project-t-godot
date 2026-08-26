@@ -59,6 +59,15 @@ const DEFS := {
 		"life_loss": 5, "walk_frames": 8, "death_frames": 4, "sprite_px": 58.0,
 		"stride_px": 46.0, "flip_horizontally": false,
 	},
+	# The support caster. Its health and speed sit between the goblin's and the
+	# ogre's, matching its place in the roster; sprite_px is 44 because its
+	# source art is 112px tall against the goblin's 89, so drawing it at the
+	# goblin's 34 would make the taller creature render smaller.
+	&"shaman": {
+		"label": "Goblin Shaman", "base_speed": 80.0, "base_health": 7, "reward": 15,
+		"life_loss": 3, "walk_frames": 8, "death_frames": 4, "sprite_px": 44.0,
+		"stride_px": 36.0, "flip_horizontally": false,
+	},
 	&"bat": {
 		"label": "Bat", "base_speed": 150.0, "base_health": 3, "reward": 10,
 		"life_loss": 2, "walk_frames": 7, "death_frames": 4, "sprite_px": 28.0,
@@ -66,7 +75,10 @@ const DEFS := {
 	},
 }
 
-const KINDS: Array[StringName] = [&"goblin", &"ogre", &"bat"]
+## Not ordered by anything meaningful - callers iterate it to cover every
+## kind, never to rank them. The roster's ordering by health lives in
+## test_data_tables.gd, which asserts it directly.
+const KINDS: Array[StringName] = [&"goblin", &"ogre", &"bat", &"shaman"]
 
 ## Health for a spawn, applying the wave modifier. Floors, never below one.
 static func scaled_health(kind: StringName, health_modifier: float) -> int:

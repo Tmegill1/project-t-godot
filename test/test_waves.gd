@@ -195,7 +195,11 @@ func test_build_schedule_breaks_ties_by_push_order() -> bool:
 	# Composition order is goblin, then bat, then ogre (see
 	# test_composition_accumulates_from_wave_one / test_ogres_arrive_at_wave_four),
 	# so within any tied at_ms, the earlier-pushed kind must sort first.
-	var rank := {&"goblin": 0, &"bat": 1, &"ogre": 2}
+	# Every kind must be here: a tie group containing a kind this map lacks
+	# throws on the lookup, which aborts the test rather than failing it.
+	# Composition order is goblin, bat, ogre, then shaman - the shaman rides
+	# in on the endless bundle, so _add appends it last.
+	var rank := {&"goblin": 0, &"bat": 1, &"ogre": 2, &"shaman": 3}
 	var schedule := Waves.build_schedule(6)
 	var groups := {}
 	for entry in schedule:
@@ -211,11 +215,11 @@ func test_build_schedule_breaks_ties_by_push_order() -> bool:
 		tie_groups_checked += 1
 		for i in range(1, kinds.size()):
 			assert_true(rank[kinds[i - 1]] <= rank[kinds[i]],
-				"at %.1fms, %s must not sort after %s (push order: goblin, bat, ogre)" % [
+				"at %.1fms, %s must not sort after %s (push order: goblin, bat, ogre, shaman)" % [
 					t, kinds[i - 1], kinds[i]])
 	# Confirms the loop above actually exercised ties rather than vacuously
 	# passing over a schedule with none (e.g. if get_composition regressed).
-	assert_eq(tie_groups_checked, 10, "wave 6 has exactly ten tied at_ms instants to check")
+	assert_eq(tie_groups_checked, 11, "wave 6 has exactly eleven tied at_ms instants to check")
 	return true
 
 # --------------------------------------------------------------------------
@@ -251,4 +255,27 @@ func test_gold_modifier_shrinks_where_health_and_speed_grow() -> bool:
 	assert_true(m["health_modifier"] > 1.0, "health scales up")
 	assert_true(m["speed_modifier"] > 1.0, "speed scales up")
 	assert_true(m["gold_modifier"] < 1.0, "and gold scales down")
+	return true
+
+# --------------------------------------------------------------------------
+# Shamans in the schedule
+# --------------------------------------------------------------------------
+
+# A support caster arrives once the player has learned the base fight, and in
+# small numbers - it is an escort, not a wave.
+func test_shamans_arrive_from_wave_six() -> bool:
+	assert_eq(_count_of(5, &"shaman"), 0, "none before wave 6")
+	assert_true(_count_of(6, &"shaman") > 0, "wave 6 fields at least one")
+	return true
+
+func test_shamans_stay_rare_relative_to_the_rank_and_file() -> bool:
+	var shamans := _count_of(12, &"shaman")
+	var goblins := _count_of(12, &"goblin")
+	assert_true(shamans > 0, "wave 12 has shamans")
+	assert_true(shamans < goblins, "but far fewer than goblins")
+	return true
+
+func test_shamans_keep_accumulating_in_the_endless_bundle() -> bool:
+	assert_true(_count_of(15, &"shaman") > _count_of(10, &"shaman"),
+		"later waves field more of them")
 	return true

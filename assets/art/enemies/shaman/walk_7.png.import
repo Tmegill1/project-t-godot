@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bi3yjg0i24jp4"
-path="res://.godot/imported/walk_7.png-dc4b92ad5feac2d512adcbf12b9e16ea.ctex"
+uid="uid://b3bx7iy3210rp"
+path="res://.godot/imported/walk_7.png-241cec969a2af3bfc8ffe0879f243405.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/art/enemies/_unused/shaman/walk_7.png"
-dest_files=["res://.godot/imported/walk_7.png-dc4b92ad5feac2d512adcbf12b9e16ea.ctex"]
+source_file="res://assets/art/enemies/shaman/walk_7.png"
+dest_files=["res://.godot/imported/walk_7.png-241cec969a2af3bfc8ffe0879f243405.ctex"]
 
 [params]
 

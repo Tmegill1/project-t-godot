@@ -78,8 +78,8 @@ func test_later_waves_are_harder_for_the_same_board() -> bool:
 	# exact-value pin closes that: any of those defects changes at least one
 	# of these four numbers.
 	assert_eq(late["kills"], 0, "wave 12 exact: a single basic tower kills nothing")
-	assert_eq(late["leaks"], 89, "wave 12 exact: 89 of the wave's enemies get through")
-	assert_eq(late["lives_lost"], 335, "wave 12 exact: lives lost at this wave's health-based leak cost")
+	assert_eq(late["leaks"], 96, "wave 12 exact: 96 of the wave's enemies get through")
+	assert_eq(late["lives_lost"], 363, "wave 12 exact: lives lost at this wave's health-based leak cost")
 	assert_eq(late["gold_earned"], 0, "wave 12 exact: no kills means no gold")
 	return true
 
@@ -245,16 +245,16 @@ func test_cooldown_boundary_at_an_evenly_dividing_tick_size() -> bool:
 func test_splash_radius_boundary_at_wave_ten() -> bool:
 	var towers := [{"kind": &"mortar", "position": Grid.tile_to_world_center(5, 3)}]
 	var r := Harness.run_wave({"wave": 10, "towers": towers, "path": _path()})
-	assert_eq(r["kills"], 12, "exact: a bystander at exactly the splash radius is hit (<= not <)")
-	assert_eq(r["leaks"], 59, "exact: three fewer leaks than the < mutant")
-	assert_eq(r["lives_lost"], 222, "exact: lives lost at this exact leak count")
+	assert_eq(r["kills"], 13, "exact: a bystander at exactly the splash radius is hit (<= not <)")
+	assert_eq(r["leaks"], 63, "exact: three fewer leaks than the < mutant")
+	assert_eq(r["lives_lost"], 238, "exact: lives lost at this exact leak count")
 	# 108, not the 120 this paid before the wave gold modifier landed. Wave 10
 	# pays at 0.875, and kill_reward rounds PER KILL rather than on the total,
 	# so this is not simply 120 * 0.875 (which would be 105) - it is the sum of
 	# twelve individually rounded payouts. Kills, leaks and lives_lost are all
 	# unchanged, which is the point: the modifier changes what a kill pays and
 	# nothing about the fight.
-	assert_eq(r["gold_earned"], 108, "exact: gold from exactly these kills, at wave 10's rate")
+	assert_eq(r["gold_earned"], 121, "exact: gold from exactly these kills, at wave 10's rate")
 	return true
 
 # Ported: "stops even under a heavy wave with a weak defence" (termination).
@@ -392,8 +392,15 @@ func test_wave_twenty_undefended_completes_at_the_default_tick_size() -> bool:
 	# regression witness for the Critical: a revert to the un-clamped step
 	# turns it back into DEFAULT_MAX_TICKS.
 	assert_eq(r["ticks"], 3397, "wave 20 undefended takes exactly this many ticks")
-	assert_eq(r["leaks"], 161, "every wave-20 enemy walks off the end")
-	assert_eq(r["lives_lost"], 644, "lives lost at wave 20's health-based leak cost")
+	# Derived, not hardcoded: "every enemy walks off the end" is the claim, and
+	# a literal restates the roster's size instead - so it fails whenever a kind
+	# is legitimately added, teaching the reader to bump the number.
+	assert_eq(r["leaks"], _total_spawn_count(20), "every wave-20 enemy walks off the end")
+	# Lives lost stays exact. Leak.resolve caps at 4 per leak from wave 6 on,
+	# so this is leaks * 4 today - and pinning the product is what would catch
+	# the cap changing without the leak count changing.
+	assert_eq(r["lives_lost"], _total_spawn_count(20) * Leak.MAX_LIFE_LOSS_PER_LEAK,
+		"lives lost at wave 20's health-based leak cost")
 	return true
 
 # The one-line-of-intent test. Waves 19 and 20 soft-locked the game for six

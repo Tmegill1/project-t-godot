@@ -296,3 +296,36 @@ func test_the_stamp_exposes_the_fields_the_workflow_writes() -> bool:
 	assert_true(BuildStamp.BUILT_AT is String, "BUILT_AT is a String")
 	assert_true(BuildStamp.label() is String, "label() returns a String")
 	return true
+
+# --------------------------------------------------------------------------
+# The goblin shaman (spec 2026-08-25 section 3)
+# --------------------------------------------------------------------------
+
+func test_the_shaman_is_in_the_roster() -> bool:
+	assert_true(Enemies.DEFS.has(&"shaman"), "the shaman has a definition")
+	assert_true(Enemies.KINDS.has(&"shaman"), "and is in KINDS")
+	return true
+
+# The kind key picks the sprite directory and the death sound, so a kind
+# without either is a kind that crashes the first time it spawns.
+func test_every_kind_has_art_on_disk() -> bool:
+	for kind in Enemies.KINDS:
+		assert_true(FileAccess.file_exists("res://assets/art/enemies/%s/walk_0.png" % kind),
+			"%s has a walk frame" % kind)
+		assert_true(FileAccess.file_exists("res://assets/art/enemies/%s/death_0.png" % kind),
+			"%s has a death frame" % kind)
+	return true
+
+func test_every_kind_has_a_registered_death_sound() -> bool:
+	for kind in Enemies.KINDS:
+		assert_true(AudioManager.SOUNDS.has(StringName("death-%s" % kind)),
+			"%s has a death sound registered" % kind)
+	return true
+
+func test_the_shamans_frame_counts_match_its_art() -> bool:
+	var walk := 0
+	while FileAccess.file_exists("res://assets/art/enemies/shaman/walk_%d.png" % walk):
+		walk += 1
+	assert_eq(Enemies.walk_frames(&"shaman"), walk,
+		"the table's walk_frames matches the files on disk")
+	return true

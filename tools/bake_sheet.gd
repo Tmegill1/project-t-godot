@@ -493,7 +493,7 @@ const WALK_ROWS := {
 	&"goblin": {"y0": 78, "y1": 164},
 	&"ogre": {"y0": 593, "y1": 710},
 	&"bat": {"y0": 789, "y1": 881},
-	&"_unused/shaman": {"y0": 242, "y1": 351},
+	&"shaman": {"y0": 242, "y1": 351},
 	&"_unused/troll": {"y0": 425, "y1": 532},
 }
 const WALK_FRAMES := 8
