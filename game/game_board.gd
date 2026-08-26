@@ -34,6 +34,20 @@ const PROJECTILE_SCENE := preload("res://game/projectile.tscn")
 ## surplus beyond this, so it is a MINIMUM rather than a fixed width.
 const PANEL_WIDTH := 140
 
+## The map the NEXT board to enter the tree should load, or empty for the
+## first map.
+##
+## Static because it has to outlive a scene change: the victory screen sets it
+## and then reloads, and there is no save file or run-state singleton in this
+## project to carry it. _ready CONSUMES it - reads it, then clears it - so a
+## run that ends on The Coils does not silently start the next one there.
+## MainMenu.begin_new_run() clears it too, so "Play" always means map one.
+##
+## This is the same shape as Grid's static state and carries the same hazard:
+## anything that reads it must not depend on test execution order. The tests
+## that touch it set and clear it explicitly.
+static var pending_map: StringName = &""
+
 var _map_name: StringName = Maps.FIRST
 var _tiles: Array = []
 var _paths: Array[PackedVector2Array] = []
@@ -72,6 +86,11 @@ var _spawn_rng := Rng.new(Seeds.DEFAULT_SPAWN_SEED)
 @onready var _ghost_range: RangeIndicator = $PreviewRange
 
 func _ready() -> void:
+	# Consume the pending map, so the next board does not inherit this one's.
+	if pending_map != &"":
+		_map_name = pending_map
+		pending_map = &""
+
 	var def := Maps.get_def(_map_name)
 	Grid.set_active(def["cols"], def["rows"], def["tile_size"])
 	_tiles = Maps.build_tiles(_map_name)

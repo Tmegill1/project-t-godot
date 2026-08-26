@@ -38,6 +38,11 @@ horizontal_alignment = 1
 autowrap_mode = 2
 text = "You cleared all 0 waves."
 
+[node name="NextMap" type="Button" parent="Panel"]
+custom_minimum_size = Vector2(120, 48)
+layout_mode = 2
+text = "Next map"
+
 [node name="Retry" type="Button" parent="Panel"]
 custom_minimum_size = Vector2(120, 48)
 layout_mode = 2

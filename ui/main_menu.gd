@@ -1,3 +1,4 @@
+class_name MainMenu
 extends Control
 
 ## Entry point of the game (`run/main_scene`). Play loads the game scene
@@ -13,7 +14,14 @@ func _ready() -> void:
 	# working out which version a browser was running previously meant
 	# downloading the pack and parsing it in a headless engine.
 	_stamp.text = BuildStamp.label()
-	_play.pressed.connect(func(): get_tree().change_scene_to_file("res://game/game.tscn"))
+	_play.pressed.connect(func():
+		begin_new_run()
+		get_tree().change_scene_to_file("res://game/game.tscn"))
 	_quit.pressed.connect(func(): get_tree().quit())
 	# Quit is meaningless in a browser build.
 	_quit.visible = OS.get_name() != "Web"
+
+## Clears anything a previous run left behind. "Play" must always mean the
+## first map, however the last run ended.
+static func begin_new_run() -> void:
+	GameBoard.pending_map = &""

@@ -29,4 +29,9 @@ func _on_victory() -> void:
 func _show_end_screen(scene: PackedScene) -> void:
 	var screen := scene.instantiate()
 	screen.wave_reached = _board.get_wave()
+	# The victory screen needs to know where it is to know where to go next.
+	# Set before add_child, so it is in place by the time _ready reads it -
+	# the same ordering wave_reached already relies on.
+	if screen.has_method("set_completed_map") or "completed_map" in screen:
+		screen.completed_map = _board.get_map_name()
 	add_child(screen)

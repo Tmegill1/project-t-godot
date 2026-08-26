@@ -95,3 +95,83 @@ func test_victory_exposes_retry_and_main_menu_buttons() -> bool:
 	assert_true(screen._menu is Button, "victory exposes a MainMenu button")
 	screen.free()
 	return true
+
+# --------------------------------------------------------------------------
+# Map progression on victory
+# --------------------------------------------------------------------------
+#
+# data/maps.gd has carried a `next` field since the core slice and NOTHING
+# read it: winning offered Retry and Main Menu only, so The Fork and The Coils
+# were unreachable in play however complete their data was. The table test
+# that asserts the chain passes on the data alone, which is exactly how this
+# stayed invisible.
+
+func test_a_fresh_board_loads_the_first_map() -> bool:
+	GameBoard.pending_map = &""
+	var b := _ready_board()
+	assert_eq(b.get_map_name(), Maps.FIRST, "no pending map means map one")
+	b.free()
+	return true
+
+func test_a_pending_map_is_what_the_board_loads() -> bool:
+	GameBoard.pending_map = &"map2"
+	var b := _ready_board()
+	assert_eq(b.get_map_name(), &"map2", "the board honoured the pending map")
+	b.free()
+	GameBoard.pending_map = &""
+	return true
+
+# Static state that outlives a scene reload is the whole mechanism, so it has
+# to be cleared deliberately or every later run inherits the last one's map.
+func test_loading_a_pending_map_consumes_it() -> bool:
+	GameBoard.pending_map = &"map2"
+	var first := _ready_board()
+	var second := _ready_board()
+	assert_eq(first.get_map_name(), &"map2", "the first board took it")
+	assert_eq(second.get_map_name(), Maps.FIRST, "the second did not inherit it")
+	first.free(); second.free()
+	GameBoard.pending_map = &""
+	return true
+
+func test_victory_offers_the_next_map_when_there_is_one() -> bool:
+	var v: CanvasLayer = _ready_victory(&"demoMap")
+	assert_true(v.next_map_button().visible, "The Pass leads somewhere")
+	assert_true(v.next_map_button().text.contains("The Fork"),
+		"and the button names where")
+	v.free()
+	return true
+
+func test_victory_hides_the_next_map_button_on_the_last_map() -> bool:
+	var v: CanvasLayer = _ready_victory(&"map3")
+	assert_false(v.next_map_button().visible,
+		"The Coils is the last map, so there is nowhere to go")
+	v.free()
+	return true
+
+func test_pressing_next_map_queues_that_map() -> bool:
+	GameBoard.pending_map = &""
+	var v: CanvasLayer = _ready_victory(&"demoMap")
+	v.queue_next_map()
+	assert_eq(GameBoard.pending_map, &"map2", "the next run loads The Fork")
+	v.free()
+	GameBoard.pending_map = &""
+	return true
+
+# Starting a fresh game from the menu must not drop the player onto whatever
+# map the previous session happened to end on.
+func test_starting_a_new_game_clears_any_pending_map() -> bool:
+	GameBoard.pending_map = &"map3"
+	MainMenu.begin_new_run()
+	assert_eq(GameBoard.pending_map, &"", "a new run starts at the beginning")
+	return true
+
+func _ready_victory(completed_map: StringName) -> CanvasLayer:
+	var v: CanvasLayer = load("res://ui/victory.tscn").instantiate()
+	v.completed_map = completed_map
+	v.notification(Node.NOTIFICATION_READY)
+	return v
+
+func _ready_board() -> GameBoard:
+	var b: GameBoard = load("res://game/game_board.tscn").instantiate()
+	b.notification(Node.NOTIFICATION_READY)
+	return b
