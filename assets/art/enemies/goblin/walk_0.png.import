@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://csqspu7046vxm"
-path="res://.godot/imported/walk_3.png-5258c3320cb72161d668d51a96d49a95.ctex"
+uid="uid://jfo8qqfo3v06"
+path="res://.godot/imported/walk_0.png-fc9c45d22e72fd691296aa69bad6f570.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/art/enemies/slime/walk_3.png"
-dest_files=["res://.godot/imported/walk_3.png-5258c3320cb72161d668d51a96d49a95.ctex"]
+source_file="res://assets/art/enemies/goblin/walk_0.png"
+dest_files=["res://.godot/imported/walk_0.png-fc9c45d22e72fd691296aa69bad6f570.ctex"]
 
 [params]
 

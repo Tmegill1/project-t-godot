@@ -89,7 +89,7 @@ static func advance(position: Vector2, path_index: int, path: PackedVector2Array
 	#
 	# Enemies whose step is under the 2px radius are bit-identical, since
 	# `distance <= move_distance` cannot fire before `distance < 2.0` does. That
-	# is every ogre at every wave (max 1.75 px/tick) and every slime below wave
+	# is every ogre at every wave (max 1.75 px/tick) and every goblin below wave
 	# 9 — which is why the shift is as small as it is.
 	#
 	# Note that explicit crossing detection would be the same predicate: motion

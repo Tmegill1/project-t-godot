@@ -251,7 +251,7 @@ func test_kill_reward_clamps_a_negative_flat_bonus() -> bool:
 func test_kill_reward_reads_the_keys_resolve_tower_stats_writes() -> bool:
 	var maxed_income := UpgradesSim.resolve_tower_stats(&"fast", {&"sustained": 0, &"burst": 4})
 	assert_eq(EconomySim.kill_reward(5, maxed_income), 12,
-		"a fully upgraded Bounty Hunter pays 5 * 2 + 2 on a slime")
+		"a fully upgraded Bounty Hunter pays 5 * 2 + 2 on a goblin")
 	var plain := UpgradesSim.resolve_tower_stats(&"fast", UpgradesSim.empty_tiers())
 	assert_eq(EconomySim.kill_reward(5, plain), 5, "and an unupgraded one pays the plain reward")
 	return true

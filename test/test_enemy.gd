@@ -27,13 +27,13 @@ func _straight_path() -> PackedVector2Array:
 # setup()
 # --------------------------------------------------------------------------
 
-func test_setup_populates_sim_with_scaled_health_and_speed_for_slime_at_wave_one() -> bool:
+func test_setup_populates_sim_with_scaled_health_and_speed_for_goblin_at_wave_one() -> bool:
 	var e := _ready_enemy()
-	e.setup(&"slime", _straight_path(), 1)
+	e.setup(&"goblin", _straight_path(), 1)
 
 	var modifiers := Waves.get_modifiers(1)
-	var expected_health := float(Enemies.scaled_health(&"slime", modifiers["health_modifier"]))
-	var expected_speed := Enemies.scaled_speed(&"slime", modifiers["speed_modifier"])
+	var expected_health := float(Enemies.scaled_health(&"goblin", modifiers["health_modifier"]))
+	var expected_speed := Enemies.scaled_speed(&"goblin", modifiers["speed_modifier"])
 
 	assert_eq(e.sim["health"], expected_health, "health scaled via Enemies.scaled_health for the given wave")
 	assert_eq(e.sim["max_health"], expected_health, "max_health mirrors starting health")
@@ -47,7 +47,7 @@ func test_setup_populates_sim_with_scaled_health_and_speed_for_slime_at_wave_one
 
 # A later wave and a different kind together prove setup() actually threads
 # both the kind argument and the wave argument through to Enemies/Waves,
-# rather than e.g. always scaling as if for wave 1 or always as slime.
+# rather than e.g. always scaling as if for wave 1 or always as goblin.
 func test_setup_scales_health_and_speed_for_ogre_at_a_later_wave() -> bool:
 	var e := _ready_enemy()
 	e.setup(&"ogre", _straight_path(), 10)
@@ -59,8 +59,8 @@ func test_setup_scales_health_and_speed_for_ogre_at_a_later_wave() -> bool:
 
 	assert_eq(e.sim["health"], expected_health, "ogre health at wave 10 uses the ogre base and the wave-10 modifier")
 	assert_eq(e.sim["speed"], expected_speed, "ogre speed at wave 10 uses the ogre base and the wave-10 modifier")
-	assert_true(expected_health != float(Enemies.scaled_health(&"slime", modifiers["health_modifier"])),
-		"precondition: ogre and slime scale to different health values, so a kind mix-up would be caught")
+	assert_true(expected_health != float(Enemies.scaled_health(&"goblin", modifiers["health_modifier"])),
+		"precondition: ogre and goblin scale to different health values, so a kind mix-up would be caught")
 
 	e.free()
 	return true
@@ -72,9 +72,9 @@ func test_setup_sets_position_kind_and_starting_path_index() -> bool:
 	# reading path[0] - confirmed by actually running that mutation against
 	# a straight path starting at (0, 0) before switching to this one.
 	var path := PackedVector2Array([Vector2(40, 25), Vector2(100, 0), Vector2(100, 100)])
-	e.setup(&"bee", path, 1)
+	e.setup(&"bat", path, 1)
 
-	assert_eq(e.kind, &"bee", "kind is stored")
+	assert_eq(e.kind, &"bat", "kind is stored")
 	assert_eq(e.position, path[0], "enemy spawns at the first path point")
 	assert_eq(e.sim["path_index"], Movement.starting_path_index(path[0], path),
 		"path_index comes from Movement.starting_path_index, not a hardcoded 0 or 1")
@@ -98,7 +98,7 @@ func test_physics_process_before_setup_is_a_safe_no_op() -> bool:
 
 func test_physics_process_advances_position_toward_the_first_waypoint() -> bool:
 	var e := _ready_enemy()
-	e.setup(&"slime", _straight_path(), 1)
+	e.setup(&"goblin", _straight_path(), 1)
 	assert_eq(e.sim["path_index"], 1, "precondition: spawning on path[0] skips straight to heading for path[1]")
 
 	e._physics_process(0.1)  # 0.1s -> 100ms; speed 100px/s -> 10px moved
@@ -118,7 +118,7 @@ func test_physics_process_advances_position_toward_the_first_waypoint() -> bool:
 # halves to demand a skip and would wrongly let the tick through.
 func test_physics_process_skips_processing_while_dying_even_if_alive_flag_is_stale() -> bool:
 	var e := _ready_enemy()
-	e.setup(&"slime", _straight_path(), 1)
+	e.setup(&"goblin", _straight_path(), 1)
 	e.sim["dying"] = true
 	var position_before := e.position
 	var sim_before := e.sim.duplicate()
@@ -146,7 +146,7 @@ func test_physics_process_does_not_flip_the_sprite_on_a_waypoint_arrival_tick() 
 	# without moving - and reads as moving right (dx = 1 > 0), even though
 	# the path immediately continues sharply left afterward.
 	var path := PackedVector2Array([Vector2(0, 0), Vector2(1, 0), Vector2(-100, 0)])
-	e.setup(&"slime", path, 1)
+	e.setup(&"goblin", path, 1)
 	var sprite: Sprite2D = e.get_node("Sprite")
 	e.set_facing_from_travel(true)  # establishes "facing left", as ongoing travel would
 	assert_true(sprite.flip_h, "precondition: facing left before the arrival tick")
@@ -163,7 +163,7 @@ func test_physics_process_does_not_flip_the_sprite_on_a_waypoint_arrival_tick() 
 func test_physics_process_reaching_the_goal_emits_leaked_with_the_resolved_value_and_marks_dead() -> bool:
 	var e := _ready_enemy()
 	var single_point_path := PackedVector2Array([Vector2(0, 0)])
-	# Bee at wave 6 (past Leak.LIFE_LOSS_SCALING_WAVE = 5) puts Leak.resolve on
+	# Bat at wave 6 (past Leak.LIFE_LOSS_SCALING_WAVE = 5) puts Leak.resolve on
 	# its health-based branch with an uncapped result (health 3, life_loss 2 -
 	# neither hits MAX_LIFE_LOSS_PER_LEAK = 4). That makes this scenario
 	# sensitive to the two dict fields passed to Leak.resolve being swapped:
@@ -171,7 +171,7 @@ func test_physics_process_reaching_the_goal_emits_leaked_with_the_resolved_value
 	# exceed the cap, so a life_loss/health swap was invisible (both routes
 	# saturated to the same capped value of 4) - confirmed by actually
 	# running that mutation before settling on this scenario.
-	e.setup(&"bee", single_point_path, 6)
+	e.setup(&"bat", single_point_path, 6)
 	var starting_health: float = e.sim["health"]
 
 	# GDScript lambdas capture locals by value, not by reference, so a plain
@@ -184,7 +184,7 @@ func test_physics_process_reaching_the_goal_emits_leaked_with_the_resolved_value
 	e._physics_process(0.016)
 
 	var expected: int = Leak.resolve(
-		{"life_loss": Enemies.DEFS[&"bee"]["life_loss"], "health": starting_health}, 6)
+		{"life_loss": Enemies.DEFS[&"bat"]["life_loss"], "health": starting_health}, 6)
 	assert_true(expected < Leak.MAX_LIFE_LOSS_PER_LEAK, "precondition: this scenario's result is not cap-saturated")
 	assert_eq(captured["count"], 1, "leaked fires exactly once")
 	assert_eq(captured["value"], expected, "leaked carries whatever Leak.resolve computes for this enemy/wave")
@@ -199,7 +199,7 @@ func test_physics_process_reaching_the_goal_emits_leaked_with_the_resolved_value
 
 func test_take_damage_reduces_health_and_updates_health_bar() -> bool:
 	var e := _ready_enemy()
-	e.setup(&"slime", _straight_path(), 1)  # health 5
+	e.setup(&"goblin", _straight_path(), 1)  # health 5
 
 	var r1 := e.take_damage({"damage": 2.0})
 	assert_eq(r1["remaining_health"], 3.0, "5 - 2 = 3")
@@ -212,7 +212,7 @@ func test_take_damage_reduces_health_and_updates_health_bar() -> bool:
 
 func test_take_damage_emits_died_exactly_once_on_the_lethal_hit_and_not_before() -> bool:
 	var e := _ready_enemy()
-	e.setup(&"slime", _straight_path(), 1)  # health 5, reward 5
+	e.setup(&"goblin", _straight_path(), 1)  # health 5, reward 5
 
 	var captured := {"count": 0, "reward": -1, "kind": &""}
 	e.died.connect(func(v, k): captured["count"] += 1; captured["reward"] = v; captured["kind"] = k)
@@ -225,8 +225,8 @@ func test_take_damage_emits_died_exactly_once_on_the_lethal_hit_and_not_before()
 	var lethal := e.take_damage({"damage": 2.0})  # 1 -> 0, lethal
 	assert_true(lethal["lethal"], "the resolve result reports lethal")
 	assert_eq(captured["count"], 1, "died fired exactly once on the lethal hit")
-	assert_eq(captured["reward"], int(Enemies.DEFS[&"slime"]["reward"]), "died carries the enemy's reward")
-	assert_eq(captured["kind"], &"slime", "died carries the enemy's own kind, not a fixed/default value")
+	assert_eq(captured["reward"], int(Enemies.DEFS[&"goblin"]["reward"]), "died carries the enemy's reward")
+	assert_eq(captured["kind"], &"goblin", "died carries the enemy's own kind, not a fixed/default value")
 	assert_eq(e.sim["dying"], true, "sim marks dying")
 	assert_eq(e.sim["alive"], false, "sim marks not alive")
 	assert_false(e._health_bar.visible, "health bar is hidden once dying")
@@ -264,7 +264,7 @@ func test_an_enemy_is_drawn_at_its_kind_s_declared_height() -> bool:
 
 func test_an_enemy_faces_the_way_it_travels() -> bool:
 	var e := _ready_enemy()
-	e.setup(&"slime", _straight_path(), 1)
+	e.setup(&"goblin", _straight_path(), 1)
 	var sprite: Sprite2D = e.get_node("Sprite")
 	e.set_facing_from_travel(true)
 	var left := sprite.flip_h
@@ -285,7 +285,7 @@ func test_death_runs_for_a_duration_this_file_owns() -> bool:
 	assert_true(Enemy.DEATH_MS > 0.0, "the death sequence has a duration")
 	assert_true(Enemy.DEATH_MS < 1000.0,
 		"and it is short enough not to hold a kill on screen")
-	assert_true(Enemy.DEATH_MS / float(Enemies.death_frames(&"slime")) >= 60.0,
+	assert_true(Enemy.DEATH_MS / float(Enemies.death_frames(&"goblin")) >= 60.0,
 		"and each drawn frame gets long enough to be seen")
 	return true
 
@@ -294,7 +294,7 @@ func test_a_lethal_hit_off_the_tree_still_pays_and_hides_the_bar() -> bool:
 	# header), and create_tween() requires one. _die must reach everything the
 	# sim observes before it gives up on the presentation.
 	var e := _ready_enemy()
-	e.setup(&"slime", _straight_path(), 1)
+	e.setup(&"goblin", _straight_path(), 1)
 	var captured := {"count": 0}
 	e.died.connect(func(_v, _k): captured["count"] += 1)
 	e.take_damage({"damage": 999.0})
@@ -311,7 +311,7 @@ func test_a_lethal_hit_off_the_tree_still_pays_and_hides_the_bar() -> bool:
 
 func test_health_bar_fraction_and_color_at_full_half_and_zero_health() -> bool:
 	var e := _ready_enemy()
-	e.setup(&"slime", _straight_path(), 1)
+	e.setup(&"goblin", _straight_path(), 1)
 
 	e.sim["health"] = 10.0
 	e.sim["max_health"] = 10.0
@@ -341,7 +341,7 @@ func test_health_bar_fraction_and_color_at_full_half_and_zero_health() -> bool:
 # what keeps the bar from over- or under-drawing in that case.
 func test_health_bar_fraction_clamps_outside_zero_to_one() -> bool:
 	var e := _ready_enemy()
-	e.setup(&"slime", _straight_path(), 1)
+	e.setup(&"goblin", _straight_path(), 1)
 
 	e.sim["health"] = 15.0
 	e.sim["max_health"] = 10.0
@@ -363,7 +363,7 @@ func test_health_bar_fraction_clamps_outside_zero_to_one() -> bool:
 
 func test_to_candidate_returns_documented_keys_with_node_pointing_at_the_enemy() -> bool:
 	var e := _ready_enemy()
-	e.setup(&"bee", _straight_path(), 1)
+	e.setup(&"bat", _straight_path(), 1)
 	e.take_damage({"damage": 1.0})
 	e._physics_process(0.05)
 
@@ -382,7 +382,7 @@ func test_to_candidate_returns_documented_keys_with_node_pointing_at_the_enemy()
 
 func test_get_sim_state_returns_the_live_sim_dictionary() -> bool:
 	var e := _ready_enemy()
-	e.setup(&"slime", _straight_path(), 1)
+	e.setup(&"goblin", _straight_path(), 1)
 	e.take_damage({"damage": 1.0})
 
 	assert_eq(e.get_sim_state(), e.sim, "get_sim_state reflects the current sim contents")
@@ -401,7 +401,7 @@ func test_get_sim_state_returns_the_live_sim_dictionary() -> bool:
 
 func test_setup_starts_the_enemy_unslowed() -> bool:
 	var e := _ready_enemy()
-	e.setup(&"slime", _straight_path(), 1)
+	e.setup(&"goblin", _straight_path(), 1)
 	assert_almost_eq(e.sim["slow"]["factor"], 1.0, 0.0001, "no slow to begin with")
 	assert_almost_eq(e.sim["slow"]["remaining_ms"], 0.0, 0.0001, "and no clock running")
 	assert_almost_eq(e.current_speed(), float(e.sim["speed"]), 0.0001, "so it moves at its full speed")
@@ -410,7 +410,7 @@ func test_setup_starts_the_enemy_unslowed() -> bool:
 
 func test_taking_a_hit_from_a_slowing_source_slows_the_enemy() -> bool:
 	var e := _ready_enemy()
-	e.setup(&"slime", _straight_path(), 1)
+	e.setup(&"goblin", _straight_path(), 1)
 	var full: float = e.sim["speed"]
 	e.take_damage({"damage": 0.0, "slow_factor": 0.5, "slow_duration_ms": 1000.0})
 	assert_almost_eq(e.current_speed(), full * 0.5, 0.0001, "moving at half speed")
@@ -421,7 +421,7 @@ func test_taking_a_hit_from_a_slowing_source_slows_the_enemy() -> bool:
 # the target, not being hurt by it - the reference says so at the same seam.
 func test_a_slow_lands_even_when_the_hit_does_no_damage() -> bool:
 	var e := _ready_enemy()
-	e.setup(&"slime", _straight_path(), 1)
+	e.setup(&"goblin", _straight_path(), 1)
 	var health_before: float = e.sim["health"]
 	e.take_damage({"damage": 0.0, "slow_factor": 0.5, "slow_duration_ms": 1000.0})
 	assert_almost_eq(e.sim["health"], health_before, 0.0001, "precondition: the hit did nothing to its health")
@@ -431,7 +431,7 @@ func test_a_slow_lands_even_when_the_hit_does_no_damage() -> bool:
 
 func test_a_stronger_slow_replaces_a_weaker_one() -> bool:
 	var e := _ready_enemy()
-	e.setup(&"slime", _straight_path(), 1)
+	e.setup(&"goblin", _straight_path(), 1)
 	var full: float = e.sim["speed"]
 	e.take_damage({"damage": 0.0, "slow_factor": 0.7, "slow_duration_ms": 1500.0})
 	e.take_damage({"damage": 0.0, "slow_factor": 0.45, "slow_duration_ms": 2500.0})
@@ -443,7 +443,7 @@ func test_a_stronger_slow_replaces_a_weaker_one() -> bool:
 
 func test_a_hit_with_no_slow_leaves_a_running_slow_alone() -> bool:
 	var e := _ready_enemy()
-	e.setup(&"slime", _straight_path(), 1)
+	e.setup(&"goblin", _straight_path(), 1)
 	var full: float = e.sim["speed"]
 	e.take_damage({"damage": 0.0, "slow_factor": 0.5, "slow_duration_ms": 1000.0})
 	e.take_damage({"damage": 0.0})
@@ -453,7 +453,7 @@ func test_a_hit_with_no_slow_leaves_a_running_slow_alone() -> bool:
 
 func test_a_slow_expires_after_its_duration() -> bool:
 	var e := _ready_enemy()
-	e.setup(&"slime", _straight_path(), 1)
+	e.setup(&"goblin", _straight_path(), 1)
 	var full: float = e.sim["speed"]
 	e.take_damage({"damage": 0.0, "slow_factor": 0.5, "slow_duration_ms": 1000.0})
 	e.tick_slow(1000.0)
@@ -461,12 +461,12 @@ func test_a_slow_expires_after_its_duration() -> bool:
 	e.free()
 	return true
 
-# The mechanic only exists if the movement step actually reads it. Slime moves
+# The mechanic only exists if the movement step actually reads it. Goblin moves
 # 10px in 100ms unslowed (test_physics_process_advances_position_toward_the_
 # first_waypoint pins that); half speed must cover half the ground.
 func test_physics_process_moves_a_slowed_enemy_at_the_slowed_speed() -> bool:
 	var e := _ready_enemy()
-	e.setup(&"slime", _straight_path(), 1)
+	e.setup(&"goblin", _straight_path(), 1)
 	e.take_damage({"damage": 0.0, "slow_factor": 0.5, "slow_duration_ms": 1000.0})
 	e._physics_process(0.1)
 	assert_almost_eq(e.position.x, 5.0, 0.001, "5px, not the unslowed 10px")
@@ -477,7 +477,7 @@ func test_physics_process_moves_a_slowed_enemy_at_the_slowed_speed() -> bool:
 # permanent.
 func test_physics_process_counts_the_slow_down() -> bool:
 	var e := _ready_enemy()
-	e.setup(&"slime", _straight_path(), 1)
+	e.setup(&"goblin", _straight_path(), 1)
 	e.take_damage({"damage": 0.0, "slow_factor": 0.5, "slow_duration_ms": 100.0})
 	e._physics_process(0.05)
 	assert_almost_eq(e.sim["slow"]["remaining_ms"], 50.0, 0.001, "50ms of the 100 spent")
@@ -491,7 +491,7 @@ func test_physics_process_counts_the_slow_down() -> bool:
 # abort rather than fail.
 func test_a_lethal_hit_pays_the_sources_gold_effects() -> bool:
 	var e := _ready_enemy()
-	e.setup(&"slime", _straight_path(), 1)
+	e.setup(&"goblin", _straight_path(), 1)
 	var rewards: Array = []
 	e.died.connect(func(reward, _kind): rewards.append(reward))
 
@@ -508,7 +508,7 @@ func test_a_lethal_hit_pays_the_sources_gold_effects() -> bool:
 
 func test_a_lethal_hit_from_a_plain_source_pays_the_base_reward() -> bool:
 	var e := _ready_enemy()
-	e.setup(&"slime", _straight_path(), 1)
+	e.setup(&"goblin", _straight_path(), 1)
 	var rewards: Array = []
 	e.died.connect(func(reward, _kind): rewards.append(reward))
 
@@ -537,7 +537,7 @@ func test_a_lethal_hit_still_reports_which_kind_died() -> bool:
 # is read with has to be 1.0 - "no slow" - and this is what says so.
 func test_a_hit_with_no_slow_effect_leaves_the_enemy_at_full_speed() -> bool:
 	var e := _ready_enemy()
-	e.setup(&"slime", _straight_path(), 1)
+	e.setup(&"goblin", _straight_path(), 1)
 	e.take_damage({"damage": 1.0})
 	assert_almost_eq(e.current_speed(), float(e.sim["speed"]), 0.0001, "still at full speed")
 	assert_almost_eq(e.sim["slow"]["remaining_ms"], 0.0, 0.0001, "and no timer was started")
@@ -552,7 +552,7 @@ func test_a_hit_with_no_slow_effect_leaves_the_enemy_at_full_speed() -> bool:
 # that, which is why this test exists rather than an assertion on the default.
 func test_a_plain_hit_leaves_no_residue_for_a_later_slow_to_inherit() -> bool:
 	var e := _ready_enemy()
-	e.setup(&"slime", _straight_path(), 1)
+	e.setup(&"goblin", _straight_path(), 1)
 	var full: float = e.sim["speed"]
 	e.take_damage({"damage": 1.0})
 	e.take_damage({"damage": 0.0, "slow_factor": 0.7, "slow_duration_ms": 1500.0})
@@ -623,8 +623,8 @@ func test_the_walk_frame_advances_with_distance_not_with_time() -> bool:
 	var slow := _ready_enemy()
 	slow.setup(&"ogre", _straight_path(), 1)
 	var fast := _ready_enemy()
-	fast.setup(&"bee", _straight_path(), 1)
-	assert_true(Enemies.DEFS[&"bee"]["base_speed"] > Enemies.DEFS[&"ogre"]["base_speed"],
+	fast.setup(&"bat", _straight_path(), 1)
+	assert_true(Enemies.DEFS[&"bat"]["base_speed"] > Enemies.DEFS[&"ogre"]["base_speed"],
 		"precondition: the bat is faster than the ogre")
 
 	# Count CYCLES completed, not distinct frames seen: the bat's cycle is
@@ -653,7 +653,7 @@ func test_the_walk_frame_advances_with_distance_not_with_time() -> bool:
 
 func test_a_stationary_enemy_holds_its_frame() -> bool:
 	var e := _ready_enemy()
-	e.setup(&"slime", _straight_path(), 1)
+	e.setup(&"goblin", _straight_path(), 1)
 	for i in 4:
 		e._physics_process(0.05)
 	var held := e.walk_frame()
@@ -689,7 +689,7 @@ func test_the_walk_frame_wraps_and_never_leaves_the_cycle() -> bool:
 
 func test_the_sprite_shows_the_frame_the_cycle_names() -> bool:
 	var e := _ready_enemy()
-	e.setup(&"slime", _long_path(), 1)
+	e.setup(&"goblin", _long_path(), 1)
 	var sprite: Sprite2D = e.get_node("Sprite")
 	for i in 120:
 		e._physics_process(1.0 / 60.0)
@@ -703,8 +703,8 @@ func test_the_bat_has_a_shorter_cycle_than_the_others() -> bool:
 	# Its eighth frame is broken art the bake drops. Pinned here so a
 	# regenerated sheet that fixes it shows up as a failing number rather than
 	# as nothing.
-	assert_eq(Enemies.walk_frames(&"bee"), 7, "the bat walks on seven frames")
-	assert_eq(Enemies.walk_frames(&"slime"), 8, "the goblin walks on eight")
+	assert_eq(Enemies.walk_frames(&"bat"), 7, "the bat walks on seven frames")
+	assert_eq(Enemies.walk_frames(&"goblin"), 8, "the goblin walks on eight")
 	assert_eq(Enemies.walk_frames(&"ogre"), 8, "the ogre walks on eight")
 	return true
 
@@ -779,12 +779,12 @@ func test_the_death_frames_are_the_case_this_covers() -> bool:
 	# baseline would be the same thing and neither test above would prove
 	# anything.
 	var ratios := []
-	for i in Enemies.death_frames(&"slime"):
+	for i in Enemies.death_frames(&"goblin"):
 		var bytes := FileAccess.get_file_as_bytes(
-			"res://assets/art/enemies/slime/death_%d.png" % i)
-		assert_false(bytes.is_empty(), "slime death_%d exists" % i)
+			"res://assets/art/enemies/goblin/death_%d.png" % i)
+		assert_false(bytes.is_empty(), "goblin death_%d exists" % i)
 		var img := Image.new()
-		assert_eq(img.load_png_from_buffer(bytes), OK, "slime death_%d decodes" % i)
+		assert_eq(img.load_png_from_buffer(bytes), OK, "goblin death_%d decodes" % i)
 		ratios.append(float(img.get_width()) / float(img.get_height()))
 	assert_true(ratios.size() >= 2, "there is a sequence to compare")
 	if ratios.size() < 2:
@@ -803,10 +803,10 @@ func test_the_death_frames_are_the_case_this_covers() -> bool:
 # gold modifier reaches the payout. The pure function is tested in
 # test_economy.gd; this pins that the enemy threads its own wave through to it.
 func test_a_late_wave_kill_pays_less_than_an_early_one() -> bool:
-	var base := int(Enemies.DEFS[&"slime"]["reward"])
+	var base := int(Enemies.DEFS[&"goblin"]["reward"])
 	var early := EconomySim.kill_reward(base, {},
 		float(Waves.get_modifiers(1)["gold_modifier"]))
 	var late := EconomySim.kill_reward(base, {},
 		float(Waves.get_modifiers(20)["gold_modifier"]))
-	assert_true(late < early, "the same slime is worth less on wave 20 than on wave 1")
+	assert_true(late < early, "the same goblin is worth less on wave 20 than on wave 1")
 	return true

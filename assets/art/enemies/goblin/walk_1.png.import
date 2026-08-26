@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://ba8i00skyucf4"
-path="res://.godot/imported/death_3.png-31ebb02e48276425d405c18fc0d1655d.ctex"
+uid="uid://boikwufbrycpj"
+path="res://.godot/imported/walk_1.png-d4d026773992ed8652e80ae1d4e3a0f5.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/art/enemies/bee/death_3.png"
-dest_files=["res://.godot/imported/death_3.png-31ebb02e48276425d405c18fc0d1655d.ctex"]
+source_file="res://assets/art/enemies/goblin/walk_1.png"
+dest_files=["res://.godot/imported/walk_1.png-d4d026773992ed8652e80ae1d4e3a0f5.ctex"]
 
 [params]
 

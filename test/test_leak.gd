@@ -5,8 +5,8 @@ extends TestCase
 # --------------------------------------------------------------------------
 
 func test_flat_cost_at_or_below_the_scaling_wave() -> bool:
-	assert_eq(Leak.resolve({"life_loss": 1, "health": 5.0}, 1), 1, "slime costs 1")
-	assert_eq(Leak.resolve({"life_loss": 2, "health": 3.0}, 3), 2, "bee costs 2")
+	assert_eq(Leak.resolve({"life_loss": 1, "health": 5.0}, 1), 1, "goblin costs 1")
+	assert_eq(Leak.resolve({"life_loss": 2, "health": 3.0}, 3), 2, "bat costs 2")
 	assert_eq(Leak.resolve({"life_loss": 5, "health": 8.0}, 5), 4, "ogre's 5 caps to 4")
 	return true
 

@@ -1,5 +1,18 @@
 class_name Enemies
 
+## The kind keys name WHAT THE ART DRAWS.
+##
+## They used to say slime and bee while the sprites drew a goblin with a knife
+## and a bat - verified by rendering them - so every reader had to carry a
+## translation table in their head, and the wave tables read as a bestiary that
+## did not exist. The names are the art's now.
+##
+## The keys are load-bearing beyond this file: they pick the sprite directory
+## (assets/art/enemies/<kind>/), the death sound (death-<kind>), and the join
+## to every wave composition. Renaming one means moving the art, renaming the
+## audio, and updating AudioManager.SOUNDS together - see the commit that did
+## it for the full set.
+
 ## walk_frames and death_frames replaced variant_count when the enemy art
 ## became drawn animation rather than a set of per-spawn variants. The first
 ## sheet's rows were fifteen different goblins, not one goblin walking -
@@ -32,12 +45,12 @@ class_name Enemies
 ## lean sampled a fast-moving wave far below the rate needed to read as
 ## motion - watching it live showed the whole sprite buzzing rather than
 ## flying, not a faster version of the same cycle the other kinds show. 32.0
-## keeps the bat's cycle visibly quicker than the slime's (about 9.4 footfalls
+## keeps the bat's cycle visibly quicker than the goblin's (about 9.4 footfalls
 ## a second against 6.7) while sampling it densely enough per frame to read as
 ## a cycle rather than noise.
 const DEFS := {
-	&"slime": {
-		"label": "Slime", "base_speed": 100.0, "base_health": 5, "reward": 5,
+	&"goblin": {
+		"label": "Goblin", "base_speed": 100.0, "base_health": 5, "reward": 5,
 		"life_loss": 1, "walk_frames": 8, "death_frames": 4, "sprite_px": 34.0,
 		"stride_px": 30.0, "flip_horizontally": false,
 	},
@@ -46,14 +59,14 @@ const DEFS := {
 		"life_loss": 5, "walk_frames": 8, "death_frames": 4, "sprite_px": 58.0,
 		"stride_px": 46.0, "flip_horizontally": false,
 	},
-	&"bee": {
-		"label": "Bee", "base_speed": 150.0, "base_health": 3, "reward": 10,
+	&"bat": {
+		"label": "Bat", "base_speed": 150.0, "base_health": 3, "reward": 10,
 		"life_loss": 2, "walk_frames": 7, "death_frames": 4, "sprite_px": 28.0,
 		"stride_px": 32.0, "flip_horizontally": false,
 	},
 }
 
-const KINDS: Array[StringName] = [&"slime", &"ogre", &"bee"]
+const KINDS: Array[StringName] = [&"goblin", &"ogre", &"bat"]
 
 ## Health for a spawn, applying the wave modifier. Floors, never below one.
 static func scaled_health(kind: StringName, health_modifier: float) -> int:

@@ -60,7 +60,7 @@ func test_arrival_boundary_against_the_step_length() -> bool:
 # fixed timestep an enemy must reach its waypoint in finitely many ticks at ANY
 # speed. The old code failed this whenever the approach remainder r and the
 # overshoot (step - r) both landed at or above the 2px radius — e.g. a 4.25
-# px/tick step against the 48px tile spacing (a wave-19 bee), which alternated
+# px/tick step against the 48px tile spacing (a wave-19 bat), which alternated
 # 2.00/2.25 forever. Swept rather than spot-checked precisely because the old
 # behaviour was fine at almost every step size and catastrophic at a few: wave
 # 18's 4.125 px/tick converges and wave 19's 4.25 does not, so any single value

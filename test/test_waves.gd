@@ -10,19 +10,19 @@ func test_max_waves_is_twenty() -> bool:
 	assert_eq(Waves.MAX_WAVES, 20, "victory at wave 20")
 	return true
 
-func test_wave_one_is_five_slimes() -> bool:
-	assert_eq(_count_of(1, &"slime"), 5, "five slimes")
-	assert_eq(_count_of(1, &"bee"), 0, "no bees yet")
+func test_wave_one_is_five_goblins() -> bool:
+	assert_eq(_count_of(1, &"goblin"), 5, "five goblins")
+	assert_eq(_count_of(1, &"bat"), 0, "no bats yet")
 	assert_eq(_count_of(1, &"ogre"), 0, "no ogres yet")
 	return true
 
 # Composition ACCUMULATES from wave 1, so wave 3 contains waves 1 and 2 too.
 # This is surprising and is preserved deliberately.
 func test_composition_accumulates_from_wave_one() -> bool:
-	assert_eq(_count_of(2, &"slime"), 8, "5 + 3")
-	assert_eq(_count_of(2, &"bee"), 3, "0 + 3")
-	assert_eq(_count_of(3, &"slime"), 11, "5 + 3 + 3")
-	assert_eq(_count_of(3, &"bee"), 6, "3 + 3")
+	assert_eq(_count_of(2, &"goblin"), 8, "5 + 3")
+	assert_eq(_count_of(2, &"bat"), 3, "0 + 3")
+	assert_eq(_count_of(3, &"goblin"), 11, "5 + 3 + 3")
+	assert_eq(_count_of(3, &"bat"), 6, "3 + 3")
 	return true
 
 func test_ogres_arrive_at_wave_four() -> bool:
@@ -31,16 +31,16 @@ func test_ogres_arrive_at_wave_four() -> bool:
 	return true
 
 func test_wave_five_totals() -> bool:
-	assert_eq(_count_of(5, &"slime"), 14, "5+3+3+0+3")
-	assert_eq(_count_of(5, &"bee"), 9, "3+3+0+3")
+	assert_eq(_count_of(5, &"goblin"), 14, "5+3+3+0+3")
+	assert_eq(_count_of(5, &"bat"), 9, "3+3+0+3")
 	assert_eq(_count_of(5, &"ogre"), 3, "2+1")
 	return true
 
 func test_beyond_wave_five_adds_a_fixed_bundle() -> bool:
-	assert_eq(_count_of(6, &"slime"), 16, "14 + 2")
-	assert_eq(_count_of(6, &"bee"), 14, "9 + 5")
+	assert_eq(_count_of(6, &"goblin"), 16, "14 + 2")
+	assert_eq(_count_of(6, &"bat"), 14, "9 + 5")
 	assert_eq(_count_of(6, &"ogre"), 5, "3 + 2")
-	assert_eq(_count_of(7, &"slime"), 18, "two bundles past wave 5")
+	assert_eq(_count_of(7, &"goblin"), 18, "two bundles past wave 5")
 	return true
 
 func test_modifiers_are_flat_through_wave_five() -> bool:
@@ -59,7 +59,7 @@ func test_modifiers_scale_past_wave_five() -> bool:
 	assert_almost_eq(m20["speed_modifier"], 1.75, 0.0001, "wave 20 speed +75%")
 	return true
 
-func test_ogre_delay_trails_the_last_slime_but_is_capped() -> bool:
+func test_ogre_delay_trails_the_last_goblin_but_is_capped() -> bool:
 	assert_almost_eq(Waves.ogre_spawn_delay(5), 5000.0, 0.001, "4*500 + 3000")
 	assert_almost_eq(Waves.ogre_spawn_delay(30), 10000.0, 0.001, "capped at 10s")
 	return true
@@ -80,8 +80,8 @@ func test_composition_returns_fresh_objects() -> bool:
 
 func test_build_schedule_is_sorted_by_time() -> bool:
 	# Wave 5 mixes all three kinds with three different start offsets
-	# (slime immediately, bee after BEE_START_DELAY_MS, ogre after the last
-	# slime), so a sort bug is actually reachable here, unlike a
+	# (goblin immediately, bat after BAT_START_DELAY_MS, ogre after the last
+	# goblin), so a sort bug is actually reachable here, unlike a
 	# single-kind wave.
 	var schedule := Waves.build_schedule(5)
 	for i in range(1, schedule.size()):
@@ -91,63 +91,63 @@ func test_build_schedule_is_sorted_by_time() -> bool:
 	return true
 
 func test_wave_four_schedule_has_nineteen_entries() -> bool:
-	# Wave 4's composition is 11 slimes + 6 bees + 2 ogres (accumulated from
+	# Wave 4's composition is 11 goblins + 6 bats + 2 ogres (accumulated from
 	# waves 1-4; see test_ogres_arrive_at_wave_four /
 	# test_composition_accumulates_from_wave_one above) = 19 spawn instants.
 	var schedule := Waves.build_schedule(4)
-	assert_eq(schedule.size(), 19, "11 slimes + 6 bees + 2 ogres")
-	var slimes := 0
-	var bees := 0
+	assert_eq(schedule.size(), 19, "11 goblins + 6 bats + 2 ogres")
+	var goblins := 0
+	var bats := 0
 	var ogres := 0
 	for entry in schedule:
 		match entry["kind"]:
-			&"slime": slimes += 1
-			&"bee": bees += 1
+			&"goblin": goblins += 1
+			&"bat": bats += 1
 			&"ogre": ogres += 1
-	assert_eq(slimes, 11, "eleven slime entries")
-	assert_eq(bees, 6, "six bee entries")
+	assert_eq(goblins, 11, "eleven goblin entries")
+	assert_eq(bats, 6, "six bat entries")
 	assert_eq(ogres, 2, "two ogre entries")
 	return true
 
-# BEE_START_DELAY_MS had zero test coverage before this task: mutating 5000
+# BAT_START_DELAY_MS had zero test coverage before this task: mutating 5000
 # to 9999 left the whole suite green. Pin the constant directly...
 func test_bee_start_delay_ms_is_five_thousand() -> bool:
-	assert_almost_eq(Waves.BEE_START_DELAY_MS, 5000.0, 0.001, "bees wait five seconds")
+	assert_almost_eq(Waves.BAT_START_DELAY_MS, 5000.0, 0.001, "bats wait five seconds")
 	return true
 
 # ...and, more importantly, pin it through the one place it actually has an
 # effect: the schedule the harness and the live board both spawn from. A
-# mutation to BEE_START_DELAY_MS that the constant test above somehow missed
+# mutation to BAT_START_DELAY_MS that the constant test above somehow missed
 # (or a future refactor that stops build_schedule from reading the constant
-# at all) would still be caught here, because the earliest bee's at_ms is
+# at all) would still be caught here, because the earliest bat's at_ms is
 # asserted directly against the real constant, not a hardcoded literal.
 func test_schedule_starts_the_bee_column_at_bee_start_delay() -> bool:
-	# Wave 2 is the first wave with bees (three of them) and no ogres, so the
-	# earliest bee entry is unambiguous.
+	# Wave 2 is the first wave with bats (three of them) and no ogres, so the
+	# earliest bat entry is unambiguous.
 	var schedule := Waves.build_schedule(2)
 	var earliest_bee = null
 	for entry in schedule:
-		if entry["kind"] == &"bee":
+		if entry["kind"] == &"bat":
 			earliest_bee = entry
 			break
-	assert_true(earliest_bee != null, "wave 2 has bees")
-	assert_almost_eq(earliest_bee["at_ms"], Waves.BEE_START_DELAY_MS, 0.001,
-		"the bee column starts at BEE_START_DELAY_MS, not some other offset")
+	assert_true(earliest_bee != null, "wave 2 has bats")
+	assert_almost_eq(earliest_bee["at_ms"], Waves.BAT_START_DELAY_MS, 0.001,
+		"the bat column starts at BAT_START_DELAY_MS, not some other offset")
 	return true
 
-# The ogre column's start time has the same shape of gap the bee tests above
-# close: ogre_spawn_delay(slime_count) is unit-tested directly (see
-# test_ogre_delay_trails_the_last_slime_but_is_capped above), but nothing
-# pinned that build_schedule (a) calls it with the wave's own slime count
+# The ogre column's start time has the same shape of gap the bat tests above
+# close: ogre_spawn_delay(goblin_count) is unit-tested directly (see
+# test_ogre_delay_trails_the_last_goblin_but_is_capped above), but nothing
+# pinned that build_schedule (a) calls it with the wave's own goblin count
 # rather than some other kind's count, or (b) calls it at all rather than a
 # fixed constant. Both are real, distinct mutations found by mutation
-# testing sim/harness.gd and this file together: capturing slime_count from
+# testing sim/harness.gd and this file together: capturing goblin_count from
 # the wrong kind's composition entry, and hardcoding the ogre column to
-# start at BEE_START_DELAY_MS instead of the computed delay. Both survived
+# start at BAT_START_DELAY_MS instead of the computed delay. Both survived
 # every other test in this file (schedule size, sort order, entry counts)
 # because none of those look at a specific entry's `at_ms`.
 func test_schedule_starts_the_ogre_column_at_the_computed_delay() -> bool:
-	# Wave 4 has 11 slimes (see test_wave_four_schedule_has_nineteen_entries
+	# Wave 4 has 11 goblins (see test_wave_four_schedule_has_nineteen_entries
 	# above) and 2 ogres, so ogre_spawn_delay(11) = (11-1)*500 + 3000 = 8000,
 	# under the 10000 cap. Hardcoded rather than computed via
 	# Waves.ogre_spawn_delay(11) here, so this test does not become
@@ -160,14 +160,14 @@ func test_schedule_starts_the_ogre_column_at_the_computed_delay() -> bool:
 			break
 	assert_true(earliest_ogre != null, "wave 4 has ogres")
 	assert_almost_eq(earliest_ogre["at_ms"], 8000.0, 0.001,
-		"the ogre column starts at ogre_spawn_delay(11), not BEE_START_DELAY_MS or any other offset")
+		"the ogre column starts at ogre_spawn_delay(11), not BAT_START_DELAY_MS or any other offset")
 	return true
 
 # Review follow-up (post-Task-14): Array.sort_custom is not documented as a
 # stable sort on this engine, so a comparator keyed only on at_ms leaves
 # tied entries (same at_ms, different kind) in an order that is an artifact
 # of the sort implementation rather than the wave data. build_schedule
-# breaks ties on push order — composition order is slime, then bee, then
+# breaks ties on push order — composition order is goblin, then bat, then
 # ogre (see test_composition_accumulates_from_wave_one /
 # test_ogres_arrive_at_wave_four), and within a kind, increasing spawn
 # index — mirroring the reference's
@@ -176,8 +176,8 @@ func test_schedule_starts_the_ogre_column_at_the_computed_delay() -> bool:
 # outright: "so the schedule does not depend on the sort implementation."
 #
 # test_build_schedule_is_sorted_by_time above uses wave 5, which has zero
-# *cross-column* ties at a boundary this test needs (it has slime/bee ties
-# but no bee/ogre ones), so it cannot exercise the ogre column's tie-break.
+# *cross-column* ties at a boundary this test needs (it has goblin/bat ties
+# but no bat/ogre ones), so it cannot exercise the ogre column's tie-break.
 # Wave 6 has both, ten tied at_ms instants total.
 #
 # This checks every tied group at wave 6, not one or two cherry-picked
@@ -188,14 +188,14 @@ func test_schedule_starts_the_ogre_column_at_the_computed_delay() -> bool:
 # re-running, that on this exact engine build sort_custom's own partitioning
 # happens to leave both of those two particular groups in push order by
 # coincidence. The very next tied instant, 5500ms, does NOT: the no-tie-break
-# comparator puts bee before slime there, backwards from push order.
+# comparator puts bat before goblin there, backwards from push order.
 # Checking the whole set (not a sample) is what makes this test load-bearing
 # rather than a false sense of coverage.
 func test_build_schedule_breaks_ties_by_push_order() -> bool:
-	# Composition order is slime, then bee, then ogre (see
+	# Composition order is goblin, then bat, then ogre (see
 	# test_composition_accumulates_from_wave_one / test_ogres_arrive_at_wave_four),
 	# so within any tied at_ms, the earlier-pushed kind must sort first.
-	var rank := {&"slime": 0, &"bee": 1, &"ogre": 2}
+	var rank := {&"goblin": 0, &"bat": 1, &"ogre": 2}
 	var schedule := Waves.build_schedule(6)
 	var groups := {}
 	for entry in schedule:
@@ -211,7 +211,7 @@ func test_build_schedule_breaks_ties_by_push_order() -> bool:
 		tie_groups_checked += 1
 		for i in range(1, kinds.size()):
 			assert_true(rank[kinds[i - 1]] <= rank[kinds[i]],
-				"at %.1fms, %s must not sort after %s (push order: slime, bee, ogre)" % [
+				"at %.1fms, %s must not sort after %s (push order: goblin, bat, ogre)" % [
 					t, kinds[i - 1], kinds[i]])
 	# Confirms the loop above actually exercised ties rather than vacuously
 	# passing over a schedule with none (e.g. if get_composition regressed).

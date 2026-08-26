@@ -143,8 +143,8 @@ func _mipmap_setting(path: String) -> String:
 func test_props_endpoints_and_enemy_frames_generate_a_mipmap_chain() -> bool:
 	var paths := _prop_import_paths() + _endpoint_import_paths() + _enemy_frame_import_paths()
 	# Pinned, not just "> 0": 49 is 12 props (4 slots x 3 biomes) + 2
-	# endpoints + 35 enemy frames (8 walk + 4 death for slime and for ogre,
-	# 7 + 4 for the bee, whose eighth walk frame is broken art the bake drops).
+	# endpoints + 35 enemy frames (8 walk + 4 death for goblin and for ogre,
+	# 7 + 4 for the bat, whose eighth walk frame is broken art the bake drops).
 	# It was 45 while these were per-spawn variants. If it drops, a biome,
 	# prop slot or enemy kind went missing, not "the assets are fine, just
 	# fewer of them".

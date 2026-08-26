@@ -568,10 +568,10 @@ func test_start_next_wave_emits_wave_changed_and_wave_state_changed() -> bool:
 # on a spawn's at_ms must still spawn it this tick, not the next.
 func test_physics_process_spawns_enemies_exactly_when_the_clock_reaches_at_ms() -> bool:
 	var b := _ready_board()
-	b.start_next_wave()  # wave 1: 5 slimes at at_ms 0, 500, 1000, 1500, 2000
+	b.start_next_wave()  # wave 1: 5 goblins at at_ms 0, 500, 1000, 1500, 2000
 	# One queue per path; demoMap has a single entrance, so queue 0 is the wave.
-	assert_eq(b._spawn_queues[0][0]["at_ms"], 0.0, "precondition: the first slime spawns at t=0")
-	assert_eq(b._spawn_queues[0][1]["at_ms"], 500.0, "precondition: the second slime spawns at t=500")
+	assert_eq(b._spawn_queues[0][0]["at_ms"], 0.0, "precondition: the first goblin spawns at t=0")
+	assert_eq(b._spawn_queues[0][1]["at_ms"], 500.0, "precondition: the second goblin spawns at t=500")
 
 	b._physics_process(0.0)  # delta 0: _wave_clock stays at 0.0, only the t=0 spawn is due
 	assert_eq(b._enemies_root.get_child_count(), 1, "only the t=0 spawn has occurred")
@@ -589,7 +589,7 @@ func test_physics_process_spawns_enemies_exactly_when_the_clock_reaches_at_ms() 
 func test_wave_clears_only_after_every_spawn_has_left_the_board() -> bool:
 	var b := _ready_board()
 	b.start_next_wave()
-	b._spawn_queues = [[{"kind": &"slime", "at_ms": 0.0}]]
+	b._spawn_queues = [[{"kind": &"goblin", "at_ms": 0.0}]]
 	b._wave_clock = 0.0
 	b._spawned_per_path = [0]
 
@@ -658,10 +658,10 @@ func test_clearing_wave_nineteen_does_not_emit_victory() -> bool:
 func test_enemy_leak_subtracts_lives_by_the_value_leak_resolve_produces() -> bool:
 	var b := _ready_board()
 	b.start_next_wave()
-	b._spawn_queues = [[{"kind": &"bee", "at_ms": 0.0}]]
+	b._spawn_queues = [[{"kind": &"bat", "at_ms": 0.0}]]
 	b._wave_clock = 0.0
 	b._spawned_per_path = [0]
-	b._physics_process(0.0)  # spawns the bee and wires its died/leaked signals to the board
+	b._physics_process(0.0)  # spawns the bat and wires its died/leaked signals to the board
 	var enemy: Enemy = b._enemies_root.get_child(0)
 
 	var lives_events: Array = []
@@ -669,7 +669,7 @@ func test_enemy_leak_subtracts_lives_by_the_value_leak_resolve_produces() -> boo
 	var lives_before := b.get_lives()
 
 	var expected_loss := Leak.resolve(
-		{"life_loss": Enemies.DEFS[&"bee"]["life_loss"], "health": enemy.sim["health"]}, b.get_wave())
+		{"life_loss": Enemies.DEFS[&"bat"]["life_loss"], "health": enemy.sim["health"]}, b.get_wave())
 	enemy.leaked.emit(expected_loss)
 
 	assert_eq(b.get_lives(), lives_before - expected_loss, "lives dropped by exactly the value the leaked signal carried")
@@ -785,9 +785,9 @@ func test_game_over_does_not_fire_twice_for_a_second_leak_after_the_run_is_finis
 
 func test_splash_hit_damages_enemies_inside_the_radius_and_spares_ones_outside() -> bool:
 	var b := _ready_board()
-	var target := _ready_enemy_under(b._enemies_root, &"slime", Vector2(500, 500))
-	var inside := _ready_enemy_under(b._enemies_root, &"slime", Vector2(530, 500))   # 30px away
-	var outside := _ready_enemy_under(b._enemies_root, &"slime", Vector2(560, 500))  # 60px away
+	var target := _ready_enemy_under(b._enemies_root, &"goblin", Vector2(500, 500))
+	var inside := _ready_enemy_under(b._enemies_root, &"goblin", Vector2(530, 500))   # 30px away
+	var outside := _ready_enemy_under(b._enemies_root, &"goblin", Vector2(560, 500))  # 60px away
 	var health_target: float = target.sim["health"]
 	var health_inside: float = inside.sim["health"]
 	var health_outside: float = outside.sim["health"]
@@ -804,8 +804,8 @@ func test_splash_hit_damages_enemies_inside_the_radius_and_spares_ones_outside()
 # Isolates `<=` from `<` on the splash distance check.
 func test_splash_hit_includes_an_enemy_at_exactly_the_radius_boundary() -> bool:
 	var b := _ready_board()
-	var target := _ready_enemy_under(b._enemies_root, &"slime", Vector2(0, 0))
-	var at_boundary := _ready_enemy_under(b._enemies_root, &"slime", Vector2(40, 0))  # exactly 40px away
+	var target := _ready_enemy_under(b._enemies_root, &"goblin", Vector2(0, 0))
+	var at_boundary := _ready_enemy_under(b._enemies_root, &"goblin", Vector2(40, 0))  # exactly 40px away
 	var health_before: float = at_boundary.sim["health"]
 
 	b._on_projectile_hit(target, {"damage": 1.0}, 40.0)  # splash radius equals the distance exactly
@@ -817,8 +817,8 @@ func test_splash_hit_includes_an_enemy_at_exactly_the_radius_boundary() -> bool:
 # Isolates `<= 0.0` from `< 0.0` on the "no splash" early return.
 func test_zero_splash_radius_does_not_touch_a_co_located_enemy() -> bool:
 	var b := _ready_board()
-	var target := _ready_enemy_under(b._enemies_root, &"slime", Vector2(200, 200))
-	var co_located := _ready_enemy_under(b._enemies_root, &"slime", Vector2(200, 200))  # distance 0
+	var target := _ready_enemy_under(b._enemies_root, &"goblin", Vector2(200, 200))
+	var co_located := _ready_enemy_under(b._enemies_root, &"goblin", Vector2(200, 200))  # distance 0
 	var health_before: float = co_located.sim["health"]
 
 	b._on_projectile_hit(target, {"damage": 1.0}, 0.0)
@@ -833,7 +833,7 @@ func test_zero_splash_radius_does_not_touch_a_co_located_enemy() -> bool:
 # second time on top of its direct hit.
 func test_splash_hit_does_not_double_damage_the_direct_target() -> bool:
 	var b := _ready_board()
-	var target := _ready_enemy_under(b._enemies_root, &"slime", Vector2(0, 0))
+	var target := _ready_enemy_under(b._enemies_root, &"goblin", Vector2(0, 0))
 	var health_before: float = target.sim["health"]
 
 	b._on_projectile_hit(target, {"damage": 1.0}, 100.0)  # generous radius that trivially covers the target itself
@@ -848,11 +848,11 @@ func test_splash_hit_does_not_double_damage_the_direct_target() -> bool:
 # aborting the rest of the splash resolution for enemies still to come.
 func test_splash_hit_skips_non_enemy_children_of_the_enemies_root() -> bool:
 	var b := _ready_board()
-	var target := _ready_enemy_under(b._enemies_root, &"slime", Vector2(0, 0))
+	var target := _ready_enemy_under(b._enemies_root, &"goblin", Vector2(0, 0))
 	var decoy := Node2D.new()
 	decoy.position = Vector2(5, 0)
 	b._enemies_root.add_child(decoy)  # sits between target and neighbor in child order
-	var neighbor := _ready_enemy_under(b._enemies_root, &"slime", Vector2(10, 0))
+	var neighbor := _ready_enemy_under(b._enemies_root, &"goblin", Vector2(10, 0))
 	var neighbor_health_before: float = neighbor.sim["health"]
 
 	b._on_projectile_hit(target, {"damage": 1.0}, 50.0)
@@ -869,8 +869,8 @@ func test_splash_hit_skips_non_enemy_children_of_the_enemies_root() -> bool:
 # alive neighbour in the same radius.
 func test_splash_over_an_already_dying_enemy_pays_no_second_reward() -> bool:
 	var b := _ready_board()
-	var dying := _ready_enemy_under(b._enemies_root, &"slime", Vector2(0, 0))
-	var alive_neighbor := _ready_enemy_under(b._enemies_root, &"slime", Vector2(10, 0))
+	var dying := _ready_enemy_under(b._enemies_root, &"goblin", Vector2(0, 0))
+	var alive_neighbor := _ready_enemy_under(b._enemies_root, &"goblin", Vector2(10, 0))
 	dying.died.connect(b._on_enemy_died)  # the same wiring _spawn() performs
 
 	var gold_before := b.get_gold()
@@ -903,7 +903,7 @@ func test_physics_process_excludes_dead_or_dying_enemies_but_offers_alive_ones()
 	b._try_place(world_pos)
 	var tower: Tower = b._towers_root.get_child(0)
 
-	var dead := _ready_enemy_under(b._enemies_root, &"slime", world_pos + Vector2(10, 0))
+	var dead := _ready_enemy_under(b._enemies_root, &"goblin", world_pos + Vector2(10, 0))
 	dead.sim["alive"] = false
 	dead.sim["dying"] = true
 
@@ -912,7 +912,7 @@ func test_physics_process_excludes_dead_or_dying_enemies_but_offers_alive_ones()
 	b._physics_process(0.016)
 	assert_eq(fired["n"], 0, "with only a dead/dying enemy nearby, the tower does not fire")
 
-	var alive := _ready_enemy_under(b._enemies_root, &"slime", world_pos + Vector2(10, 0))
+	var alive := _ready_enemy_under(b._enemies_root, &"goblin", world_pos + Vector2(10, 0))
 	b._physics_process(0.016)
 	assert_eq(fired["n"], 1, "once a genuinely alive enemy is nearby, the same tower fires")
 
@@ -929,7 +929,7 @@ func test_tower_fired_spawns_a_projectile_with_the_towers_speed_and_arc_flag() -
 	b.select_tower_kind(&"mortar")  # arcs=true, a non-default flag a "hardcode false" mutant would miss
 	b._try_place(pos)
 	var tower: Tower = b._towers_root.get_child(0)
-	var target := _ready_enemy_under(b._enemies_root, &"slime", tower.position + Vector2(10, 0))
+	var target := _ready_enemy_under(b._enemies_root, &"goblin", tower.position + Vector2(10, 0))
 
 	b._on_tower_fired(target, {"damage": 5, "pierce": 0}, 55.0, tower)
 
@@ -1376,8 +1376,8 @@ func test_the_wave_does_not_clear_while_any_path_still_has_spawns_pending() -> b
 	b.start_next_wave()
 	# Path 0 is finished; path 1 still has one enemy to send.
 	b._spawn_queues = [
-		[{"kind": &"slime", "at_ms": 0.0}],
-		[{"kind": &"slime", "at_ms": 0.0}, {"kind": &"slime", "at_ms": 999999.0}],
+		[{"kind": &"goblin", "at_ms": 0.0}],
+		[{"kind": &"goblin", "at_ms": 0.0}, {"kind": &"goblin", "at_ms": 999999.0}],
 	]
 	b._spawned_per_path = [1, 1]
 	assert_false(b._all_spawns_issued(),

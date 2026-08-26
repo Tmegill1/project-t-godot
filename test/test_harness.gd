@@ -27,7 +27,7 @@ func _total_spawn_count(wave: int) -> int:
 func test_an_undefended_wave_leaks_everything() -> bool:
 	var r := Harness.run_wave({"wave": 1, "towers": [], "path": _path()})
 	assert_eq(r["kills"], 0, "no towers, no kills")
-	assert_eq(r["leaks"], 5, "all five slimes leak")
+	assert_eq(r["leaks"], 5, "all five goblins leak")
 	assert_eq(r["lives_lost"], 5, "one life each at wave 1")
 	assert_false(r["timed_out"], "the wave completed")
 	# Ported: "earns no gold" (harness.test.ts "an undefended lane").
@@ -49,7 +49,7 @@ func test_a_defended_wave_kills_everything() -> bool:
 	var r := Harness.run_wave({"wave": 1, "towers": towers, "path": _path()})
 	assert_eq(r["leaks"], 0, "nothing gets through")
 	assert_eq(r["kills"], 5, "all five die")
-	assert_eq(r["gold_earned"], 25, "five slimes at 5 gold")
+	assert_eq(r["gold_earned"], 25, "five goblins at 5 gold")
 	# Ported: "loses no lives" (harness.test.ts "an overwhelming defence").
 	assert_eq(r["lives_lost"], 0, "zero leaks means zero lives lost")
 	return true
@@ -179,14 +179,14 @@ func test_a_tower_on_the_lane_engages() -> bool:
 # folded into other scenarios there), but this port's config includes a
 # `base_splash_radius`-bearing tower kind (mortar) and nothing above
 # exercises it — every other test in this file uses basic/fast/long, all of
-# which have zero splash. Mortar one-shots a wave-1 slime outright (damage 5
+# which have zero splash. Mortar one-shots a wave-1 goblin outright (damage 5
 # >= scaled health 5), so getting all five kills from only 2-3 shots at a
 # 2000ms fire rate is only possible if splash is actually reaching bystanders
 # clustered near the primary target, not just the target itself.
 func test_mortar_splash_kills_more_than_its_shot_count_would_alone() -> bool:
 	var towers := [{"kind": &"mortar", "position": Grid.tile_to_world_center(5, 3)}]
 	var r := Harness.run_wave({"wave": 1, "towers": towers, "path": _path()})
-	assert_eq(r["kills"], 5, "all five slimes die, most of them to splash")
+	assert_eq(r["kills"], 5, "all five goblins die, most of them to splash")
 	assert_eq(r["leaks"], 0, "none escape")
 	return true
 
@@ -316,7 +316,7 @@ func test_tick_ms_override_is_honored() -> bool:
 	#
 	# Re-derived from 712 to 710 when movement.gd's un-clamped overshoot was
 	# removed, and this is the largest pacing shift the removal produced
-	# anywhere in the suite: at tick_ms=40 a wave-1 slime moves exactly 4.0
+	# anywhere in the suite: at tick_ms=40 a wave-1 goblin moves exactly 4.0
 	# px/tick, so it is one of the few scenarios where a step exceeds the 2px
 	# arrival radius at all. Two ticks out of 712 is 0.3%.
 	assert_eq(coarser_run["ticks"], 710, "exact tick count at tick_ms=40 for this scenario")
@@ -349,7 +349,7 @@ func test_an_extreme_tick_size_completes_rather_than_oscillating() -> bool:
 	var r := Harness.run_wave({"wave": 1, "towers": [], "path": _path(), "tick_ms": 100.0})
 	assert_false(r["timed_out"], "a 100ms tick completes rather than oscillating forever")
 	assert_eq(r["ticks"], 312, "exact tick count at tick_ms=100 for this scenario")
-	assert_eq(r["leaks"], 5, "all five slimes still walk off the end")
+	assert_eq(r["leaks"], 5, "all five goblins still walk off the end")
 	return true
 
 # --------------------------------------------------------------------------
@@ -387,7 +387,7 @@ func test_an_extreme_tick_size_completes_rather_than_oscillating() -> bool:
 func test_wave_twenty_undefended_completes_at_the_default_tick_size() -> bool:
 	var r := Harness.run_wave({"wave": 20, "towers": [], "path": _path()})
 	assert_false(r["timed_out"], "wave 20 finishes within the default tick budget")
-	# Exact pin. The bee speed that used to trap (150 * 1.75 = 4.375 px/tick)
+	# Exact pin. The bat speed that used to trap (150 * 1.75 = 4.375 px/tick)
 	# is still the fastest thing in the game, so this number is the direct
 	# regression witness for the Critical: a revert to the un-clamped step
 	# turns it back into DEFAULT_MAX_TICKS.
@@ -443,15 +443,15 @@ func test_every_wave_undefended_terminates_at_the_doubled_tick_size() -> bool:
 #   this interface. Covered instead by test_results_are_reproducible and
 #   test_repeated_runs_of_a_heavier_wave_are_identical above, which assert
 #   the same property (same input -> same output) without a seed to vary.
-# - "late-wave life loss" (wave 5 vs 6, isolated to one slime via a
+# - "late-wave life loss" (wave 5 vs 6, isolated to one goblin via a
 #   `composition` override) — this interface has no composition override,
 #   and Leak.resolve's own wave-5-boundary behaviour is already pinned
 #   directly in test/test_leak.gd (Task 10):
 #   test_switches_over_exactly_after_wave_five et al. Re-deriving it through
 #   a full wave simulation here would not test anything Leak's own suite
 #   doesn't already cover more precisely.
-# - "explicit compositions" (bee-only wave, empty composition) — same
-#   reason: no composition override in this interface, and bee life_loss is
+# - "explicit compositions" (bat-only wave, empty composition) — same
+#   reason: no composition override in this interface, and bat life_loss is
 #   already pinned in test/test_data_tables.gd.
 # - "insignia reports zero until lieutenants exist" — no insignia field;
 #   lieutenants/bosses are out of scope for the core slice (see
@@ -473,7 +473,7 @@ func test_a_slowing_tower_makes_a_wave_take_longer() -> bool:
 	var position := Grid.tile_to_world_center(5, 3)
 	# Damage-free by construction: what is being measured is the delay, and a
 	# tower that also killed things would confound it. Suppression tier 4 is
-	# the only slow in the table, so its damage comes along - wave 20's bees
+	# the only slow in the table, so its damage comes along - wave 20's bats
 	# outrun the fast tower's reach in numbers, leaving plenty alive to time.
 	var plain := Harness.run_wave({"wave": 20, "path": path, "towers": [
 		{"kind": &"fast", "position": position, "tiers": {&"sustained": 0, &"burst": 0}},
@@ -549,9 +549,9 @@ func test_kills_pay_through_the_killing_towers_gold_effects() -> bool:
 	var rich := Harness.run_wave({"wave": 1, "path": path, "towers": rich_towers})
 
 	assert_true(plain["kills"] > 0, "precondition: the plain build kills something")
-	assert_eq(plain["gold_earned"], plain["kills"] * 5, "a slime pays its table reward")
+	assert_eq(plain["gold_earned"], plain["kills"] * 5, "a goblin pays its table reward")
 	assert_true(rich["kills"] > 0, "precondition: the upgraded build kills something too")
-	assert_eq(rich["gold_earned"], rich["kills"] * 12, "5 * 2 + 2 per slime, through kill_reward")
+	assert_eq(rich["gold_earned"], rich["kills"] * 12, "5 * 2 + 2 per goblin, through kill_reward")
 	return true
 
 # --------------------------------------------------------------------------

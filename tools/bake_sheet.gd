@@ -490,9 +490,9 @@ const WALK_BACKGROUND := Vector3(6.5, 21.5, 30.0)
 ## Frames 0-7 are the walk cycle and 8-11 the death sequence, uniformly across
 ## all five rows - checked by rendering every frame of every row.
 const WALK_ROWS := {
-	&"slime": {"y0": 78, "y1": 164},
+	&"goblin": {"y0": 78, "y1": 164},
 	&"ogre": {"y0": 593, "y1": 710},
-	&"bee": {"y0": 789, "y1": 881},
+	&"bat": {"y0": 789, "y1": 881},
 	&"_unused/shaman": {"y0": 242, "y1": 351},
 	&"_unused/troll": {"y0": 425, "y1": 532},
 }

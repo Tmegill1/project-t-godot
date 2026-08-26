@@ -1,11 +1,11 @@
 extends TestCase
 
 func test_enemy_stats_match_the_phaser_build() -> bool:
-	var slime: Dictionary = Enemies.DEFS[&"slime"]
-	assert_eq(slime["base_speed"], 100.0, "slime speed")
-	assert_eq(slime["base_health"], 5, "slime health")
-	assert_eq(slime["reward"], 5, "slime reward")
-	assert_eq(slime["life_loss"], 1, "slime leak cost")
+	var goblin: Dictionary = Enemies.DEFS[&"goblin"]
+	assert_eq(goblin["base_speed"], 100.0, "goblin speed")
+	assert_eq(goblin["base_health"], 5, "goblin health")
+	assert_eq(goblin["reward"], 5, "goblin reward")
+	assert_eq(goblin["life_loss"], 1, "goblin leak cost")
 
 	var ogre: Dictionary = Enemies.DEFS[&"ogre"]
 	assert_eq(ogre["base_speed"], 60.0, "ogre speed")
@@ -15,17 +15,17 @@ func test_enemy_stats_match_the_phaser_build() -> bool:
 	assert_eq(ogre["sprite_px"], 58.0, "ogre draws taller than the others")
 	assert_false(ogre["flip_horizontally"], "ogre artwork faces the same way as the others on this sheet")
 
-	var bee: Dictionary = Enemies.DEFS[&"bee"]
-	assert_eq(bee["base_speed"], 150.0, "bee speed")
-	assert_eq(bee["base_health"], 3, "bee health")
-	assert_eq(bee["reward"], 10, "bee reward")
-	assert_eq(bee["life_loss"], 2, "bee leak cost")
+	var bat: Dictionary = Enemies.DEFS[&"bat"]
+	assert_eq(bat["base_speed"], 150.0, "bat speed")
+	assert_eq(bat["base_health"], 3, "bat health")
+	assert_eq(bat["reward"], 10, "bat reward")
+	assert_eq(bat["life_loss"], 2, "bat leak cost")
 	return true
 
 func test_scaled_health_floors_and_clamps_to_one() -> bool:
-	assert_eq(Enemies.scaled_health(&"slime", 1.0), 5, "unmodified")
-	assert_eq(Enemies.scaled_health(&"slime", 1.5), 7, "7.5 floors to 7")
-	assert_eq(Enemies.scaled_health(&"slime", 0.0), 1, "never below one")
+	assert_eq(Enemies.scaled_health(&"goblin", 1.0), 5, "unmodified")
+	assert_eq(Enemies.scaled_health(&"goblin", 1.5), 7, "7.5 floors to 7")
+	assert_eq(Enemies.scaled_health(&"goblin", 0.0), 1, "never below one")
 	return true
 
 func test_scaled_speed_is_unrounded_and_clamps_to_one() -> bool:
@@ -105,9 +105,9 @@ func test_tower_cosmetic_and_progression_fields_match_the_phaser_build() -> bool
 ## number.
 func test_enemy_cosmetic_fields_are_the_ones_this_port_draws_from() -> bool:
 	var expected := {
-		&"slime": {"label": "Slime", "walk_frames": 8, "death_frames": 4, "sprite_px": 34.0, "stride_px": 30.0, "flip_horizontally": false},
+		&"goblin": {"label": "Goblin", "walk_frames": 8, "death_frames": 4, "sprite_px": 34.0, "stride_px": 30.0, "flip_horizontally": false},
 		&"ogre":  {"label": "Ogre",  "walk_frames": 8, "death_frames": 4, "sprite_px": 58.0, "stride_px": 46.0, "flip_horizontally": false},
-		&"bee":   {"label": "Bee",   "walk_frames": 7, "death_frames": 4, "sprite_px": 28.0, "stride_px": 32.0, "flip_horizontally": false},
+		&"bat":   {"label": "Bat",   "walk_frames": 7, "death_frames": 4, "sprite_px": 28.0, "stride_px": 32.0, "flip_horizontally": false},
 	}
 	for kind in expected.keys():
 		var def: Dictionary = Enemies.DEFS[kind]

@@ -10,16 +10,16 @@ const MAX_WAVES := 20
 const LAST_AUTHORED_WAVE := 5
 
 const _ADDITIONS := {
-	1: [{"kind": &"slime", "count": 5}],
-	2: [{"kind": &"slime", "count": 3}, {"kind": &"bee", "count": 3}],
-	3: [{"kind": &"slime", "count": 3}, {"kind": &"bee", "count": 3}],
+	1: [{"kind": &"goblin", "count": 5}],
+	2: [{"kind": &"goblin", "count": 3}, {"kind": &"bat", "count": 3}],
+	3: [{"kind": &"goblin", "count": 3}, {"kind": &"bat", "count": 3}],
 	4: [{"kind": &"ogre", "count": 2}],
-	5: [{"kind": &"slime", "count": 3}, {"kind": &"bee", "count": 3}, {"kind": &"ogre", "count": 1}],
+	5: [{"kind": &"goblin", "count": 3}, {"kind": &"bat", "count": 3}, {"kind": &"ogre", "count": 1}],
 }
 
 const _ENDLESS_BUNDLE := [
-	{"kind": &"slime", "count": 2},
-	{"kind": &"bee", "count": 5},
+	{"kind": &"goblin", "count": 2},
+	{"kind": &"bat", "count": 5},
 	{"kind": &"ogre", "count": 2},
 ]
 
@@ -53,8 +53,8 @@ const GOLD_PER_WAVE := 0.025
 const MIN_GOLD_MODIFIER := 0.40
 
 const INTERVAL_MS := 500.0
-const BEE_START_DELAY_MS := 5000.0
-const OGRE_DELAY_AFTER_LAST_SLIME_MS := 3000.0
+const BAT_START_DELAY_MS := 5000.0
+const OGRE_DELAY_AFTER_LAST_GOBLIN_MS := 3000.0
 const OGRE_MAX_START_DELAY_MS := 10000.0
 
 ## Enemy counts for a wave, accumulated from wave 1. Returns fresh
@@ -94,11 +94,11 @@ static func get_modifiers(wave_number: int) -> Dictionary:
 		"gold_modifier": maxf(MIN_GOLD_MODIFIER, 1.0 - float(past) * GOLD_PER_WAVE),
 	}
 
-## When the ogre column starts, given how many slimes precede it. Ogres trail
-## the last slime by three seconds but never wait more than ten.
-static func ogre_spawn_delay(slime_count: int) -> float:
-	var last_slime_at := float(slime_count - 1) * INTERVAL_MS
-	return minf(last_slime_at + OGRE_DELAY_AFTER_LAST_SLIME_MS, OGRE_MAX_START_DELAY_MS)
+## When the ogre column starts, given how many goblins precede it. Ogres trail
+## the last goblin by three seconds but never wait more than ten.
+static func ogre_spawn_delay(goblin_count: int) -> float:
+	var last_goblin_at := float(goblin_count - 1) * INTERVAL_MS
+	return minf(last_goblin_at + OGRE_DELAY_AFTER_LAST_GOBLIN_MS, OGRE_MAX_START_DELAY_MS)
 
 ## Spawn instants for a wave, mirroring GameScene.startWave's offsets.
 ##
@@ -110,26 +110,26 @@ static func build_schedule(wave: int) -> Array:
 	var schedule: Array = []
 	var composition := get_composition(wave)
 
-	var slime_count := 0
+	var goblin_count := 0
 	for entry in composition:
-		if entry["kind"] == &"slime":
-			slime_count = entry["count"]
+		if entry["kind"] == &"goblin":
+			goblin_count = entry["count"]
 
 	# Tie-break carries push order (see below) so two entries at the same
 	# at_ms sort deterministically instead of depending on whatever ordering
 	# Array.sort_custom happens to produce for equal keys — it is not
 	# documented as a stable sort on this engine. Ties are not hypothetical:
-	# from wave 6 on, slime/bee/ogre columns land on identical at_ms values
+	# from wave 6 on, goblin/bat/ogre columns land on identical at_ms values
 	# (e.g. wave 12 has genuine three-way ties at 10000, 10500, 11000...).
 	var push_index := 0
 	for entry in composition:
 		var kind: StringName = entry["kind"]
 		var start := 0.0
 		match kind:
-			&"bee":
-				start = BEE_START_DELAY_MS
+			&"bat":
+				start = BAT_START_DELAY_MS
 			&"ogre":
-				start = ogre_spawn_delay(slime_count)
+				start = ogre_spawn_delay(goblin_count)
 			_:
 				start = 0.0
 		for i in entry["count"]:

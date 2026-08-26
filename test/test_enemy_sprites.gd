@@ -14,9 +14,9 @@ extends TestCase
 # rather than on index: hard-coding "skip frame 7" would silently discard a
 # good frame if the sheet were regenerated.
 
-const _KINDS := ["slime", "ogre", "bee"]
-const _EXPECTED_WALK := {"slime": 8, "ogre": 8, "bee": 7}
-const _EXPECTED_DEATH := {"slime": 4, "ogre": 4, "bee": 4}
+const _KINDS := ["goblin", "ogre", "bat"]
+const _EXPECTED_WALK := {"goblin": 8, "ogre": 8, "bat": 7}
+const _EXPECTED_DEATH := {"goblin": 4, "ogre": 4, "bat": 4}
 const _MARGIN_ALPHA_MAX := 8
 
 func _frame(kind: String, action: String, index: int) -> Image:

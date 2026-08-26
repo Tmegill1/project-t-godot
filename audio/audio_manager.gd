@@ -14,8 +14,8 @@ extends Node
 const SOUNDS := [
 	&"place", &"sell", &"denied", &"ui-click", &"wave-start", &"wave-clear",
 	&"leak", &"victory", &"defeat", &"fire-basic", &"fire-fast",
-	&"fire-mortar", &"fire-long", &"death-slime", &"death-ogre",
-	&"death-bee", &"explosion",
+	&"fire-mortar", &"fire-long", &"death-goblin", &"death-ogre",
+	&"death-bat", &"explosion",
 ]
 
 const POOL_SIZE := 12

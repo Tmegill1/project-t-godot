@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://weddw0e6rnif"
-path="res://.godot/imported/walk_6.png-da7e8f6ba6e860feef424d191a42a335.ctex"
+uid="uid://cudmpxdo3eg58"
+path="res://.godot/imported/walk_4.png-8486b2894d172b7a91ac39b6cbf08b13.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/art/enemies/bee/walk_6.png"
-dest_files=["res://.godot/imported/walk_6.png-da7e8f6ba6e860feef424d191a42a335.ctex"]
+source_file="res://assets/art/enemies/goblin/walk_4.png"
+dest_files=["res://.godot/imported/walk_4.png-8486b2894d172b7a91ac39b6cbf08b13.ctex"]
 
 [params]
 
