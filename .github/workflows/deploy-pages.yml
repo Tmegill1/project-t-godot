@@ -83,6 +83,41 @@ jobs:
       - name: Run tests
         run: godot --headless --quit --script test/run_tests.gd
 
+      # Stamp the build so a shipped page can identify itself. build_stamp.gd
+      # is committed as a template reading "dev"; this overwrites it in the
+      # runner's working copy only, immediately before the export, so the
+      # artifact carries the SHA it was built from and no commit is needed.
+      #
+      # It exists because a cached index.pck is indistinguishable from a fresh
+      # one from outside the browser - answering "which build am I running?"
+      # previously meant downloading the pack and parsing it in a headless
+      # engine.
+      - name: Stamp the build
+        run: |
+          set -euo pipefail
+          SHORT_SHA="$(git rev-parse --short HEAD)"
+          BUILT_AT="$(date -u +%Y-%m-%dT%H:%MZ)"
+          cat > build_stamp.gd <<EOF
+          class_name BuildStamp
+
+          ## GENERATED AT EXPORT by .github/workflows/deploy-pages.yml.
+          ## The committed version of this file is a template reading "dev".
+          const SHA := "${SHORT_SHA}"
+          const BUILT_AT := "${BUILT_AT}"
+
+          static func label() -> String:
+          	if SHA == "dev":
+          		return "dev build"
+          	if BUILT_AT == "":
+          		return "build %s" % SHA
+          	return "build %s · %s" % [SHA, BUILT_AT]
+          EOF
+          # Heredocs indent-strip is not available here, so normalise the
+          # leading whitespace the block above introduced.
+          sed -i 's/^          //' build_stamp.gd
+          echo "Stamped ${SHORT_SHA} / ${BUILT_AT}"
+          cat build_stamp.gd
+
       - name: Export web build
         run: |
           set -euo pipefail

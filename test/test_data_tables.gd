@@ -273,3 +273,26 @@ func test_swapping_the_art_moved_no_stats() -> bool:
 	assert_eq(float(Towers.DEFS[&"mortar"]["fire_rate"]), 2000.0, "and still fires every 2000ms")
 	assert_eq(int(Towers.DEFS[&"mortar"]["cost"]), 70, "and still costs 70")
 	return true
+
+# --------------------------------------------------------------------------
+# Build stamp
+# --------------------------------------------------------------------------
+
+# The committed template must always read as a local build. If CI's generated
+# version were ever committed by accident, this fails and says so.
+func test_the_committed_build_stamp_is_the_dev_template() -> bool:
+	assert_eq(BuildStamp.SHA, "dev",
+		"the committed template is unstamped; CI overwrites it at export")
+	return true
+
+func test_an_unstamped_build_says_so() -> bool:
+	assert_eq(BuildStamp.label(), "dev build", "a local run identifies itself")
+	return true
+
+# The workflow generates this file wholesale, so the names and types it writes
+# have to keep matching what the game reads.
+func test_the_stamp_exposes_the_fields_the_workflow_writes() -> bool:
+	assert_true(BuildStamp.SHA is String, "SHA is a String")
+	assert_true(BuildStamp.BUILT_AT is String, "BUILT_AT is a String")
+	assert_true(BuildStamp.label() is String, "label() returns a String")
+	return true

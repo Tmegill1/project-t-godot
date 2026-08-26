@@ -5,8 +5,14 @@ extends Control
 
 @onready var _play: Button = $Panel/Play
 @onready var _quit: Button = $Panel/Quit
+@onready var _stamp: Label = $BuildStampLabel
 
 func _ready() -> void:
+	# Which build this is, dimmed in the corner. A diagnostic, not a feature:
+	# a cached index.pck is indistinguishable from a fresh one otherwise, and
+	# working out which version a browser was running previously meant
+	# downloading the pack and parsing it in a headless engine.
+	_stamp.text = BuildStamp.label()
 	_play.pressed.connect(func(): get_tree().change_scene_to_file("res://game/game.tscn"))
 	_quit.pressed.connect(func(): get_tree().quit())
 	# Quit is meaningless in a browser build.
