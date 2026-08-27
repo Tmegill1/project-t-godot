@@ -132,7 +132,16 @@ static func death_frames(kind: StringName) -> int:
 const RESISTANCE_ONSET_WAVE := 8
 
 ## Armour added per wave past the onset, on kinds that carry armour at all.
-const ARMOR_PER_WAVE := 0.6
+## Measured. Was 0.6, alongside PIERCE_PER_TIER of 2 - and that pairing had
+## erased armour entirely: a maxed Basic dealt exactly as much to a wave-20
+## ogre as to an unarmoured goblin, because six tiers of levelling bought more
+## pierce than the ogre had armour.
+##
+## At 1.0 against PIERCE_PER_TIER of 1, each tower gets a distinct relationship
+## to armour at wave 20: Basic 67% through, Mortar 84%, Magic 15% (the floor -
+## magic is the shield answer, not the armour one), and Long Range 100%,
+## because its own pierce tiers are what make it the armour specialist.
+const ARMOR_PER_WAVE := 1.0
 
 ## How many waves apart each additional shield charge lands. Shields STEP
 ## rather than scale, because half a charge absorbs nothing - the whole point

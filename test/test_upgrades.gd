@@ -472,17 +472,36 @@ func test_penetration_counts_both_branches_equally() -> bool:
 		"four tiers is four tiers, however they were spent")
 	return true
 
-# The point of it all: a maxed Magic tower must actually get through the
-# armour a late ogre carries, rather than relying on the floor alone.
-func test_a_maxed_magic_tower_beats_a_late_ogres_armour_by_more_than_the_floor() -> bool:
-	var s := UpgradesSim.resolve_tower_stats(&"fast", {&"sustained": 4, &"burst": 2})
-	var ogre_armor := int(Enemies.resistance_for(&"ogre", 20)["armor"])
-	var target := {"health": 500.0, "armor": ogre_armor, "shield": 0, "alive": true}
+# Levelled penetration must do real work SOMEWHERE, and mid-game armour is
+# where. Against a wave-20 ogre a maxed Magic tower rides the damage floor,
+# and that is the design rather than a shortfall: magic is the shield answer,
+# armour is Long Range's, and the floor is what stops magic ever being a dead
+# button. An earlier version of this test asserted the opposite and drove
+# PIERCE_PER_TIER to 2 - which erased armour for every physical tower. See
+# that constant's comment.
+func test_levelled_penetration_does_real_work_against_mid_game_armour() -> bool:
+	var st := UpgradesSim.resolve_tower_stats(&"fast", {&"sustained": 4, &"burst": 2})
+	var armor := int(Enemies.resistance_for(&"ogre", 10)["armor"])
+	var target := {"health": 500.0, "armor": armor, "shield": 0, "alive": true}
 	var with_pierce := Damage.resolve({
-		"damage": float(s["damage"]), "pierce": int(s["pierce"]),
+		"damage": float(st["damage"]), "pierce": int(st["pierce"]),
 		"damage_type": &"magic"}, target)
 	var without := Damage.resolve({
-		"damage": float(s["damage"]), "pierce": 0, "damage_type": &"magic"}, target)
+		"damage": float(st["damage"]), "pierce": 0, "damage_type": &"magic"}, target)
 	assert_true(with_pierce["damage_dealt"] > without["damage_dealt"],
-		"the penetration it levelled into is doing real work against wave 20 armour")
+		"levelling buys its way through a wave 10 ogre")
+	return true
+
+# And against LATE armour it rides the floor - stated, so nobody "fixes" it
+# back into erasing armour for everyone else.
+func test_a_maxed_magic_tower_rides_the_floor_against_late_armour() -> bool:
+	var st := UpgradesSim.resolve_tower_stats(&"fast", {&"sustained": 4, &"burst": 2})
+	var target := {"health": 500.0, "shield": 0, "alive": true,
+		"armor": int(Enemies.resistance_for(&"ogre", 20)["armor"])}
+	var r := Damage.resolve({"damage": float(st["damage"]), "pierce": int(st["pierce"]),
+		"damage_type": &"magic"}, target)
+	assert_almost_eq(r["damage_dealt"],
+		float(st["damage"]) * Damage.MIN_DAMAGE_FRACTION, 0.001,
+		"the floor, not the pierce, is what carries magic against a wave 20 ogre")
+	assert_true(r["damage_dealt"] > 0.0, "and it is never nothing")
 	return true

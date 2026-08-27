@@ -31,7 +31,7 @@ const CROSS_PATH_CAP := 2
 ## 2 it reaches 12, which clears the floor and makes levelling genuinely buy
 ## its way through. Long Range still ends far ahead, because its explicit
 ## pierce tiers add 15 on top.
-const PIERCE_PER_TIER := 2
+const PIERCE_PER_TIER := 1
 
 static func empty_tiers() -> Dictionary:
 	return {&"sustained": 0, &"burst": 0}

@@ -52,10 +52,10 @@ func test_modifiers_are_flat_through_wave_five() -> bool:
 
 func test_modifiers_scale_past_wave_five() -> bool:
 	var m10 := Waves.get_modifiers(10)
-	assert_almost_eq(m10["health_modifier"], 1.5, 0.0001, "wave 10 health +50%")
+	assert_almost_eq(m10["health_modifier"], 2.25, 0.0001, "wave 10 health +125%")
 	assert_almost_eq(m10["speed_modifier"], 1.25, 0.0001, "wave 10 speed +25%")
 	var m20 := Waves.get_modifiers(20)
-	assert_almost_eq(m20["health_modifier"], 2.5, 0.0001, "wave 20 health +150%")
+	assert_almost_eq(m20["health_modifier"], 4.75, 0.0001, "wave 20 health +375%")
 	assert_almost_eq(m20["speed_modifier"], 1.75, 0.0001, "wave 20 speed +75%")
 	return true
 

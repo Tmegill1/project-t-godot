@@ -34,7 +34,20 @@ const _ENDLESS_BUNDLE := [
 	{"kind": &"shaman", "count": 1},
 ]
 
-const HEALTH_PER_WAVE := 0.1
+## Measured, not ported. Was 0.10.
+##
+## Task 9 swept this against a maxed 16-tower board and a half-built one. The
+## finding that decided it: health scaling ALONE cannot threaten a maxed board
+## at any rate - even at 0.70, which is wave-20 health x11.5, it leaks zero.
+## The binding constraint is board COVERAGE, not enemy hit points.
+##
+## What the rate does move is where the knife edge sits. At 0.10 six maxed
+## towers hold wave 20 against a budget of sixteen, so the board has 100%
+## headroom. At 0.25 the edge moves to between eight and twelve, which is
+## where slice 0's gold curve actually lets a player land - so a good build
+## holds and a thin one does not. 0.40 gives the same edge for more hit-point
+## inflation, so it buys nothing.
+const HEALTH_PER_WAVE := 0.25
 const SPEED_PER_WAVE := 0.05
 
 ## How much of a kill's reward each wave past LAST_AUTHORED_WAVE removes.
