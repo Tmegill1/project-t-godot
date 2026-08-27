@@ -79,6 +79,11 @@ static func run_wave(config: Dictionary) -> Dictionary:
 				"alive": true,
 				"dying": false,
 				"slow": Slow.none(),
+				# Read by sim/damage.gd. The live board sets the same two keys in
+				# Enemy.setup; if only one side carried them, every balance number
+				# this harness produces would be a fiction.
+				"armor": int(Enemies.resistance_for(kind, wave)["armor"]),
+				"shield": int(Enemies.resistance_for(kind, wave)["shield"]),
 			})
 			next_id += 1
 			spawned += 1
@@ -142,6 +147,8 @@ static func run_wave(config: Dictionary) -> Dictionary:
 					float(source["slow_duration_ms"]))
 				var r := Damage.resolve(source, e)
 				e["health"] = r["remaining_health"]
+				# Written back, or a shield absorbs every hit forever.
+				e["shield"] = int(r["remaining_shield"])
 				if r["lethal"]:
 					e["alive"] = false
 					kills += 1

@@ -43,6 +43,10 @@ func setup(enemy_kind: StringName, path: PackedVector2Array, wave: int, rng: Rng
 		"dying": false,
 		"path_index": Movement.starting_path_index(path[0], path),
 		"slow": Slow.none(),
+		# Read by sim/damage.gd, which has implemented both since the core
+		# slice and never had an enemy carrying either.
+		"armor": int(Enemies.resistance_for(enemy_kind, wave)["armor"]),
+		"shield": int(Enemies.resistance_for(enemy_kind, wave)["shield"]),
 	}
 
 	position = path[0]
@@ -166,6 +170,9 @@ func take_damage(source: Dictionary) -> Dictionary:
 		float(source.get(&"slow_duration_ms", 0.0)))
 	var result := Damage.resolve(source, sim)
 	sim["health"] = result["remaining_health"]
+	# Written back, or a shield absorbs every hit forever - which is the
+	# difference between a charge and invulnerability.
+	sim["shield"] = int(result["remaining_shield"])
 	_update_health_bar()
 	if result["lethal"]:
 		_die(source)

@@ -389,3 +389,62 @@ func test_the_roster_values() -> bool:
 	assert_eq(float(Enemies.DEFS[&"shaman"]["base_speed"]), 80.0, "shaman speed")
 	assert_eq(float(Enemies.DEFS[&"ogre"]["base_speed"]), 55.0, "ogre speed")
 	return true
+
+# --------------------------------------------------------------------------
+# Armour and shields (spec 2026-08-25 section 3)
+# --------------------------------------------------------------------------
+#
+# sim/damage.gd has implemented both in full since the core slice, with 68
+# assertions covering them, and no enemy has ever carried either. This is the
+# data half.
+
+# Split by COUNTER, not sprinkled: armour is flat reduction so it folds to few
+# large hits, shields absorb whole hits so they fold to many cheap ones. The
+# goblin carries neither on purpose - it is the control every other kind is
+# read against.
+func test_resistance_is_split_by_counter() -> bool:
+	assert_true(int(Enemies.DEFS[&"ogre"]["armor"]) > 0, "ogres are armoured")
+	assert_eq(int(Enemies.DEFS[&"ogre"]["shield"]), 0, "and unshielded")
+	assert_true(int(Enemies.DEFS[&"bat"]["shield"]) > 0, "bats are shielded")
+	assert_eq(int(Enemies.DEFS[&"bat"]["armor"]), 0, "and unarmoured")
+	assert_true(int(Enemies.DEFS[&"shaman"]["shield"]) > 0, "shamans are shielded")
+	assert_eq(int(Enemies.DEFS[&"shaman"]["armor"]), 0, "and unarmoured")
+	assert_eq(int(Enemies.DEFS[&"goblin"]["armor"]), 0, "the goblin is the control")
+	assert_eq(int(Enemies.DEFS[&"goblin"]["shield"]), 0, "in both dimensions")
+	return true
+
+func test_no_resistance_before_the_onset_wave() -> bool:
+	for w in range(1, Enemies.RESISTANCE_ONSET_WAVE):
+		assert_eq(int(Enemies.resistance_for(&"ogre", w)["armor"]),
+			int(Enemies.DEFS[&"ogre"]["armor"]),
+			"wave %d ogre carries only its base armour" % w)
+	return true
+
+func test_armour_grows_with_the_wave() -> bool:
+	var early := int(Enemies.resistance_for(&"ogre", Enemies.RESISTANCE_ONSET_WAVE)["armor"])
+	var late := int(Enemies.resistance_for(&"ogre", 20)["armor"])
+	assert_true(late > early, "a wave 20 ogre is harder to chip than a wave 8 one")
+	return true
+
+# Resistance SCALES what a kind has; it never grants what it lacks. That is
+# what keeps the goblin a control and keeps the two counters distinct.
+func test_scaling_never_grants_resistance_a_kind_lacks() -> bool:
+	for w in [1, 10, 20, 40]:
+		var g := Enemies.resistance_for(&"goblin", w)
+		assert_eq(int(g["armor"]), 0, "goblin stays unarmoured at wave %d" % w)
+		assert_eq(int(g["shield"]), 0, "and unshielded at wave %d" % w)
+		assert_eq(int(Enemies.resistance_for(&"ogre", w)["shield"]), 0,
+			"the ogre never gains shields at wave %d" % w)
+		assert_eq(int(Enemies.resistance_for(&"bat", w)["armor"]), 0,
+			"the bat never gains armour at wave %d" % w)
+	return true
+
+# Shields STEP rather than scale: half a charge absorbs nothing, and the whole
+# point of a charge is that it eats one hit regardless of size.
+func test_shield_charges_step_rather_than_climbing_every_wave() -> bool:
+	var seen := {}
+	for w in range(1, 21):
+		seen[int(Enemies.resistance_for(&"bat", w)["shield"])] = true
+	assert_true(seen.size() >= 2, "the count changes across the run")
+	assert_true(seen.size() <= 4, "but steps, rather than climbing every wave")
+	return true

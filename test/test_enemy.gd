@@ -810,3 +810,53 @@ func test_a_late_wave_kill_pays_less_than_an_early_one() -> bool:
 		float(Waves.get_modifiers(20)["gold_modifier"]))
 	assert_true(late < early, "the same goblin is worth less on wave 20 than on wave 1")
 	return true
+
+# --------------------------------------------------------------------------
+# Resistance reaches the sim state (spec 2026-08-25 section 3)
+# --------------------------------------------------------------------------
+
+func test_an_enemy_carries_its_resistance_into_its_sim_state() -> bool:
+	var e := _ready_enemy()
+	e.setup(&"ogre", _straight_path(), 20)
+	assert_true(int(e.sim["armor"]) > 0, "the ogre spawned armoured at wave 20")
+	assert_eq(int(e.sim["shield"]), 0, "and unshielded")
+	e.free()
+	return true
+
+func test_a_shielded_enemy_survives_a_hit_that_would_kill_it() -> bool:
+	var e := _ready_enemy()
+	e.setup(&"bat", _straight_path(), 20)
+	var before: float = e.sim["health"]
+	e.take_damage({"damage": 9999.0})
+	assert_eq(e.sim["health"], before, "the shield ate the whole hit")
+	assert_true(e.sim["alive"], "so it is still alive")
+	e.free()
+	return true
+
+# The shield must be WRITTEN BACK or it absorbs every hit forever, which is
+# the difference between a charge and invulnerability.
+func test_a_shield_charge_is_spent_when_it_absorbs() -> bool:
+	var e := _ready_enemy()
+	e.setup(&"bat", _straight_path(), 20)
+	var charges: int = e.sim["shield"]
+	assert_true(charges > 0, "precondition: the bat spawned shielded")
+	for i in charges:
+		e.take_damage({"damage": 1.0})
+	assert_eq(int(e.sim["shield"]), 0, "every charge was spent")
+	var before: float = e.sim["health"]
+	e.take_damage({"damage": 1.0})
+	assert_true(e.sim["health"] < before, "and the next hit lands on health")
+	e.free()
+	return true
+
+func test_armour_reduces_a_hit_without_stopping_it() -> bool:
+	var e := _ready_enemy()
+	e.setup(&"ogre", _straight_path(), 20)
+	var armor: float = float(e.sim["armor"])
+	assert_true(armor > 0.0, "precondition: armoured")
+	var before: float = e.sim["health"]
+	e.take_damage({"damage": armor + 5.0})
+	assert_almost_eq(float(e.sim["health"]), before - 5.0, 0.001,
+		"armour absorbed exactly its own value")
+	e.free()
+	return true

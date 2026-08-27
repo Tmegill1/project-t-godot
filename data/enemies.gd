@@ -58,11 +58,13 @@ const DEFS := {
 		"label": "Goblin", "base_speed": 100.0, "base_health": 5, "reward": 5,
 		"life_loss": 1, "walk_frames": 8, "death_frames": 4, "sprite_px": 34.0,
 		"stride_px": 30.0, "flip_horizontally": false,
+		"armor": 0, "shield": 0,
 	},
 	&"ogre": {
 		"label": "Ogre", "base_speed": 55.0, "base_health": 10, "reward": 20,
 		"life_loss": 5, "walk_frames": 8, "death_frames": 4, "sprite_px": 58.0,
 		"stride_px": 46.0, "flip_horizontally": false,
+		"armor": 2, "shield": 0,
 	},
 	# The support caster. Its health and speed sit between the goblin's and the
 	# ogre's, matching its place in the roster; sprite_px is 44 because its
@@ -72,11 +74,13 @@ const DEFS := {
 		"label": "Goblin Shaman", "base_speed": 80.0, "base_health": 7, "reward": 15,
 		"life_loss": 3, "walk_frames": 8, "death_frames": 4, "sprite_px": 44.0,
 		"stride_px": 36.0, "flip_horizontally": false,
+		"armor": 0, "shield": 1,
 	},
 	&"bat": {
 		"label": "Bat", "base_speed": 150.0, "base_health": 3, "reward": 10,
 		"life_loss": 2, "walk_frames": 7, "death_frames": 4, "sprite_px": 28.0,
 		"stride_px": 32.0, "flip_horizontally": false,
+		"armor": 0, "shield": 1,
 	},
 }
 
@@ -106,3 +110,37 @@ static func walk_frames(kind: StringName) -> int:
 
 static func death_frames(kind: StringName) -> int:
 	return int(DEFS[kind]["death_frames"])
+
+
+# --- Resistance -----------------------------------------------------------
+
+## The wave from which resistance starts SCALING.
+##
+## Not wave 1: armour on the first goblin a new player meets teaches nothing
+## except that their tower is broken. The early game is where the base rules
+## are learned, so resistance grows once they are. A kind's base value from
+## DEFS still applies from wave 1 - this gates the growth, not the property.
+const RESISTANCE_ONSET_WAVE := 8
+
+## Armour added per wave past the onset, on kinds that carry armour at all.
+const ARMOR_PER_WAVE := 0.6
+
+## How many waves apart each additional shield charge lands. Shields STEP
+## rather than scale, because half a charge absorbs nothing - the whole point
+## of a charge is that it eats one hit regardless of size.
+const WAVES_PER_SHIELD_CHARGE := 6
+
+## Armour and shields for a spawn of this kind at this wave.
+##
+## Scaling never GRANTS what a kind lacks: a 0 in the table stays 0 forever.
+## That is what keeps the goblin a control, and what keeps armour and shields
+## answering different towers instead of blurring into general toughness.
+static func resistance_for(kind: StringName, wave: int) -> Dictionary:
+	var def: Dictionary = DEFS[kind]
+	var base_armor := int(def.get("armor", 0))
+	var base_shield := int(def.get("shield", 0))
+	var past: int = maxi(0, wave - RESISTANCE_ONSET_WAVE)
+	return {
+		"armor": 0 if base_armor <= 0 else base_armor + int(floor(float(past) * ARMOR_PER_WAVE)),
+		"shield": 0 if base_shield <= 0 else base_shield + int(past / WAVES_PER_SHIELD_CHARGE),
+	}

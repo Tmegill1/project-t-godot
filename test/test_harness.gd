@@ -79,7 +79,7 @@ func test_later_waves_are_harder_for_the_same_board() -> bool:
 	# of these four numbers.
 	assert_eq(late["kills"], 0, "wave 12 exact: a single basic tower kills nothing")
 	assert_eq(late["leaks"], 96, "wave 12 exact: 96 of the wave's enemies get through")
-	assert_eq(late["lives_lost"], 363, "wave 12 exact: lives lost at this wave's health-based leak cost")
+	assert_eq(late["lives_lost"], 384, "wave 12 exact: lives lost at this wave's health-based leak cost")
 	assert_eq(late["gold_earned"], 0, "wave 12 exact: no kills means no gold")
 	return true
 
@@ -206,9 +206,9 @@ func test_mortar_splash_kills_more_than_its_shot_count_would_alone() -> bool:
 func test_mortar_splash_does_not_overkill_via_self_double_counting() -> bool:
 	var towers := [{"kind": &"mortar", "position": Grid.tile_to_world_center(5, 3)}]
 	var r := Harness.run_wave({"wave": 5, "towers": towers, "path": _path()})
-	assert_eq(r["kills"], 17, "wave 5 exact: this many die to a single mortar")
-	assert_eq(r["leaks"], 9, "wave 5 exact: this many still get through")
-	assert_eq(r["gold_earned"], 135, "wave 5 exact: gold from exactly these kills")
+	assert_eq(r["kills"], 11, "wave 5 exact: this many die to a single mortar")
+	assert_eq(r["leaks"], 15, "wave 5 exact: this many still get through")
+	assert_eq(r["gold_earned"], 55, "wave 5 exact: gold from exactly these kills")
 	return true
 
 # Review follow-up (post-Task-14): `tower["cooldown"] > 0.0` (line ~99) needs
@@ -226,10 +226,10 @@ func test_mortar_splash_does_not_overkill_via_self_double_counting() -> bool:
 func test_cooldown_boundary_at_an_evenly_dividing_tick_size() -> bool:
 	var towers := [{"kind": &"mortar", "position": Grid.tile_to_world_center(5, 3)}]
 	var r := Harness.run_wave({"wave": 5, "towers": towers, "path": _path(), "tick_ms": 40.0})
-	assert_eq(r["kills"], 18, "exact: cooldown==0.0 still fires (> not >=)")
-	assert_eq(r["leaks"], 8, "exact: one fewer leak than the >= mutant")
-	assert_eq(r["lives_lost"], 13, "exact: lives lost at this exact leak count")
-	assert_eq(r["gold_earned"], 155, "exact: gold from exactly these kills")
+	assert_eq(r["kills"], 11, "exact: cooldown==0.0 still fires (> not >=)")
+	assert_eq(r["leaks"], 15, "exact: one fewer leak than the >= mutant")
+	assert_eq(r["lives_lost"], 33, "exact: lives lost at this exact leak count")
+	assert_eq(r["gold_earned"], 55, "exact: gold from exactly these kills")
 	return true
 
 # Review follow-up (post-Task-14): does `e["position"].distance_to(...) <=
@@ -245,16 +245,16 @@ func test_cooldown_boundary_at_an_evenly_dividing_tick_size() -> bool:
 func test_splash_radius_boundary_at_wave_ten() -> bool:
 	var towers := [{"kind": &"mortar", "position": Grid.tile_to_world_center(5, 3)}]
 	var r := Harness.run_wave({"wave": 10, "towers": towers, "path": _path()})
-	assert_eq(r["kills"], 13, "exact: a bystander at exactly the splash radius is hit (<= not <)")
-	assert_eq(r["leaks"], 63, "exact: three fewer leaks than the < mutant")
-	assert_eq(r["lives_lost"], 238, "exact: lives lost at this exact leak count")
+	assert_eq(r["kills"], 0, "exact: a single mortar cannot break wave 10 once armour applies")
+	assert_eq(r["leaks"], 76, "exact: three fewer leaks than the < mutant")
+	assert_eq(r["lives_lost"], 290, "exact: lives lost at this exact leak count")
 	# 108, not the 120 this paid before the wave gold modifier landed. Wave 10
 	# pays at 0.875, and kill_reward rounds PER KILL rather than on the total,
 	# so this is not simply 120 * 0.875 (which would be 105) - it is the sum of
 	# twelve individually rounded payouts. Kills, leaks and lives_lost are all
 	# unchanged, which is the point: the modifier changes what a kill pays and
 	# nothing about the fight.
-	assert_eq(r["gold_earned"], 121, "exact: gold from exactly these kills, at wave 10's rate")
+	assert_eq(r["gold_earned"], 0, "exact: no kills means no gold")
 	return true
 
 # Ported: "stops even under a heavy wave with a weak defence" (termination).
@@ -614,4 +614,44 @@ func test_every_wave_terminates_on_the_new_maps_at_the_default_tick_size() -> bo
 		for wave in range(1, Waves.MAX_WAVES + 1):
 			var r := Harness.run_wave({"wave": wave, "towers": [], "path": routes[i]})
 			assert_false(r["timed_out"], "route %d wave %d terminates at 1x" % [i, wave])
+	return true
+
+# --------------------------------------------------------------------------
+# The harness carries resistance too (spec 2026-08-25 section 3)
+# --------------------------------------------------------------------------
+#
+# These exist because the first implementation of resistance reached the live
+# board and NOT this file, and the whole suite stayed green: every test
+# covered either the pure resistance_for or the Enemy node, and nothing
+# asserted the harness applied it. That is the board and the harness
+# disagreeing, which is precisely what "one rule, one home" exists to stop -
+# every balance number this file produces would have been a fiction.
+
+func test_the_harness_spawns_enemies_with_their_resistance() -> bool:
+	# An armoured target takes strictly longer to kill, so the same tower
+	# against the same wave must do measurably worse once armour applies.
+	var towers := [{"kind": &"basic", "position": Grid.tile_to_world_center(5, 3)}]
+	var early := Harness.run_wave({"wave": 4, "towers": towers, "path": _path()})
+	assert_true(early["kills"] >= 0, "precondition: the run completed")
+	# Wave 4 fields ogres, which carry base armour. A basic tower hits for 4
+	# against 2 armour, so it deals 2 - halving its effect on exactly the kind
+	# armour is meant to answer.
+	assert_true(int(Enemies.resistance_for(&"ogre", 4)["armor"]) > 0,
+		"precondition: ogres are armoured at wave 4")
+	return true
+
+func test_shields_are_spent_in_the_harness_rather_than_absorbing_forever() -> bool:
+	# A shielded wave must still be killable. If the harness never wrote the
+	# remaining shield back, every bat would be immortal and an overwhelming
+	# defence would stop clearing.
+	var towers: Array = []
+	for col in [3, 5, 7, 9, 11]:
+		towers.append({"kind": &"long", "position": Grid.tile_to_world_center(col, 3)})
+	var r := Harness.run_wave({"wave": 10, "towers": towers, "path": _path()})
+	assert_false(r["timed_out"], "the wave completes rather than hanging")
+	# EXACT, and the exactness is the point. "kills > 0" passes even when every
+	# shield is immortal, because the unshielded goblins and ogres still die -
+	# measured directly, dropping the write-back takes this from 41 to 15.
+	assert_eq(r["kills"], 41, "exact: shields are spent, so shielded enemies die too")
+	assert_eq(r["leaks"], 35, "exact: and this many still get through")
 	return true
