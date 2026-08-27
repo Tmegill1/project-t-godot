@@ -42,6 +42,8 @@ static func run_wave(config: Dictionary) -> Dictionary:
 			"slow_duration_ms": float(stats["slow_duration_ms"]),
 			"gold_multiplier": float(stats["gold_multiplier"]),
 			"bonus_gold_per_kill": int(stats["bonus_gold_per_kill"]),
+			# Physical or magic - decides how armour and shields bite this tower.
+			"damage_type": Towers.DEFS[t["kind"]]["damage_type"],
 			"priority": Targeting.DEFAULT_PRIORITY,
 			"cooldown": 0.0,
 		})
@@ -125,6 +127,7 @@ static func run_wave(config: Dictionary) -> Dictionary:
 			var source := {
 				"damage": tower["damage"],
 				"pierce": tower["pierce"],
+				"damage_type": tower["damage_type"],
 				"gold_multiplier": tower["gold_multiplier"],
 				"bonus_gold_per_kill": tower["bonus_gold_per_kill"],
 				"slow_factor": tower["slow_factor"],

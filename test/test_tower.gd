@@ -605,3 +605,42 @@ func test_priority_survives_an_upgrade() -> bool:
 	assert_eq(tower.get_priority(), &"first", "the choice survives buying a tier")
 	tower.free()
 	return true
+
+# --------------------------------------------------------------------------
+# The fired payload carries the damage type
+# --------------------------------------------------------------------------
+#
+# Tested on the SIGNAL rather than through an outcome: dropping the key makes
+# Damage.resolve fall back to physical, which changes results only in
+# scenarios involving resistance, so an outcome test elsewhere can pass while
+# this is broken. The payload is the contract.
+
+func test_a_tower_announces_its_damage_type_when_it_fires() -> bool:
+	var t := _ready_tower()
+	t.setup(&"fast", Vector2(100, 100), 50)
+	var seen := []
+	t.wants_to_fire.connect(func(_node, source, _splash): seen.append(source))
+	var target := {
+		"id": 1, "position": Vector2(110, 100), "health": 99.0,
+		"path_index": 0, "alive": true, "dying": false, "node": t,
+	}
+	t.tick(99999.0, [target])
+	assert_eq(seen.size(), 1, "the tower fired")
+	assert_eq(seen[0]["damage_type"], &"magic", "and announced itself as magic")
+	t.free()
+	return true
+
+func test_a_physical_tower_announces_physical() -> bool:
+	var t := _ready_tower()
+	t.setup(&"long", Vector2(100, 100), 100)
+	var seen := []
+	t.wants_to_fire.connect(func(_node, source, _splash): seen.append(source))
+	var target := {
+		"id": 1, "position": Vector2(110, 100), "health": 99.0,
+		"path_index": 0, "alive": true, "dying": false, "node": t,
+	}
+	t.tick(99999.0, [target])
+	assert_eq(seen.size(), 1, "the tower fired")
+	assert_eq(seen[0]["damage_type"], &"physical", "Long Range is physical")
+	t.free()
+	return true

@@ -161,6 +161,10 @@ func tick(delta_ms: float, candidates: Array) -> void:
 		{
 			"damage": _stats["damage"],
 			"pierce": _stats["pierce"],
+			# Physical or magic. Read by sim/damage.gd to decide how armour and
+			# shields bite; the harness sets the same key, or the two would
+			# resolve the same shot differently.
+			"damage_type": _def["damage_type"],
 			"gold_multiplier": _stats["gold_multiplier"],
 			"bonus_gold_per_kill": _stats["bonus_gold_per_kill"],
 			"slow_factor": _stats["slow_factor"],

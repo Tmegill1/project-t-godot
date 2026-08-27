@@ -448,3 +448,13 @@ func test_shield_charges_step_rather_than_climbing_every_wave() -> bool:
 	assert_true(seen.size() >= 2, "the count changes across the run")
 	assert_true(seen.size() <= 4, "but steps, rather than climbing every wave")
 	return true
+
+func test_every_tower_declares_a_damage_type() -> bool:
+	for kind in Towers.KINDS:
+		var t: StringName = Towers.DEFS[kind]["damage_type"]
+		assert_true(t == &"physical" or t == &"magic", "%s declares one" % kind)
+	assert_eq(Towers.DEFS[&"fast"]["damage_type"], &"magic", "the Magic tower is magic")
+	assert_eq(Towers.DEFS[&"long"]["damage_type"], &"physical", "Long Range is physical")
+	assert_eq(Towers.DEFS[&"basic"]["damage_type"], &"physical", "Basic is physical")
+	assert_eq(Towers.DEFS[&"mortar"]["damage_type"], &"physical", "Mortar is physical")
+	return true

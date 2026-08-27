@@ -73,9 +73,14 @@ func test_armour_reduces_each_hit_flatly() -> bool:
 	assert_almost_eq(r["armor_absorbed"], 3.0, 0.001, "three absorbed")
 	return true
 
+# Was "floors at zero". Since the soft-edge rule it floors at
+# MIN_DAMAGE_FRACTION of the hit instead - but the guarantee this test was
+# really holding is that damage is never NEGATIVE, and that still stands.
 func test_armour_cannot_make_damage_negative() -> bool:
 	var r := Damage.resolve({"damage": 2}, _target(10.0, {"armor": 9}))
-	assert_almost_eq(r["damage_dealt"], 0.0, 0.001, "floors at zero")
+	assert_true(r["damage_dealt"] >= 0.0, "never negative")
+	assert_almost_eq(r["damage_dealt"], 2.0 * Damage.MIN_DAMAGE_FRACTION, 0.001,
+		"and floors at the fraction rather than at nothing")
 	return true
 
 func test_pierce_ignores_armour() -> bool:
@@ -83,10 +88,15 @@ func test_pierce_ignores_armour() -> bool:
 	assert_almost_eq(r["damage_dealt"], 4.0, 0.001, "pierce cancels armour")
 	return true
 
-func test_a_shield_swallows_a_whole_hit() -> bool:
+# Was "swallows a WHOLE hit". Under the soft-edge rule a charge eats most of
+# a hit rather than all of it - the charge is still spent, and the leak is a
+# fixed fraction by damage type.
+func test_a_shield_swallows_most_of_a_hit() -> bool:
 	var r := Damage.resolve({"damage": 15}, _target(10.0, {"shield": 2}))
-	assert_true(r["shield_absorbed"], "absorbed by shield")
-	assert_almost_eq(r["damage_dealt"], 0.0, 0.001, "no health lost")
+	assert_true(r["shield_absorbed"], "met by the shield")
+	assert_almost_eq(r["damage_dealt"], 15.0 * Damage.SHIELD_LEAK_PHYSICAL, 0.001,
+		"only the physical leak fraction gets through")
+	assert_true(r["damage_dealt"] < 15.0 * 0.5, "which is most of it stopped")
 	assert_eq(r["remaining_shield"], 1, "one charge spent")
 	return true
 
@@ -102,8 +112,9 @@ func test_armour_and_shields_are_answered_by_opposite_profiles() -> bool:
 	# Rapid cheap fire: 8 hits of 2. Heavy slow fire: 1 hit of 16.
 	var armoured := _target(20.0, {"armor": 3})
 	var shielded := _target(20.0, {"shield": 3})
-	assert_almost_eq(Damage.resolve({"damage": 2}, armoured)["damage_dealt"], 0.0, 0.001,
-		"rapid fire is useless against armour")
+	assert_almost_eq(Damage.resolve({"damage": 2}, armoured)["damage_dealt"],
+		2.0 * Damage.MIN_DAMAGE_FRACTION, 0.001,
+		"rapid fire is nearly useless against armour - but not zero")
 	assert_almost_eq(Damage.resolve({"damage": 16}, armoured)["damage_dealt"], 13.0, 0.001,
 		"a heavy hit punches armour")
 	assert_true(Damage.resolve({"damage": 16}, shielded)["shield_absorbed"],
@@ -163,18 +174,26 @@ func test_zero_damage_without_shield_does_not_report_kill() -> bool:
 
 # Ported: "blocks a hit entirely when armour exceeds the damage". No chip
 # floor: checks remaining_health and lethal in addition to damage_dealt.
-func test_armour_blocks_a_hit_entirely_when_it_exceeds_damage() -> bool:
+# Was "blocks a hit ENTIRELY". Armour that exceeds the damage now reduces the
+# hit to the floor rather than to nothing, which is the guarantee that no
+# tower is ever a dead button against a wall.
+func test_armour_reduces_an_outmatched_hit_to_the_floor() -> bool:
 	var r := Damage.resolve({"damage": 2}, _target(50.0, {"armor": 5}))
-	assert_almost_eq(r["damage_dealt"], 0.0, 0.001, "armour fully blocks the hit")
-	assert_almost_eq(r["remaining_health"], 50.0, 0.001, "no chip damage gets through")
-	assert_false(r["lethal"], "not lethal")
+	assert_almost_eq(r["damage_dealt"], 2.0 * Damage.MIN_DAMAGE_FRACTION, 0.001,
+		"the floor is what gets through")
+	assert_true(r["damage_dealt"] > 0.0, "and it is never nothing")
+	assert_false(r["lethal"], "not lethal against 50 health")
 	return true
 
 # Ported: "never turns a blocked hit into healing" — armour far in excess of
 # damage still floors at zero rather than going negative and healing.
 func test_armour_never_turns_a_blocked_hit_into_healing() -> bool:
 	var r := Damage.resolve({"damage": 1}, _target(20.0, {"armor": 99}))
-	assert_almost_eq(r["remaining_health"], 20.0, 0.001, "health does not increase")
+	# The claim is that health never goes UP. Under the soft-edge rule it no
+	# longer stays exactly put either, because the floor always gets something
+	# through - but healing was always the actual hazard here.
+	assert_true(r["remaining_health"] <= 20.0, "health does not increase")
+	assert_true(r["remaining_health"] > 19.0, "and an absurdly armoured target barely feels it")
 	return true
 
 # Ported: pierce "cannot push damage above the source's own value". Without
@@ -196,12 +215,16 @@ func test_pierce_partially_offsets_heavier_armour() -> bool:
 
 # Ported: shields absorb "a hit whole, regardless of its size" — a 999
 # damage hit against a 10-health target is still fully absorbed.
-func test_shield_absorbs_a_hit_whole_regardless_of_size() -> bool:
-	var r := Damage.resolve({"damage": 999}, _target(10.0, {"shield": 2}))
-	assert_almost_eq(r["damage_dealt"], 0.0, 0.001, "no damage gets through")
-	assert_almost_eq(r["remaining_health"], 10.0, 0.001, "health untouched")
-	assert_eq(r["remaining_shield"], 1, "one charge spent regardless of hit size")
-	assert_true(r["shield_absorbed"], "absorbed")
+# One charge per hit regardless of size is still true, and is still the
+# property that makes shields fold to many cheap hits rather than few big
+# ones. What changed is that the hit is reduced rather than erased.
+func test_a_shield_costs_one_charge_regardless_of_hit_size() -> bool:
+	var small := Damage.resolve({"damage": 4}, _target(500.0, {"shield": 2}))
+	var huge := Damage.resolve({"damage": 999}, _target(500.0, {"shield": 2}))
+	assert_eq(small["remaining_shield"], 1, "a small hit spends one charge")
+	assert_eq(huge["remaining_shield"], 1, "and so does an enormous one")
+	assert_true(huge["damage_dealt"] > small["damage_dealt"],
+		"but the big hit still leaks more through, so size is not irrelevant")
 	return true
 
 # Ported: shields cost "one charge per hit no matter the damage".
@@ -224,9 +247,12 @@ func test_shield_at_zero_lets_damage_through() -> bool:
 func test_shield_takes_priority_over_armour() -> bool:
 	var r := Damage.resolve({"damage": 20}, _target(50.0, {"shield": 1, "armor": 5}))
 	assert_true(r["shield_absorbed"], "shield spends first")
-	assert_almost_eq(r["armor_absorbed"], 0.0, 0.001,
-		"armour never sees a hit the shield already ate")
 	assert_eq(r["remaining_shield"], 0, "charge spent")
+	# The claim is ORDERING: a hit the shield met is resolved on the shield
+	# path, so the target's 5 armour never enters the arithmetic. The leak is
+	# the shield's own fraction of the raw hit, not a post-armour figure.
+	assert_almost_eq(r["damage_dealt"], 20.0 * Damage.SHIELD_LEAK_PHYSICAL, 0.001,
+		"the leak is a fraction of the RAW hit, so armour never saw it")
 	return true
 
 # Ported: shields "cannot be pierced" — pierce answers armour only. If it
@@ -234,7 +260,12 @@ func test_shield_takes_priority_over_armour() -> bool:
 func test_shield_cannot_be_pierced() -> bool:
 	var r := Damage.resolve({"damage": 20, "pierce": 99}, _target(50.0, {"shield": 2}))
 	assert_true(r["shield_absorbed"], "pierce does not touch shields")
-	assert_almost_eq(r["damage_dealt"], 0.0, 0.001, "fully absorbed")
+	assert_eq(int(r["remaining_shield"]), 1, "and strips exactly one charge, not more")
+	# Pierce answers armour ONLY. If it answered both, one upgrade path would
+	# counter everything - so 99 pierce must leak no more than 0 pierce does.
+	var unpierced := Damage.resolve({"damage": 20}, _target(50.0, {"shield": 2}))
+	assert_almost_eq(r["damage_dealt"], unpierced["damage_dealt"], 0.001,
+		"pierce buys nothing against a shield")
 	return true
 
 # Ported: "armoured and shielded demand opposite answers" describe block.
@@ -255,9 +286,14 @@ func test_heavy_hits_beat_fast_fire_against_armour() -> bool:
 	assert_true(heavy < fast, "heavy hits beat fast cheap fire against armour")
 	return true
 
-func test_rapid_fire_cannot_hurt_armour_at_all() -> bool:
+# Was "rapid fire cannot hurt armour AT ALL", which is exactly the wall the
+# owner's soft-edge rule removed: a tower that reads zero is a dead button.
+# Rapid fire is still the WRONG answer to armour - it just is not a null one.
+func test_rapid_fire_is_the_wrong_answer_to_armour_but_not_a_useless_one() -> bool:
 	var fast := _time_to_kill(2.0, 500.0, 30.0, 4, 0)
-	assert_true(fast == INF, "2 damage never exceeds 4 armour, so the fight never ends")
+	var heavy := _time_to_kill(15.0, 1500.0, 30.0, 4, 0)
+	assert_true(fast != INF, "it gets through, because the floor guarantees it")
+	assert_true(fast > heavy, "but far more slowly than a heavy hit does")
 	return true
 
 func test_neither_profile_is_a_universal_answer() -> bool:
@@ -319,9 +355,16 @@ func test_corpse_reports_no_absorption_of_any_kind() -> bool:
 # The shield-consumption branch hardcodes lethal=false - untested by the
 # brief's shield test. A shield absorbing a hit can never itself be lethal,
 # even against a target with only 1 health left.
-func test_shield_absorption_never_reports_lethal() -> bool:
-	var r := Damage.resolve({"damage": 999}, _target(1.0, {"shield": 1}))
-	assert_false(r["lethal"], "a shield-absorbed hit cannot be lethal, even at 1 health")
+# DELIBERATE REVERSAL. This used to assert a shield-met hit could never be
+# lethal, which was true while absorption was total. Under the soft-edge rule
+# a shield is a reduction, not immunity - and the alternative is worse: a
+# 1-health shielded enemy would be unkillable while it held any charge.
+func test_a_shield_reduces_a_hit_but_does_not_confer_immunity() -> bool:
+	var fatal := Damage.resolve({"damage": 999}, _target(1.0, {"shield": 1}))
+	assert_true(fatal["lethal"], "the leak still kills a target on its last point")
+	var survived := Damage.resolve({"damage": 10}, _target(50.0, {"shield": 1}))
+	assert_false(survived["lethal"], "but a proportionate hit is survived comfortably")
+	assert_true(survived["remaining_health"] > 45.0, "with most of the hit stopped")
 	return true
 
 # Pins the lethal threshold at exactly remaining_health <= 0, not some wider
@@ -444,4 +487,88 @@ func test_in_splash_with_a_zero_radius_still_covers_a_co_located_point() -> bool
 		"distance zero is within radius zero, so the callers' own guard matters")
 	assert_false(Damage.in_splash(Vector2(5.0, 5.0), Vector2(5.1, 5.0), 0.0),
 		"anything at all off-centre is outside a zero radius")
+	return true
+
+# --------------------------------------------------------------------------
+# Damage types, with soft edges (spec 2026-08-25 section 3.1)
+# --------------------------------------------------------------------------
+#
+# Rock-paper-scissors where neither type is ever reduced to nothing. A tower
+# with a speciality is a choice; a tower reading zero is a dead button. An
+# earlier draft made the walls hard, which would have let armour zero a
+# 4-damage Magic tower outright.
+
+func test_magic_is_stronger_against_shields_than_physical() -> bool:
+	var target := {"health": 100.0, "shield": 1, "armor": 0, "alive": true}
+	var magic := Damage.resolve({"damage": 20.0, "damage_type": &"magic"}, target)
+	var physical := Damage.resolve({"damage": 20.0, "damage_type": &"physical"}, target)
+	assert_true(magic["damage_dealt"] > physical["damage_dealt"],
+		"magic leaks more through a shield")
+	return true
+
+func test_physical_still_damages_a_shielded_target() -> bool:
+	var target := {"health": 100.0, "shield": 1, "armor": 0, "alive": true}
+	var r := Damage.resolve({"damage": 20.0, "damage_type": &"physical"}, target)
+	assert_true(r["damage_dealt"] > 0.0,
+		"reduced, not absorbed outright - the soft-edge rule")
+	return true
+
+func test_both_damage_types_still_cost_the_shield_a_charge() -> bool:
+	var target := {"health": 100.0, "shield": 2, "armor": 0, "alive": true}
+	for kind in [&"magic", &"physical"]:
+		var r := Damage.resolve({"damage": 20.0, "damage_type": kind}, target)
+		assert_eq(int(r["remaining_shield"]), 1, "%s spent a charge" % kind)
+		assert_true(r["shield_absorbed"], "%s was met by the shield" % kind)
+	return true
+
+func test_physical_is_stronger_against_armour_than_magic() -> bool:
+	var target := {"health": 100.0, "shield": 0, "armor": 10, "alive": true}
+	var physical := Damage.resolve({"damage": 20.0, "damage_type": &"physical"}, target)
+	var magic := Damage.resolve({"damage": 20.0, "damage_type": &"magic"}, target)
+	assert_true(physical["damage_dealt"] > magic["damage_dealt"],
+		"armour bites magic harder")
+	return true
+
+# The guarantee that makes the whole design safe.
+func test_armour_can_never_reduce_a_hit_to_nothing() -> bool:
+	var target := {"health": 100.0, "shield": 0, "armor": 9999, "alive": true}
+	for kind in [&"magic", &"physical"]:
+		var r := Damage.resolve({"damage": 4.0, "damage_type": kind}, target)
+		assert_true(r["damage_dealt"] > 0.0,
+			"%s still gets through absurd armour" % kind)
+	return true
+
+# A FRACTION, not a flat floor: a flat one would make a 4-damage tower and an
+# 80-damage tower equally good against a wall, inverting the point of building
+# the big one.
+func test_the_damage_floor_scales_with_the_incoming_hit() -> bool:
+	var target := {"health": 1000.0, "shield": 0, "armor": 9999, "alive": true}
+	var small := Damage.resolve({"damage": 4.0, "damage_type": &"magic"}, target)
+	var large := Damage.resolve({"damage": 80.0, "damage_type": &"magic"}, target)
+	assert_true(large["damage_dealt"] > small["damage_dealt"],
+		"a bigger hit still gets more through the floor")
+	return true
+
+func test_an_absent_damage_type_reads_as_physical() -> bool:
+	var target := {"health": 100.0, "shield": 0, "armor": 10, "alive": true}
+	var typed := Damage.resolve({"damage": 20.0, "damage_type": &"physical"}, target)
+	var untyped := Damage.resolve({"damage": 20.0}, target)
+	assert_eq(untyped["damage_dealt"], typed["damage_dealt"],
+		"every pre-existing caller keeps its behaviour")
+	return true
+
+func test_a_zero_damage_source_still_does_not_strip_a_charge() -> bool:
+	var target := {"health": 100.0, "shield": 1, "armor": 0, "alive": true}
+	for kind in [&"magic", &"physical"]:
+		var r := Damage.resolve({"damage": 0.0, "damage_type": kind}, target)
+		assert_eq(int(r["remaining_shield"]), 1,
+			"%s with no damage peels nothing" % kind)
+	return true
+
+func test_a_corpse_still_absorbs_nothing_whatever_the_type() -> bool:
+	var dead := {"health": 0.0, "shield": 3, "armor": 5, "alive": false}
+	for kind in [&"magic", &"physical"]:
+		var r := Damage.resolve({"damage": 50.0, "damage_type": kind}, dead)
+		assert_eq(r["damage_dealt"], 0.0, "%s does nothing to a corpse" % kind)
+		assert_false(r["lethal"], "and cannot kill it twice" )
 	return true

@@ -16,7 +16,7 @@ class_name Towers
 
 const DEFS := {
 	&"basic": {
-		"label": "Basic", "cost": 20, "cost_escalation": 10, "range": 100.0,
+		"label": "Basic", "damage_type": &"physical", "cost": 20, "cost_escalation": 10, "range": 100.0,
 		"fire_rate": 1000.0, "damage": 4, "pierce": 0, "detection": false,
 		"base_splash_radius": 0.0, "projectile_speed": 500.0,
 		"projectile_arcs": false, "color": Color8(0x00, 0x66, 0xff),
@@ -24,7 +24,7 @@ const DEFS := {
 		"base_limit": 8, "limit_bonus_map2": 2,
 	},
 	&"fast": {
-		"label": "Magic", "cost": 50, "cost_escalation": 15, "range": 80.0,
+		"label": "Magic", "damage_type": &"magic", "cost": 50, "cost_escalation": 15, "range": 80.0,
 		"fire_rate": 500.0, "damage": 2, "pierce": 0, "detection": false,
 		"base_splash_radius": 0.0, "projectile_speed": 500.0,
 		"projectile_arcs": false, "color": Color8(0x00, 0xff, 0x00),
@@ -32,7 +32,7 @@ const DEFS := {
 		"base_limit": 8, "limit_bonus_map2": 2,
 	},
 	&"mortar": {
-		"label": "Mortar", "cost": 70, "cost_escalation": 35, "range": 120.0,
+		"label": "Mortar", "damage_type": &"physical", "cost": 70, "cost_escalation": 35, "range": 120.0,
 		"fire_rate": 2000.0, "damage": 5, "pierce": 0, "detection": false,
 		"base_splash_radius": 55.0, "projectile_speed": 350.0,
 		"projectile_arcs": true, "color": Color8(0xb0, 0x7a, 0x3a),
@@ -40,7 +40,7 @@ const DEFS := {
 		"base_limit": 5, "limit_bonus_map2": 2,
 	},
 	&"long": {
-		"label": "Long Range", "cost": 100, "cost_escalation": 50, "range": 150.0,
+		"label": "Long Range", "damage_type": &"physical", "cost": 100, "cost_escalation": 50, "range": 150.0,
 		"fire_rate": 1500.0, "damage": 15, "pierce": 0, "detection": false,
 		"base_splash_radius": 0.0, "projectile_speed": 500.0,
 		"projectile_arcs": false, "color": Color8(0xff, 0x66, 0x00),

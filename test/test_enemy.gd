@@ -823,13 +823,19 @@ func test_an_enemy_carries_its_resistance_into_its_sim_state() -> bool:
 	e.free()
 	return true
 
-func test_a_shielded_enemy_survives_a_hit_that_would_kill_it() -> bool:
+# Written before damage types existed, when a shield absorbed the whole hit.
+# It is a reduction now, so the claim is that a shielded enemy survives a hit
+# it would otherwise die to - not that it survives anything at all.
+func test_a_shielded_enemy_survives_a_hit_that_would_otherwise_kill_it() -> bool:
 	var e := _ready_enemy()
 	e.setup(&"bat", _straight_path(), 20)
 	var before: float = e.sim["health"]
-	e.take_damage({"damage": 9999.0})
-	assert_eq(e.sim["health"], before, "the shield ate the whole hit")
-	assert_true(e.sim["alive"], "so it is still alive")
+	assert_true(int(e.sim["shield"]) > 0, "precondition: the bat spawned shielded")
+	# A hit slightly larger than its health: lethal unshielded, survivable with
+	# a charge, because only the leak fraction lands.
+	e.take_damage({"damage": before + 1.0, "damage_type": &"physical"})
+	assert_true(e.sim["alive"], "the charge carried it through")
+	assert_true(e.sim["health"] < before, "though not without a scratch")
 	e.free()
 	return true
 

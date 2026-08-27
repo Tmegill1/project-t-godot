@@ -655,3 +655,25 @@ func test_shields_are_spent_in_the_harness_rather_than_absorbing_forever() -> bo
 	assert_eq(r["kills"], 41, "exact: shields are spent, so shielded enemies die too")
 	assert_eq(r["leaks"], 35, "exact: and this many still get through")
 	return true
+
+# The damage type must reach the fight, in BOTH runners.
+#
+# Added because the first attempt at resistance wired the board and not the
+# harness and the suite stayed green. A type that only the live game applied
+# would make every balance number here a fiction, in exactly the same way.
+func test_the_damage_type_reaches_the_harness() -> bool:
+	# Same position, same wave, same tier investment - only the type differs.
+	# Magic is the shield answer, so against a wave carrying shielded bats it
+	# must not produce identical results to a physical tower.
+	var r := Harness.run_wave({"wave": 10, "path": _path(), "towers": [
+		{"kind": &"fast", "position": Grid.tile_to_world_center(5, 3),
+			"tiers": {&"sustained": 4, &"burst": 2}}]})
+	# EXACT, and the exactness is what makes it a witness. Comparing a magic
+	# tower against a DIFFERENT physical tower proves nothing - they differ in
+	# damage and cadence too, so that comparison passes even when the type is
+	# dropped entirely. Measured directly: without the type reaching the
+	# source, this same maxed Magic tower falls back to physical and takes
+	# these numbers from 7/69 to 3/73 against wave 10's shielded bats.
+	assert_eq(r["kills"], 7, "exact: the Magic tower fires as magic against shields")
+	assert_eq(r["leaks"], 69, "exact: and this many still get through")
+	return true
