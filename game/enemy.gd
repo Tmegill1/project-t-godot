@@ -26,6 +26,12 @@ var _path: PackedVector2Array
 var _wave := 1
 var _travelled := 0.0
 var _flip := false
+## Whether this spawn is a boss, and what it pays. A boss draws from
+## data/bosses.gd rather than from its kind's table.
+var is_boss := false
+var boss_reward := 0
+## How much larger a boss draws than its kind. 1.0 for everything else.
+var _boss_display_scale := 1.0
 
 func setup(enemy_kind: StringName, path: PackedVector2Array, wave: int, rng: Rng = null) -> void:
 	kind = enemy_kind
@@ -61,7 +67,7 @@ func setup(enemy_kind: StringName, path: PackedVector2Array, wave: int, rng: Rng
 	# walk_0 is the creature standing, so it is what sprite_px is a height OF.
 	# Every other frame - mid-stride, mid-fall, flat - is drawn at this same
 	# scale rather than renormalised to its own height.
-	_frame_scale = float(Enemies.DEFS[kind]["sprite_px"]) \
+	_frame_scale = float(Enemies.DEFS[kind]["sprite_px"]) * _boss_display_scale \
 		/ float(_sprite.texture.get_height())
 	apply_sprite_height()
 	_update_health_bar()
@@ -84,7 +90,7 @@ func setup(enemy_kind: StringName, path: PackedVector2Array, wave: int, rng: Rng
 ## used to be and appears to float; with it, the feet stay where the feet
 ## were and the body goes down.
 func apply_sprite_height() -> void:
-	var standing := float(Enemies.DEFS[kind]["sprite_px"])
+	var standing := float(Enemies.DEFS[kind]["sprite_px"]) * _boss_display_scale
 	var drawn := float(_sprite.texture.get_height()) * _frame_scale
 	_sprite.scale = Vector2.ONE * _frame_scale
 	_sprite.position.y = (standing - drawn) / 2.0
@@ -184,6 +190,29 @@ func take_damage(source: Dictionary) -> Dictionary:
 func refresh_resistance_visual() -> void:
 	pass
 
+## Overrides this enemy's stats with a boss definition, after setup().
+##
+## Applied on top rather than threaded through setup(), so nothing about the
+## ordinary spawn path has to know bosses exist. Everything downstream -
+## movement, targeting, damage, leak - reads the same sim dictionary it always
+## did, which is what keeps a boss from needing a special case anywhere in
+## sim/.
+func make_boss(definition: Dictionary) -> void:
+	if definition.is_empty():
+		return
+	is_boss = true
+	boss_reward = int(definition["reward"])
+	sim["health"] = float(definition["health"])
+	sim["max_health"] = float(definition["health"])
+	sim["speed"] = float(definition["speed"])
+	sim["armor"] = int(definition["armor"])
+	sim["shield"] = int(definition["shield"])
+	# Display only. sprite_px and every placement rule are untouched; this is
+	# the same separation Tower.DISPLAY_SCALE keeps from the placement radius.
+	_boss_display_scale = float(definition["display_scale"])
+	apply_sprite_height()
+	_update_health_bar()
+
 func to_candidate() -> Dictionary:
 	return {
 		"id": sim["id"], "position": position, "health": sim["health"],
@@ -202,8 +231,10 @@ func _die(source: Dictionary) -> void:
 	sim["alive"] = false
 	# Emitted before the presentation, unchanged across three rewrites of what
 	# a death looks like: economy timing must not move because the art did.
+	# A boss pays its own bounty, not its kind's.
+	var base_reward := boss_reward if is_boss else int(Enemies.DEFS[kind]["reward"])
 	died.emit(EconomySim.kill_reward(
-		int(Enemies.DEFS[kind]["reward"]), source,
+		base_reward, source,
 		float(Waves.get_modifiers(_wave)["gold_modifier"])), kind)
 	_health_bar.visible = false
 	# Every enemy the test harness builds is outside the scene tree (see the

@@ -55,8 +55,14 @@ const AUDIO_MANAGER_SCRIPT := "res://audio/audio_manager.gd"
 # Sounds that exist in assets/audio/ but belong to phases after the core
 # slice - see task-22-amendments.md #1 and #6. Pinned here so a later phase
 # adding one of these to SOUNDS has to do it deliberately, not by accident.
+## Sounds whose feature has not landed yet. A name in SOUNDS with nothing
+## firing it is dead weight; a name NOT in SOUNDS is never loaded, so the day
+## the feature arrives play() is a silent no-op.
+##
+## `boss` graduated off this list when bosses landed - it had been in
+## assets/audio since the core slice, unregistered and therefore never loaded.
 const _DEFERRED_SOUNDS: Array[StringName] = [
-	&"boss", &"insignia", &"lieutenant", &"power", &"upgrade",
+	&"insignia", &"lieutenant", &"power", &"upgrade",
 ]
 
 func _manager_script() -> GDScript:

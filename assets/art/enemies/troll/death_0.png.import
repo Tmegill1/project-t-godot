@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://6mci55twmcyi"
-path="res://.godot/imported/walk_1.png-3d2e9c0928edf7b6539dc877abb578dc.ctex"
+uid="uid://c2i4s51osrtg3"
+path="res://.godot/imported/death_0.png-d55f0248cb09ff1d3cbaf99d6236e574.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/art/enemies/_unused/troll/walk_1.png"
-dest_files=["res://.godot/imported/walk_1.png-3d2e9c0928edf7b6539dc877abb578dc.ctex"]
+source_file="res://assets/art/enemies/troll/death_0.png"
+dest_files=["res://.godot/imported/death_0.png-d55f0248cb09ff1d3cbaf99d6236e574.ctex"]
 
 [params]
 

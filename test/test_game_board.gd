@@ -1469,3 +1469,80 @@ func _spawn_enemy_at(board: GameBoard, kind: StringName, at: Vector2) -> Enemy:
 	e.setup(kind, PackedVector2Array([at, at + Vector2(1, 0)]), 1)
 	e.position = at
 	return e
+
+# --------------------------------------------------------------------------
+# The board spawns bosses (spec 2026-08-25 section 6)
+# --------------------------------------------------------------------------
+#
+# The harness has its own boss coverage. This is the board half - the fourth
+# time in this slice a rule needed wiring into two runners, and the three
+# before it all shipped green with only one side done.
+
+func test_the_board_spawns_a_boss_on_wave_ten() -> bool:
+	var board := _ready_board()
+	board.set_wave_for_test(9)
+	board.start_next_wave()
+	# Long enough for the whole schedule, boss included, to have been issued.
+	for i in 2000:
+		board._physics_process(0.05)
+	var bosses := 0
+	for child in board._enemies_root.get_children():
+		if child is Enemy and child.is_boss:
+			bosses += 1
+	assert_eq(board.get_wave(), 10, "precondition: on wave 10")
+	assert_eq(bosses + _bosses_already_dead(board, 10), 1,
+		"exactly one boss was issued")
+	board.free()
+	return true
+
+## The boss may already have leaked by the time the schedule finishes, so
+## count what the schedule promised rather than only what is still standing.
+func _bosses_already_dead(board: GameBoard, wave: int) -> int:
+	var still_alive := 0
+	for child in board._enemies_root.get_children():
+		if child is Enemy and child.is_boss:
+			still_alive += 1
+	return (1 if Bosses.has_boss(wave) else 0) - still_alive
+
+func test_a_boss_carries_its_own_numbers_not_its_kinds() -> bool:
+	var e: Enemy = load("res://game/enemy.tscn").instantiate()
+	e.notification(Node.NOTIFICATION_READY)
+	e.setup(&"troll", PackedVector2Array([Vector2.ZERO, Vector2(1, 0)]), 20)
+	var definition := Bosses.on_wave(20)
+	e.make_boss(definition)
+	assert_true(e.is_boss, "flagged as a boss")
+	assert_eq(float(e.sim["health"]), float(definition["health"]), "its own health")
+	assert_eq(float(e.sim["speed"]), float(definition["speed"]), "its own speed")
+	assert_eq(int(e.sim["armor"]), int(definition["armor"]), "its own armour")
+	assert_eq(e.boss_reward, int(definition["reward"]), "and its own bounty")
+	e.free()
+	return true
+
+# make_boss lands its RULES state before it touches the sprite, matching
+# Tower.setup and Enemy.setup. A board-instantiated node aborts at the first
+# unresolved @onready in this harness, and a boss whose health never landed
+# would be an ordinary troll wearing a boss's name.
+func test_make_boss_lands_its_stats_even_when_the_sprite_half_aborts() -> bool:
+	var e: Enemy = load("res://game/enemy.tscn").instantiate()
+	# Deliberately NOT notified, so @onready fields stay unresolved.
+	e.setup(&"troll", PackedVector2Array([Vector2.ZERO, Vector2(1, 0)]), 20)
+	e.make_boss(Bosses.on_wave(20))
+	assert_true(e.is_boss, "the flag landed")
+	assert_eq(float(e.sim["health"]), float(Bosses.on_wave(20)["health"]),
+		"and so did the health, before the sprite work could abort")
+	e.free()
+	return true
+
+func test_a_boss_pays_its_own_bounty() -> bool:
+	var e: Enemy = load("res://game/enemy.tscn").instantiate()
+	e.notification(Node.NOTIFICATION_READY)
+	e.setup(&"troll", PackedVector2Array([Vector2.ZERO, Vector2(1, 0)]), 20)
+	e.make_boss(Bosses.on_wave(20))
+	var paid := []
+	e.died.connect(func(reward, _kind): paid.append(reward))
+	e.take_damage({"damage": 99999.0, "pierce": 999})
+	assert_eq(paid.size(), 1, "it died")
+	assert_true(int(paid[0]) > int(Enemies.DEFS[&"troll"]["reward"]) / 2,
+		"and paid a bounty in the boss's league, not a rank-and-file reward")
+	e.free()
+	return true

@@ -15,7 +15,11 @@ const SOUNDS := [
 	&"place", &"sell", &"denied", &"ui-click", &"wave-start", &"wave-clear",
 	&"leak", &"victory", &"defeat", &"fire-basic", &"fire-fast",
 	&"fire-mortar", &"fire-long", &"death-goblin", &"death-ogre",
-	&"death-bat", &"death-shaman", &"explosion",
+	&"death-bat", &"death-shaman", &"death-troll",
+	# boss.ogg has been in assets/audio since the core slice and was never in
+	# this list, so the manager never loaded it and play(&"boss") was a silent
+	# no-op. Registered now that something fires it.
+	&"boss", &"explosion",
 ]
 
 const POOL_SIZE := 12

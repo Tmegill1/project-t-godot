@@ -167,9 +167,11 @@ static func run_wave(config: Dictionary) -> Dictionary:
 				if r["lethal"]:
 					e["alive"] = false
 					kills += 1
+					# A boss pays its own bounty, not its kind's.
+					var base_reward: int = int(e["reward_override"]) if e.get("boss", false) \
+						else int(Enemies.DEFS[e["kind"]]["reward"])
 					gold_earned += EconomySim.kill_reward(
-						int(Enemies.DEFS[e["kind"]]["reward"]), source,
-						float(modifiers["gold_modifier"]))
+						base_reward, source, float(modifiers["gold_modifier"]))
 
 		enemies = enemies.filter(func(e): return e["alive"])
 

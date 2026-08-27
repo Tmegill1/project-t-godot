@@ -14,10 +14,17 @@ func _path() -> PackedVector2Array:
 	return PathFinder.get_path_from_spawn_to_goal(
 		DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED)))
 
+## Every spawn a wave issues, INCLUDING its boss.
+##
+## get_composition covers the rank and file only - the boss is appended to the
+## schedule rather than to the composition, so counting composition alone
+## makes "every enemy is accounted for" fail by exactly one on waves 10 and 20.
 func _total_spawn_count(wave: int) -> int:
 	var total := 0
 	for entry in Waves.get_composition(wave):
 		total += int(entry["count"])
+	if Bosses.has_boss(wave):
+		total += 1
 	return total
 
 # --------------------------------------------------------------------------
@@ -246,8 +253,8 @@ func test_splash_radius_boundary_at_wave_ten() -> bool:
 	var towers := [{"kind": &"mortar", "position": Grid.tile_to_world_center(5, 3)}]
 	var r := Harness.run_wave({"wave": 10, "towers": towers, "path": _path()})
 	assert_eq(r["kills"], 0, "exact: a single mortar cannot break wave 10 once armour applies")
-	assert_eq(r["leaks"], 76, "exact: three fewer leaks than the < mutant")
-	assert_eq(r["lives_lost"], 296, "exact: lives lost at this exact leak count")
+	assert_eq(r["leaks"], 77, "exact: three fewer leaks than the < mutant")
+	assert_eq(r["lives_lost"], 300, "exact: lives lost at this exact leak count")
 	# 108, not the 120 this paid before the wave gold modifier landed. Wave 10
 	# pays at 0.875, and kill_reward rounds PER KILL rather than on the total,
 	# so this is not simply 120 * 0.875 (which would be 105) - it is the sum of
@@ -391,7 +398,7 @@ func test_wave_twenty_undefended_completes_at_the_default_tick_size() -> bool:
 	# is still the fastest thing in the game, so this number is the direct
 	# regression witness for the Critical: a revert to the un-clamped step
 	# turns it back into DEFAULT_MAX_TICKS.
-	assert_eq(r["ticks"], 3397, "wave 20 undefended takes exactly this many ticks")
+	assert_eq(r["ticks"], 4941, "wave 20 undefended takes exactly this many ticks")
 	# Derived, not hardcoded: "every enemy walks off the end" is the claim, and
 	# a literal restates the roster's size instead - so it fails whenever a kind
 	# is legitimately added, teaching the reader to bump the number.
@@ -495,8 +502,8 @@ func test_a_slowing_tower_makes_a_wave_take_longer() -> bool:
 	# in the same spirit as the undefended wave-1 pin above. "Longer" alone
 	# cannot catch a slow that never EXPIRES - that direction is also longer.
 	# An exact count can: drop the per-tick Slow.tick and this number moves.
-	assert_eq(slowed["ticks"], 3491, "wave 20 against one Deep Freeze fast tower takes exactly this long")
-	assert_eq(plain["ticks"], 3397, "and the same build without the slow takes exactly this long")
+	assert_eq(slowed["ticks"], 5136, "wave 20 against one Deep Freeze fast tower takes exactly this long")
+	assert_eq(plain["ticks"], 4941, "and the same build without the slow takes exactly this long")
 	return true
 
 # The termination guard from the soft-lock fix, re-run with slowing in play.
@@ -653,7 +660,7 @@ func test_shields_are_spent_in_the_harness_rather_than_absorbing_forever() -> bo
 	# shield is immortal, because the unshielded goblins and ogres still die -
 	# measured directly, dropping the write-back takes this from 41 to 15.
 	assert_eq(r["kills"], 33, "exact: shields are spent, so shielded enemies die too")
-	assert_eq(r["leaks"], 43, "exact: and this many still get through")
+	assert_eq(r["leaks"], 44, "exact: and this many still get through")
 	return true
 
 # The damage type must reach the fight, in BOTH runners.
@@ -675,7 +682,7 @@ func test_the_damage_type_reaches_the_harness() -> bool:
 	# source, this same maxed Magic tower falls back to physical and takes
 	# these numbers from 7/69 to 3/73 against wave 10's shielded bats.
 	assert_eq(r["kills"], 7, "exact: the Magic tower fires as magic against shields")
-	assert_eq(r["leaks"], 69, "exact: and this many still get through")
+	assert_eq(r["leaks"], 70, "exact: and this many still get through")
 	return true
 
 

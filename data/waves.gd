@@ -68,6 +68,13 @@ const BAT_START_DELAY_MS := 5000.0
 const OGRE_DELAY_AFTER_LAST_GOBLIN_MS := 3000.0
 const OGRE_MAX_START_DELAY_MS := 10000.0
 
+## How long after the last ordinary spawn the boss walks in.
+##
+## After, not among: a boss arriving beside the first goblin is a boss nobody
+## sees coming, and it would be fought with a board the player has not been
+## paid for yet.
+const BOSS_DELAY_MS := 4000.0
+
 ## Enemy counts for a wave, accumulated from wave 1. Returns fresh
 ## dictionaries on every call so a caller cannot corrupt later waves.
 static func get_composition(wave_number: int) -> Array[Dictionary]:
@@ -159,5 +166,17 @@ static func build_schedule(wave: int) -> Array:
 
 	for entry in schedule:
 		entry.erase("_push_index")
+
+	# The boss is appended after the sort, so it lands last however the
+	# ordinary columns happen to order themselves.
+	if Bosses.has_boss(wave):
+		var last_at := 0.0
+		for entry in schedule:
+			last_at = maxf(last_at, float(entry["at_ms"]))
+		schedule.append({
+			"kind": Bosses.on_wave(wave)["kind"],
+			"at_ms": last_at + BOSS_DELAY_MS,
+			"boss": true,
+		})
 
 	return schedule

@@ -273,7 +273,8 @@ func _physics_process(delta: float) -> void:
 			var queue: Array = _spawn_queues[path_index]
 			var issued: int = _spawned_per_path[path_index]
 			while issued < queue.size() and queue[issued]["at_ms"] <= _wave_clock:
-				_spawn(queue[issued]["kind"], path_index)
+				_spawn(queue[issued]["kind"], path_index,
+					queue[issued].get("boss", false))
 				issued += 1
 			_spawned_per_path[path_index] = issued
 
@@ -330,12 +331,18 @@ func _apply_shaman_aura() -> void:
 				int(child.sim.get("shield", 0)) + 1, Aura.MAX_GRANTED_CHARGES)
 			child.refresh_resistance_visual()
 
-func _spawn(kind: StringName, path_index: int) -> void:
+func _spawn(kind: StringName, path_index: int, is_boss: bool = false) -> void:
 	if _paths.is_empty():
 		return
 	var enemy: Enemy = ENEMY_SCENE.instantiate()
 	_enemies_root.add_child(enemy)
 	enemy.setup(kind, _paths[mini(path_index, _paths.size() - 1)], _wave, _spawn_rng)
+	# A boss is an ordinary enemy with different numbers - the same node, the
+	# same rules downstream, only its stats overridden. The harness does
+	# exactly this too.
+	if is_boss:
+		enemy.make_boss(Bosses.on_wave(_wave))
+		_play_sound(&"boss")
 	enemy.died.connect(_on_enemy_died)
 	enemy.leaked.connect(_on_enemy_leaked)
 

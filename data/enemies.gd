@@ -76,6 +76,15 @@ const DEFS := {
 		"stride_px": 36.0, "flip_horizontally": false,
 		"armor": 0, "shield": 1,
 	},
+	# BOSS ONLY - deliberately absent from KINDS, which is what wave
+	# composition iterates. Its per-spawn numbers come from data/bosses.gd;
+	# what lives here is the art and the animation the renderer needs.
+	&"troll": {
+		"label": "Troll", "base_speed": 45.0, "base_health": 220, "reward": 150,
+		"life_loss": 5, "walk_frames": 8, "death_frames": 4, "sprite_px": 62.0,
+		"stride_px": 50.0, "flip_horizontally": false,
+		"armor": 6, "shield": 0,
+	},
 	&"bat": {
 		"label": "Bat", "base_speed": 150.0, "base_health": 3, "reward": 10,
 		"life_loss": 2, "walk_frames": 7, "death_frames": 4, "sprite_px": 28.0,

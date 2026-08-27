@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://vhdvkxfmnhyo"
-path="res://.godot/imported/walk_7.png-92c6b6dea5769a0267ec546e623e742c.ctex"
+uid="uid://c0w0l0r25fd33"
+path="res://.godot/imported/boss-wave10.png-b0b90bd22c3db0aeaa4b0de2544aeb98.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/art/enemies/_unused/troll/walk_7.png"
-dest_files=["res://.godot/imported/walk_7.png-92c6b6dea5769a0267ec546e623e742c.ctex"]
+source_file="res://docs/screenshots/boss-wave10.png"
+dest_files=["res://.godot/imported/boss-wave10.png-b0b90bd22c3db0aeaa4b0de2544aeb98.ctex"]
 
 [params]
 
@@ -23,7 +23,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=true
+mipmaps/generate=false
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""
