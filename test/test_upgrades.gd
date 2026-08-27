@@ -372,7 +372,11 @@ func test_resolve_never_lowers_splash_below_the_towers_base() -> bool:
 func test_resolve_adds_pierce_bonuses() -> bool:
 	# long/burst tier 3 grants 5, tier 4 grants 10 more.
 	var s := UpgradesSim.resolve_tower_stats(&"long", _tiers(0, 4))
-	assert_eq(s["pierce"], int(Towers.DEFS[&"long"]["pierce"]) + 15, "pierce bonuses add")
+	# Bought pierce (5 + 10) plus the level term for the four tiers that bought
+	# it. Written as a sum rather than a total so the two sources stay legible.
+	assert_eq(s["pierce"],
+		int(Towers.DEFS[&"long"]["pierce"]) + 15 + 4 * UpgradesSim.PIERCE_PER_TIER,
+		"pierce bonuses add, on top of what levelling grants")
 	return true
 
 func test_resolve_turns_detection_on_and_never_off() -> bool:
@@ -421,4 +425,64 @@ func test_resolve_does_not_mutate_the_tower_def() -> bool:
 	UpgradesSim.resolve_tower_stats(&"basic", _tiers(0, 4))
 	assert_almost_eq(float(Towers.DEFS[&"basic"]["damage"]), before, 0.0001,
 		"the shared tower table is untouched")
+	return true
+
+# --------------------------------------------------------------------------
+# Penetration scales with tower level (spec 2026-08-25 section 3.2)
+# --------------------------------------------------------------------------
+#
+# The owner's rule: levelling a tower makes it better at getting THROUGH, not
+# only at hitting harder. It is the second guarantee (with the damage floor)
+# that no tower is ever walled by late-game armour.
+
+func test_an_unupgraded_tower_has_no_bought_penetration() -> bool:
+	var s := UpgradesSim.resolve_tower_stats(&"fast", UpgradesSim.empty_tiers())
+	assert_eq(int(s["pierce"]), int(Towers.DEFS[&"fast"]["pierce"]),
+		"level one carries only its table value")
+	return true
+
+func test_penetration_grows_with_total_tiers_bought() -> bool:
+	var one := UpgradesSim.resolve_tower_stats(&"fast", {&"sustained": 1, &"burst": 0})
+	var many := UpgradesSim.resolve_tower_stats(&"fast", {&"sustained": 4, &"burst": 2})
+	assert_true(int(many["pierce"]) > int(one["pierce"]),
+		"a maxed tower gets through more than a barely-upgraded one")
+	return true
+
+# The case the rule exists for: neither Magic branch mentions pierce, and it
+# must still end up able to hurt an armoured target.
+func test_a_maxed_magic_tower_carries_penetration_it_never_bought() -> bool:
+	var s := UpgradesSim.resolve_tower_stats(&"fast", {&"sustained": 4, &"burst": 2})
+	assert_true(int(s["pierce"]) > 0,
+		"neither Magic branch mentions pierce, but levelling still grants it")
+	return true
+
+# Long Range must stay the specialist rather than being levelled down to
+# everyone else: its explicit tiers stack ON TOP of the scaling term.
+func test_the_pierce_tiers_stack_on_top_of_the_level_term() -> bool:
+	var specialist := UpgradesSim.resolve_tower_stats(&"long", {&"burst": 4, &"sustained": 2})
+	var generalist := UpgradesSim.resolve_tower_stats(&"fast", {&"sustained": 4, &"burst": 2})
+	assert_true(int(specialist["pierce"]) > int(generalist["pierce"]),
+		"same tier count, but Long Range bought pierce as well")
+	return true
+
+func test_penetration_counts_both_branches_equally() -> bool:
+	var lopsided := UpgradesSim.resolve_tower_stats(&"basic", {&"sustained": 4, &"burst": 0})
+	var spread := UpgradesSim.resolve_tower_stats(&"basic", {&"sustained": 2, &"burst": 2})
+	assert_eq(int(lopsided["pierce"]), int(spread["pierce"]),
+		"four tiers is four tiers, however they were spent")
+	return true
+
+# The point of it all: a maxed Magic tower must actually get through the
+# armour a late ogre carries, rather than relying on the floor alone.
+func test_a_maxed_magic_tower_beats_a_late_ogres_armour_by_more_than_the_floor() -> bool:
+	var s := UpgradesSim.resolve_tower_stats(&"fast", {&"sustained": 4, &"burst": 2})
+	var ogre_armor := int(Enemies.resistance_for(&"ogre", 20)["armor"])
+	var target := {"health": 500.0, "armor": ogre_armor, "shield": 0, "alive": true}
+	var with_pierce := Damage.resolve({
+		"damage": float(s["damage"]), "pierce": int(s["pierce"]),
+		"damage_type": &"magic"}, target)
+	var without := Damage.resolve({
+		"damage": float(s["damage"]), "pierce": 0, "damage_type": &"magic"}, target)
+	assert_true(with_pierce["damage_dealt"] > without["damage_dealt"],
+		"the penetration it levelled into is doing real work against wave 20 armour")
 	return true

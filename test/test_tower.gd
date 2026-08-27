@@ -569,7 +569,8 @@ func test_tick_carries_the_upgraded_pierce() -> bool:
 	t.wants_to_fire.connect(func(_tn, src, _sp): captured["source"] = src)
 	t.tick(16.0, [_candidate(1, t.position + Vector2(10, 0), {"node": target_node})])
 
-	assert_eq(captured["source"]["pierce"], 5, "pierce comes from the resolved stats, not the table's zero")
+	assert_eq(captured["source"]["pierce"], 5 + 3 * UpgradesSim.PIERCE_PER_TIER,
+		"the bought tier adds 5, and three tiers of levelling add on top")
 	t.free()
 	target_node.free()
 	return true

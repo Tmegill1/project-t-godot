@@ -14,6 +14,25 @@ const MAX_TIER := 4
 ## Highest tier the *other* branch may sit at while one branch goes deep.
 const CROSS_PATH_CAP := 2
 
+## Penetration every tower gains per tier bought, in either branch.
+##
+## Owner's rule: levelling a tower should make it better at getting THROUGH,
+## not only at hitting harder. With the damage floor in sim/damage.gd it is
+## the second guarantee that no tower is ever walled by late-game armour - the
+## Magic tower is the case it exists for, since neither of its branches
+## mentions pierce and it would otherwise rely on the floor alone.
+##
+## The explicit pierce_bonus tiers stack ON TOP of this, so Long Range stays
+## the pierce specialist rather than being levelled down to everyone else.
+## 2, not 1. Measured: at 1, a fully-committed Magic tower reaches 6 pierce
+## against a wave-20 ogre's effective 14.4 (9 armour x ARMOR_VS_MAGIC), so the
+## damage floor was doing all the work and the penetration was decorative -
+## the "not walled, but not a choice either" outcome the spec warns about. At
+## 2 it reaches 12, which clears the floor and makes levelling genuinely buy
+## its way through. Long Range still ends far ahead, because its explicit
+## pierce tiers add 15 on top.
+const PIERCE_PER_TIER := 2
+
 static func empty_tiers() -> Dictionary:
 	return {&"sustained": 0, &"burst": 0}
 
@@ -55,6 +74,15 @@ static func upgrade_cost(kind: StringName, branch: StringName, current_tier: int
 	return int(Upgrades.DEFS[kind][branch]["tiers"][current_tier]["cost"])
 
 ## Total gold sunk into a tower's upgrades, for sell-value calculations.
+## Tiers bought across BOTH branches. Distinct from total_invested, which
+## sums their gold cost - this counts the steps, because penetration is a
+## reward for commitment rather than for spending.
+static func total_tiers(tiers: Dictionary) -> int:
+	var total := 0
+	for branch in Upgrades.BRANCHES:
+		total += int(tiers.get(branch, 0))
+	return total
+
 static func total_invested(kind: StringName, tiers: Dictionary) -> int:
 	var total := 0
 	for branch in Upgrades.BRANCHES:
@@ -95,7 +123,9 @@ static func resolve_tower_stats(kind: StringName, tiers: Dictionary) -> Dictiona
 		"damage": float(base["damage"]),
 		"fire_rate": float(base["fire_rate"]),
 		"range": float(base["range"]),
-		"pierce": int(base["pierce"]),
+		# Every tier bought grants penetration, in either branch. The explicit
+		# pierce_bonus tiers below add to this rather than replacing it.
+		"pierce": int(base["pierce"]) + total_tiers(tiers) * PIERCE_PER_TIER,
 		"splash_radius": float(base["base_splash_radius"]),
 		"detection": bool(base["detection"]),
 		"slow_factor": 1.0,
