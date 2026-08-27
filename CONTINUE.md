@@ -3,12 +3,11 @@
 **Point an assistant at this file and say "continue this project."** It contains
 everything needed to resume with no prior conversation.
 
-Last updated: 2026-08-24 · Branch `feat/slice-0-economy-and-maps` · **core
-slice, tower upgrades, free placement and both art swaps are all merged to
-`master`. Slice 0 — the wave economy, the measured gold curve, visible tower
-limits, and The Fork and The Coils — is implemented on this branch, all
-fifteen tasks done, suite green at 9495 checks across 39 files, and not yet
-merged.**
+Last updated: 2026-08-26 · Branch `feat/slice-1-roster-resistance-bosses` ·
+**everything through slice 0 is merged and deployed. Slice 1 — the roster,
+armour and shields, damage types, the shaman aura, bosses and the measured
+health curve — is implemented on this branch, suite green at 10148 checks
+across 41 files, and not yet merged.**
 
 > **Slice 0's spec and plan are
 > [`docs/superpowers/specs/2026-08-24-slice-0-design.md`](docs/superpowers/specs/2026-08-24-slice-0-design.md)
@@ -91,8 +90,13 @@ win or lose → retry or menu, with sound.
 | `audio/` — pooled playback, 17 core-slice events | ✅ complete |
 | Web export | ✅ preset + build; **boots and renders in a browser; not yet played in one** |
 | Deploy | ✅ live at **https://tmegill1.github.io/project-t-godot/** — every push to `master` republishes, at the address GitHub assigns (no custom domain) |
-| Tests | ✅ 9495 checks across 39 files, exit 0 |
-| Maps | ✅ three — The Pass (forest), The Fork (ice, **two entrances**), The Coils (desert) |
+| Tests | ✅ 10148 checks across 41 files, exit 0 |
+| Enemies | ✅ five — goblin, bat, shaman, ogre (rank and file) and troll (**boss only**) |
+| Resistance | ✅ armour on ogres/trolls, shields on bats/shamans, both scaling by wave |
+| Damage types | ✅ physical and magic, with soft edges and a damage floor |
+| Bosses | ✅ waves 10 and 20, table-driven in `data/bosses.gd` |
+| Health curve | ✅ measured, not ported — see §9.2 |
+| Maps | ✅ three — The Pass (forest), The Fork (ice, **two entrances**), The Coils (desert), chained by `next` on victory |
 | Wave economy | ✅ clear bonus, speed bonus, interest, 20s prep timer, call-early |
 | Gold curve | ✅ measured, not guessed — see §9.2 |
 | Tower upgrades | ✅ **all 11 tasks done** — rules, tower, board, harness, inspector, verified in the running game. See §4 |
@@ -415,6 +419,38 @@ read in a doc.
   test aborts the method and trips the crash sentinel rather than failing
   cleanly. Trusting the code remains the right instinct; that is how this was
   caught.
+- **Enemy kind keys name what the ART DRAWS.** They used to say slime and bee
+  while the sprites drew a goblin and a bat. The key picks the sprite
+  directory, the death sound and the join to wave composition, so renaming one
+  means moving art, renaming audio and updating `AudioManager.SOUNDS`
+  together. **`troll` is deliberately absent from `Enemies.KINDS`** - it is
+  boss-only, and KINDS is what wave composition iterates.
+- **Resistance is split by COUNTER, not sprinkled.** Armour is flat reduction
+  so it folds to few large hits; shields absorb most of a hit so they fold to
+  many cheap ones. Ogres and trolls carry armour, bats and shamans carry
+  shields, and **the goblin carries neither on purpose** - it is the control
+  every other kind is read against. Scaling never GRANTS what a kind lacks: a
+  0 in the table stays 0 forever.
+- **Damage has a TYPE, and the edges are soft.** Physical is strong against
+  armour and reduced against shields; magic is the inverse. Under both sits
+  `Damage.MIN_DAMAGE_FRACTION`, a floor expressed as a fraction of the incoming
+  hit - a flat floor would make a 4-damage tower and an 80-damage tower equally
+  good against a wall. **A shield is a reduction, not immunity**: a shield-met
+  hit can be lethal, deliberately, or a 1-health shielded enemy would be
+  unkillable.
+- **Penetration scales with tower level**, not only with the two Long Range
+  tiers that name it. Its rate and `ARMOR_PER_WAVE` are a PAIR and were tuned
+  together - at 2 per tier, six tiers erased armour outright for every physical
+  tower. Change one and re-measure the other.
+- **A boss is an ordinary enemy with different numbers.** It uses the same
+  movement, targeting, damage and leak rules; `Enemy.make_boss` overrides stats
+  on top of `setup()`, rules state first, so the ordinary spawn path never has
+  to know bosses exist. The boss is appended to the **schedule**, not the
+  composition - anything counting spawns must add it separately.
+- **The shaman aura is a shared rule.** `sim/aura.gd` reports which ids gain a
+  charge and applies nothing; the board and the harness both call it, and the
+  harness calls it before its fire block so a charge granted this tick can
+  absorb this tick's shot.
 - **The full wave composition runs down EVERY spawn path**, not divided between
   them — ported from the reference, which computes
   `totalEnemies * enemyPaths.length`. A two-entrance map therefore fields twice
@@ -486,7 +522,7 @@ the player runs, not only in the thing the tests run.
    one of sandstone would read better and make each map feel authored, but
    triple the endpoint art and add two assets per future biome. **Decide
    whether that's worth it** when maps 2 and 3 are actually built.
-2. **The balance is unplaytested, with one measured exception.** The
+2. **The balance is unplaytested, with three measured exceptions.** The
    original's own handoff notes say every number is a placeholder, and
    "Matches Phaser" will not mean "plays well." The exception is the **gold
    curve**: `Waves.GOLD_PER_WAVE` was swept against the most a player could
@@ -495,7 +531,15 @@ the player runs, not only in the thing the tests run.
    had to touch it — the wave economy adds ~3,555 gold against no new sink,
    which would have turned a 1,185 deficit into a 2,370 surplus. See
    `docs/superpowers/specs/2026-08-24-slice-0-design.md` §4.6 for the full
-   measurement and the sweep table. Everything else still wants the harness.
+   measurement and the sweep table.
+
+   Slice 1 added two more: **`Waves.HEALTH_PER_WAVE`** and the
+   **`ARMOR_PER_WAVE` / `PIERCE_PER_TIER` pair**. The decisive finding there is
+   worth knowing before touching any of it - *health scaling alone cannot
+   threaten a maxed board at any rate*, because the binding constraint is board
+   COVERAGE rather than hit points. At the shipped values, eight maxed towers
+   lose wave 20 and twelve hold it, against a budget of sixteen. Everything
+   else still wants the harness.
 3. **Volume and mute do not persist between runs.** The HUD's two audio
    controls drive `AudioManager` directly and nothing writes them to disk, so
    a player who mutes the game gets sound back next launch. Deliberately not

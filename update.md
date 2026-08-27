@@ -4,7 +4,7 @@
 not yet built, and what is still open. `CONTINUE.md` records what *is*; this
 records what *should be*.
 
-Last updated: 2026-08-25.
+Last updated: 2026-08-26.
 
 ---
 
@@ -14,7 +14,7 @@ Last updated: 2026-08-25.
 |---|---|
 | Core slice, tower upgrades, free placement, two art swaps | ✅ merged |
 | **Slice 0** — wave economy, measured gold curve, visible limits, maps 2 and 3 | ✅ merged and **deployed** |
-| **Slice 1** — roster, resistance, bosses | 📋 spec + plan written, Task 1 starting |
+| **Slice 1** — roster, resistance, bosses | ✅ all ten tasks done, on `feat/slice-1-roster-resistance-bosses`, **not merged** |
 | Slice 2 — tactical powers | ⬜ decided, not designed |
 | Slice 3 — versioned save + meta-progression | ⬜ decided, not designed |
 | Slice 4 — hero | ⬜ decided, not designed |
@@ -24,7 +24,27 @@ republishes it.
 
 ---
 
-## Slice 1 — roster, resistance and bosses *(in progress)*
+## Slice 1 — roster, resistance and bosses *(done, unmerged)*
+
+**Shipped:** the roster renamed to its art and the shaman and troll brought off
+the bench; armour and shields split by counter; physical/magic damage types
+with soft edges and a damage floor; penetration scaling with tower level; the
+shaman's shield aura; bosses on waves 10 and 20; resistance visible as a sprite
+tint; and a measured health curve. Suite green at **10,148 checks across 41
+files**.
+
+**What the measurement pass found, and it reframes the whole problem:**
+*health scaling alone cannot threaten a maxed board at any rate.* Even at
+wave-20 health ×11.5, a maxed sixteen-tower board leaks zero. The binding
+constraint is board **coverage**, not hit points. At the shipped values eight
+maxed towers lose wave 20 and twelve hold it, against a budget of sixteen — and
+slice 0's gold curve lets a good player land right in that band.
+
+**A correction worth carrying:** `PIERCE_PER_TIER` and `ARMOR_PER_WAVE` are a
+pair. Raised to 2 to help the Magic tower, penetration erased armour outright
+for every *physical* tower — a maxed Basic hit an armoured ogre exactly as hard
+as an unarmoured goblin. Change one, re-measure the other.
+
 
 **Spec:** [`docs/superpowers/specs/2026-08-25-roster-resistance-and-bosses-design.md`](docs/superpowers/specs/2026-08-25-roster-resistance-and-bosses-design.md)
 **Plan:** [`docs/superpowers/plans/2026-08-25-roster-resistance-and-bosses.md`](docs/superpowers/plans/2026-08-25-roster-resistance-and-bosses.md)
