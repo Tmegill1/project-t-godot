@@ -1,5 +1,11 @@
 extends TestCase
 
+# Parity with the Phaser reference, EXCEPT the ogre's speed and health, which
+# the owner's ordering rule deliberately moved (60/8 -> 55/10). That is the
+# fifth deliberate divergence this port carries. Everything else here is still
+# reference parity, and the values are taken from the reference rather than
+# read back out of data/enemies.gd, so a wrong table value fails here rather
+# than being silently re-pinned as correct.
 func test_enemy_stats_match_the_phaser_build() -> bool:
 	var goblin: Dictionary = Enemies.DEFS[&"goblin"]
 	assert_eq(goblin["base_speed"], 100.0, "goblin speed")
@@ -8,8 +14,10 @@ func test_enemy_stats_match_the_phaser_build() -> bool:
 	assert_eq(goblin["life_loss"], 1, "goblin leak cost")
 
 	var ogre: Dictionary = Enemies.DEFS[&"ogre"]
-	assert_eq(ogre["base_speed"], 60.0, "ogre speed")
-	assert_eq(ogre["base_health"], 8, "ogre health")
+	# DIVERGENCE: 60.0/8 upstream. The roster now trades health against speed
+	# strictly, and the ogre is the wall at both ends of that trade.
+	assert_eq(ogre["base_speed"], 55.0, "ogre speed, diverged for the ordering rule")
+	assert_eq(ogre["base_health"], 10, "ogre health, diverged for the ordering rule")
 	assert_eq(ogre["reward"], 20, "ogre reward")
 	assert_eq(ogre["life_loss"], 5, "ogre leak cost")
 	assert_eq(ogre["sprite_px"], 58.0, "ogre draws taller than the others")
@@ -29,7 +37,7 @@ func test_scaled_health_floors_and_clamps_to_one() -> bool:
 	return true
 
 func test_scaled_speed_is_unrounded_and_clamps_to_one() -> bool:
-	assert_almost_eq(Enemies.scaled_speed(&"ogre", 1.05), 63.0, 0.001, "unrounded")
+	assert_almost_eq(Enemies.scaled_speed(&"ogre", 1.05), 57.75, 0.001, "unrounded: 55 * 1.05")
 	assert_almost_eq(Enemies.scaled_speed(&"ogre", 0.0), 1.0, 0.001, "never below one")
 	return true
 
@@ -328,4 +336,56 @@ func test_the_shamans_frame_counts_match_its_art() -> bool:
 		walk += 1
 	assert_eq(Enemies.walk_frames(&"shaman"), walk,
 		"the table's walk_frames matches the files on disk")
+	return true
+
+# --------------------------------------------------------------------------
+# The roster's ordering (spec 2026-08-25 section 4.1)
+# --------------------------------------------------------------------------
+#
+# Asserted as a RELATIONSHIP rather than as four numbers, so a rebalance has
+# to keep the shape. The exact values are pinned separately below; if only
+# those existed, a tweak could quietly invert the roster and still pass by
+# being updated to match itself.
+
+func test_health_descends_ogre_shaman_goblin_bat() -> bool:
+	var order: Array[StringName] = [&"ogre", &"shaman", &"goblin", &"bat"]
+	for i in range(order.size() - 1):
+		assert_true(
+			int(Enemies.DEFS[order[i]]["base_health"]) > int(Enemies.DEFS[order[i + 1]]["base_health"]),
+			"%s out-tanks %s" % [order[i], order[i + 1]])
+	return true
+
+func test_speed_is_the_exact_inverse_of_health() -> bool:
+	var order: Array[StringName] = [&"ogre", &"shaman", &"goblin", &"bat"]
+	for i in range(order.size() - 1):
+		assert_true(
+			float(Enemies.DEFS[order[i]]["base_speed"]) < float(Enemies.DEFS[order[i + 1]]["base_speed"]),
+			"%s is slower than %s" % [order[i], order[i + 1]])
+	return true
+
+# The ordering must survive wave scaling too - health and speed modifiers are
+# applied per kind, so a scaled roster could in principle cross over.
+func test_the_ordering_holds_after_wave_scaling() -> bool:
+	var m := Waves.get_modifiers(20)
+	var order: Array[StringName] = [&"ogre", &"shaman", &"goblin", &"bat"]
+	for i in range(order.size() - 1):
+		assert_true(
+			Enemies.scaled_health(order[i], m["health_modifier"])
+				> Enemies.scaled_health(order[i + 1], m["health_modifier"]),
+			"%s still out-tanks %s at wave 20" % [order[i], order[i + 1]])
+		assert_true(
+			Enemies.scaled_speed(order[i], m["speed_modifier"])
+				< Enemies.scaled_speed(order[i + 1], m["speed_modifier"]),
+			"%s is still slower than %s at wave 20" % [order[i], order[i + 1]])
+	return true
+
+func test_the_roster_values() -> bool:
+	assert_eq(int(Enemies.DEFS[&"bat"]["base_health"]), 3, "bat health")
+	assert_eq(int(Enemies.DEFS[&"goblin"]["base_health"]), 5, "goblin health")
+	assert_eq(int(Enemies.DEFS[&"shaman"]["base_health"]), 7, "shaman health")
+	assert_eq(int(Enemies.DEFS[&"ogre"]["base_health"]), 10, "ogre health")
+	assert_eq(float(Enemies.DEFS[&"bat"]["base_speed"]), 150.0, "bat speed")
+	assert_eq(float(Enemies.DEFS[&"goblin"]["base_speed"]), 100.0, "goblin speed")
+	assert_eq(float(Enemies.DEFS[&"shaman"]["base_speed"]), 80.0, "shaman speed")
+	assert_eq(float(Enemies.DEFS[&"ogre"]["base_speed"]), 55.0, "ogre speed")
 	return true

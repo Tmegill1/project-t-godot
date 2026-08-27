@@ -206,9 +206,9 @@ func test_mortar_splash_kills_more_than_its_shot_count_would_alone() -> bool:
 func test_mortar_splash_does_not_overkill_via_self_double_counting() -> bool:
 	var towers := [{"kind": &"mortar", "position": Grid.tile_to_world_center(5, 3)}]
 	var r := Harness.run_wave({"wave": 5, "towers": towers, "path": _path()})
-	assert_eq(r["kills"], 16, "wave 5 exact: this many die to a single mortar")
-	assert_eq(r["leaks"], 10, "wave 5 exact: this many still get through")
-	assert_eq(r["gold_earned"], 115, "wave 5 exact: gold from exactly these kills")
+	assert_eq(r["kills"], 17, "wave 5 exact: this many die to a single mortar")
+	assert_eq(r["leaks"], 9, "wave 5 exact: this many still get through")
+	assert_eq(r["gold_earned"], 135, "wave 5 exact: gold from exactly these kills")
 	return true
 
 # Review follow-up (post-Task-14): `tower["cooldown"] > 0.0` (line ~99) needs
@@ -226,10 +226,10 @@ func test_mortar_splash_does_not_overkill_via_self_double_counting() -> bool:
 func test_cooldown_boundary_at_an_evenly_dividing_tick_size() -> bool:
 	var towers := [{"kind": &"mortar", "position": Grid.tile_to_world_center(5, 3)}]
 	var r := Harness.run_wave({"wave": 5, "towers": towers, "path": _path(), "tick_ms": 40.0})
-	assert_eq(r["kills"], 16, "exact: cooldown==0.0 still fires (> not >=)")
-	assert_eq(r["leaks"], 10, "exact: one fewer leak than the >= mutant")
-	assert_eq(r["lives_lost"], 21, "exact: lives lost at this exact leak count")
-	assert_eq(r["gold_earned"], 115, "exact: gold from exactly these kills")
+	assert_eq(r["kills"], 18, "exact: cooldown==0.0 still fires (> not >=)")
+	assert_eq(r["leaks"], 8, "exact: one fewer leak than the >= mutant")
+	assert_eq(r["lives_lost"], 13, "exact: lives lost at this exact leak count")
+	assert_eq(r["gold_earned"], 155, "exact: gold from exactly these kills")
 	return true
 
 # Review follow-up (post-Task-14): does `e["position"].distance_to(...) <=

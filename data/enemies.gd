@@ -48,6 +48,11 @@ class_name Enemies
 ## keeps the bat's cycle visibly quicker than the goblin's (about 9.4 footfalls
 ## a second against 6.7) while sampling it densely enough per frame to read as
 ## a cycle rather than noise.
+## Health descends ogre > shaman > goblin > bat and speed is its exact
+## inverse, so every creature trades one for the other and no kind is strictly
+## better than another. test_data_tables.gd pins the ORDERING as well as the
+## values - and the ordering after wave scaling too, since the modifiers are
+## applied per kind and a scaled roster could in principle cross over.
 const DEFS := {
 	&"goblin": {
 		"label": "Goblin", "base_speed": 100.0, "base_health": 5, "reward": 5,
@@ -55,7 +60,7 @@ const DEFS := {
 		"stride_px": 30.0, "flip_horizontally": false,
 	},
 	&"ogre": {
-		"label": "Ogre", "base_speed": 60.0, "base_health": 8, "reward": 20,
+		"label": "Ogre", "base_speed": 55.0, "base_health": 10, "reward": 20,
 		"life_loss": 5, "walk_frames": 8, "death_frames": 4, "sprite_px": 58.0,
 		"stride_px": 46.0, "flip_horizontally": false,
 	},
