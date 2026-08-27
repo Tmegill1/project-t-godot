@@ -282,6 +282,8 @@ func _physics_process(delta: float) -> void:
 		if enemy is Enemy and enemy.sim["alive"] and not enemy.sim["dying"]:
 			candidates.append(enemy.to_candidate())
 
+	_apply_shaman_aura()
+
 	for tower in _towers_root.get_children():
 		if tower is Tower:
 			tower.tick(delta_ms, candidates)
@@ -297,6 +299,36 @@ func _all_spawns_issued() -> bool:
 		if int(_spawned_per_path[i]) < (_spawn_queues[i] as Array).size():
 			return false
 	return true
+
+## Tops up shield charges around any shaman on the board.
+##
+## The rule is sim/aura.gd and the harness runs the identical call, so a wave
+## simulated headlessly and the same wave played out resolve the same way. The
+## board's job here is only to gather the two lists and apply the answer.
+func _apply_shaman_aura() -> void:
+	var shamans: Array = []
+	var living: Array = []
+	for child in _enemies_root.get_children():
+		if not child is Enemy:
+			continue
+		if not child.sim["alive"] or child.sim["dying"]:
+			continue
+		living.append({
+			"id": child.sim["id"], "position": child.position,
+			"kind": child.kind, "shield": int(child.sim.get("shield", 0)),
+			"alive": true, "dying": false,
+		})
+		if child.kind == &"shaman":
+			shamans.append(living[living.size() - 1])
+
+	var granted := Aura.grant(shamans, living, _wave_clock)
+	if granted.is_empty():
+		return
+	for child in _enemies_root.get_children():
+		if child is Enemy and granted.has(child.sim["id"]):
+			child.sim["shield"] = mini(
+				int(child.sim.get("shield", 0)) + 1, Aura.MAX_GRANTED_CHARGES)
+			child.refresh_resistance_visual()
 
 func _spawn(kind: StringName, path_index: int) -> void:
 	if _paths.is_empty():

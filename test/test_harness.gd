@@ -247,7 +247,7 @@ func test_splash_radius_boundary_at_wave_ten() -> bool:
 	var r := Harness.run_wave({"wave": 10, "towers": towers, "path": _path()})
 	assert_eq(r["kills"], 0, "exact: a single mortar cannot break wave 10 once armour applies")
 	assert_eq(r["leaks"], 76, "exact: three fewer leaks than the < mutant")
-	assert_eq(r["lives_lost"], 290, "exact: lives lost at this exact leak count")
+	assert_eq(r["lives_lost"], 296, "exact: lives lost at this exact leak count")
 	# 108, not the 120 this paid before the wave gold modifier landed. Wave 10
 	# pays at 0.875, and kill_reward rounds PER KILL rather than on the total,
 	# so this is not simply 120 * 0.875 (which would be 105) - it is the sum of
@@ -652,8 +652,8 @@ func test_shields_are_spent_in_the_harness_rather_than_absorbing_forever() -> bo
 	# EXACT, and the exactness is the point. "kills > 0" passes even when every
 	# shield is immortal, because the unshielded goblins and ogres still die -
 	# measured directly, dropping the write-back takes this from 41 to 15.
-	assert_eq(r["kills"], 41, "exact: shields are spent, so shielded enemies die too")
-	assert_eq(r["leaks"], 35, "exact: and this many still get through")
+	assert_eq(r["kills"], 33, "exact: shields are spent, so shielded enemies die too")
+	assert_eq(r["leaks"], 43, "exact: and this many still get through")
 	return true
 
 # The damage type must reach the fight, in BOTH runners.
@@ -677,3 +677,28 @@ func test_the_damage_type_reaches_the_harness() -> bool:
 	assert_eq(r["kills"], 7, "exact: the Magic tower fires as magic against shields")
 	assert_eq(r["leaks"], 69, "exact: and this many still get through")
 	return true
+
+
+# The aura must reach the HARNESS as well as the board.
+#
+# Third time this project has wired a rule into one runner and not the other:
+# resistance landed on the board only, then the damage type, and both suites
+# stayed green. This is the explicit witness for the aura.
+func test_the_shaman_aura_reaches_the_harness() -> bool:
+	# Wave 10 fields shamans; wave 5 does not. Against the same heavy defence
+	# the shielded escort must cost the towers measurably.
+	var towers: Array = []
+	for col in [3, 5, 7, 9, 11]:
+		towers.append({"kind": &"long", "position": Grid.tile_to_world_center(col, 3)})
+	var r := Harness.run_wave({"wave": 10, "towers": towers, "path": _path()})
+	# EXACT: measured at 33 with the aura running and 41 without it, because
+	# every charge it grants is one more hit the towers have to spend.
+	assert_eq(r["kills"], 33, "the aura's charges cost the defence eight kills")
+	assert_true(_wave_has_shamans(10), "precondition: wave 10 actually fields shamans")
+	return true
+
+func _wave_has_shamans(wave: int) -> bool:
+	for entry in Waves.get_composition(wave):
+		if entry["kind"] == &"shaman":
+			return true
+	return false

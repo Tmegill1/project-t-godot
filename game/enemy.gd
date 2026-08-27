@@ -178,6 +178,12 @@ func take_damage(source: Dictionary) -> Dictionary:
 		_die(source)
 	return result
 
+## Re-applies anything drawn from the enemy's resistance. A no-op until Task 8
+## gives resistance a visual; the call site exists now because the aura is what
+## changes a shield mid-flight, and that is the moment the look has to follow.
+func refresh_resistance_visual() -> void:
+	pass
+
 func to_candidate() -> Dictionary:
 	return {
 		"id": sim["id"], "position": position, "health": sim["health"],

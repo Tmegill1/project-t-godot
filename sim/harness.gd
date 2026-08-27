@@ -113,6 +113,18 @@ static func run_wave(config: Dictionary) -> Dictionary:
 				survivors.append(e)
 		enemies = survivors
 
+		# The shaman aura, BEFORE the fire block - a charge granted this tick is
+		# available to absorb this tick's shot, identically in the live board.
+		var shamans: Array = []
+		for e in enemies:
+			if e["kind"] == &"shaman" and e["alive"] and not e["dying"]:
+				shamans.append(e)
+		for granted_id in Aura.grant(shamans, enemies, elapsed):
+			for e in enemies:
+				if e["id"] == granted_id:
+					e["shield"] = mini(int(e.get("shield", 0)) + 1, Aura.MAX_GRANTED_CHARGES)
+					break
+
 		# Fire.
 		for tower in towers:
 			tower["cooldown"] -= tick_ms

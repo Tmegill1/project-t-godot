@@ -1428,3 +1428,44 @@ func test_every_map_asks_for_room_for_its_own_pixels() -> bool:
 		assert_eq(need.y, px.y, "%s height is the map's own" % name)
 		assert_true(need.x > px.x, "%s leaves room for the panel" % name)
 	return true
+
+# --------------------------------------------------------------------------
+# The board runs the shaman aura (spec 2026-08-25 section 5)
+# --------------------------------------------------------------------------
+#
+# The harness has its own witness for this. The board needs one too: three
+# times now a rule has been wired into one runner and not the other with the
+# suite staying green, and "the board runs it" is exactly the half that a
+# pure-module test cannot see.
+func test_the_board_grants_shield_charges_around_a_shaman() -> bool:
+	var board := _ready_board()
+	board.start_next_wave()
+	var shaman := _spawn_enemy_at(board, &"shaman", Vector2(300, 300))
+	var goblin := _spawn_enemy_at(board, &"goblin", Vector2(320, 300))
+	assert_eq(int(goblin.sim["shield"]), 0, "precondition: goblins carry no shield")
+	# The aura fires on its beat, which _wave_clock reaches on the first tick.
+	board._physics_process(0.0)
+	assert_eq(int(goblin.sim["shield"]), 1, "the escort was shielded")
+	assert_true(int(shaman.sim["shield"]) <= 1,
+		"and the shaman did not top itself up beyond its own table value")
+	board.free()
+	return true
+
+func test_the_board_leaves_a_distant_enemy_unshielded() -> bool:
+	var board := _ready_board()
+	board.start_next_wave()
+	_spawn_enemy_at(board, &"shaman", Vector2(100, 100))
+	var far := _spawn_enemy_at(board, &"goblin", Vector2(100 + Aura.RADIUS + 40.0, 100))
+	board._physics_process(0.0)
+	assert_eq(int(far.sim["shield"]), 0, "out of range, no charge")
+	board.free()
+	return true
+
+## Puts a live enemy of a kind at a position, bypassing the spawn schedule.
+func _spawn_enemy_at(board: GameBoard, kind: StringName, at: Vector2) -> Enemy:
+	var e: Enemy = load("res://game/enemy.tscn").instantiate()
+	e.notification(Node.NOTIFICATION_READY)
+	board._enemies_root.add_child(e)
+	e.setup(kind, PackedVector2Array([at, at + Vector2(1, 0)]), 1)
+	e.position = at
+	return e
