@@ -49,7 +49,7 @@ as an unarmoured goblin. Change one, re-measure the other.
 **Spec:** [`docs/superpowers/specs/2026-08-25-roster-resistance-and-bosses-design.md`](docs/superpowers/specs/2026-08-25-roster-resistance-and-bosses-design.md)
 **Plan:** [`docs/superpowers/plans/2026-08-25-roster-resistance-and-bosses.md`](docs/superpowers/plans/2026-08-25-roster-resistance-and-bosses.md)
 
-### The problem, measured
+### The problem as it stood before the slice
 
 | | |
 |---|---|
@@ -58,8 +58,10 @@ as an unarmoured goblin. Change one, re-measure the other.
 | Seconds to delete the whole wave's HP | **2.9** |
 | Seconds the wave takes just to spawn | **80** |
 
-**≈28× overkill.** A maxed Long Range hits for 76 against a wave-20 ogre's 20
-HP. Even a maxed *Basic* one-shots everything.
+**≈28× overkill.** A maxed Long Range hit for 76 against a wave-20 ogre's 20
+HP; even a maxed *Basic* one-shot everything. Wave-20 health is now ×4.75
+rather than ×2.5, and the coverage finding above is what actually moved the
+difficulty.
 
 ### The roster
 
@@ -96,19 +98,20 @@ This replaces an earlier binary design where armour would have **zeroed** a
 4-damage Magic tower outright. Soft edges mean every tower stays useful
 everywhere while still having a speciality.
 
-Proposed model, numbers to be set by measurement:
+Shipped as:
 
-- **Armour** is flat reduction per hit. It bites physical at full rate and
-  magic at a *higher* rate, so physical is the armour answer — with a
-  **minimum-damage floor** so magic is never reduced to nothing.
-- **Shields** absorb most of a hit and cost a charge. Magic leaks a much larger
-  fraction through than physical does, so magic strips shields fastest — but
-  physical still gets *something* through, rather than being fully absorbed as
-  it is today.
+- **Armour** is flat reduction per hit, biting magic 1.6× harder, so physical
+  is the armour answer — under a **minimum-damage floor** (15% of the incoming
+  hit) so nothing is ever reduced to zero.
+- **Shields** cost a charge and leak 50% to magic against 15% to physical, so
+  magic strips them fastest while physical still gets something through.
 
-⚠ This changes `Damage.resolve`'s current shield behaviour, where a shield
-absorbs the **whole** hit. Several of the 68 existing assertions in
-`test/test_damage.gd` will move. Update them deliberately; do not delete them.
+At wave 20 that gives each tower a distinct relationship to armour: Basic 67%
+through, Mortar 84%, Magic 15% (the floor), and **Long Range 100%**, because
+its own pierce tiers are what make it the specialist.
+
+A shield is a **reduction, not immunity** — a shield-met hit can be lethal,
+deliberately, or a 1-health shielded enemy would be unkillable.
 
 ### Penetration scales with tower level — the owner's rule *(2026-08-25)*
 
@@ -118,14 +121,11 @@ tiers that grant `pierce_bonus` today.
 - Penetration reduces effective armour.
 - It is derived from **total tiers bought** across both branches, so investment
   in any direction makes a tower better at getting through.
-- The existing explicit `pierce_bonus` tiers stack **on top** of it, so Long
-  Range stays the pierce specialist.
-- This is the second reason no tower is ever walled: a maxed Magic tower
-  carries penetration even though neither of its branches mentions pierce.
+- The explicit `pierce_bonus` tiers stack **on top**, so Long Range stays the
+  specialist.
 
-Wiring note: `resolve_tower_stats` already computes `pierce`, and
-`Damage.resolve` already subtracts it from armour. This is a new *term* in an
-existing calculation, not new machinery.
+⚠ **Shipped at 1 per tier, not 2.** See the correction note at the top of this
+section — `PIERCE_PER_TIER` and `ARMOR_PER_WAVE` are a tuned pair.
 
 ### Bosses
 
@@ -134,16 +134,17 @@ health, heavier armour, drawn markedly larger. Structured as a table
 (`data/bosses.gd`) so waves 30/40 in endless play, and any new sprite added
 later, are data entry.
 
-`assets/audio/boss.ogg` has been in the repo since the core slice and is **not
-even registered in `AudioManager.SOUNDS`**, so it has never been loaded. It
-gets wired here.
+`assets/audio/boss.ogg` had been in the repo since the core slice and was not
+even registered in `AudioManager.SOUNDS`, so it had never been loaded. It plays
+on boss spawn now.
 
 ### Showing resistance
 
-No new art. Sprite **tint** by resistance (armour → cold steel, shield → pale
-blue) and **scale** for bosses. Both display-only; every rule reads the data,
-not the colour. A shader is the upgrade path — `modulate` can only multiply, so
-it cannot truly desaturate. Placeholder until real art arrives.
+No new art. Sprite **tint** by resistance and **scale** for bosses, both
+display-only. Verified by screenshot at gameplay size: it reads clearly for
+armour and more subtly for shields. Honest caveat — it reads as *darker* more
+than as *colder*, because `modulate` can only multiply. A shader is the upgrade
+path when the real art lands.
 
 ---
 
@@ -159,8 +160,9 @@ enemy has ≥4 health from wave 10 on, so **the cap always binds**:
 | 1–5 | 1 | 4 | 2 |
 | 10–20 | **4** | **4** | **4** |
 
-The run is always exactly **5 leaks from over**, whatever leaked. A boss
-reaching the goal costs the same as a bat. Per-kind `life_loss` becomes dead
+The run is always exactly **5 leaks from over**, whatever leaked. **A boss
+reaching the goal costs the same as a bat** — still true after slice 1, and
+now more visibly wrong, because there are bosses to notice it with. Per-kind `life_loss` becomes dead
 data, and the ogre's `life_loss: 5` is **never read at any wave**, because the
 cap is 4.
 
