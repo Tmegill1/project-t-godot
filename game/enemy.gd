@@ -70,6 +70,7 @@ func setup(enemy_kind: StringName, path: PackedVector2Array, wave: int, rng: Rng
 	_frame_scale = float(Enemies.DEFS[kind]["sprite_px"]) * _boss_display_scale \
 		/ float(_sprite.texture.get_height())
 	apply_sprite_height()
+	refresh_resistance_visual()
 	_update_health_bar()
 
 ## Draws the current frame at the kind's ONE scale, resting on the ground line
@@ -179,6 +180,7 @@ func take_damage(source: Dictionary) -> Dictionary:
 	# Written back, or a shield absorbs every hit forever - which is the
 	# difference between a charge and invulnerability.
 	sim["shield"] = int(result["remaining_shield"])
+	refresh_resistance_visual()
 	_update_health_bar()
 	if result["lethal"]:
 		_die(source)
@@ -188,7 +190,42 @@ func take_damage(source: Dictionary) -> Dictionary:
 ## gives resistance a visual; the call site exists now because the aura is what
 ## changes a shield mid-flight, and that is the moment the look has to follow.
 func refresh_resistance_visual() -> void:
-	pass
+	_sprite.modulate = resistance_tint()
+
+## How this enemy's sprite is tinted for the resistance it carries.
+##
+## Armour drains warmth toward cold steel; a shield casts pale blue. Both are
+## clamped so a deep endless wave stays a readable sprite rather than a
+## silhouette.
+##
+## DISPLAY ONLY. sim/damage.gd reads sim["armor"] and sim["shield"]; nothing
+## reads this. It exists because a player needs to know a thing is tough
+## BEFORE it reaches the towers, and because the owner is replacing it with
+## real art later.
+##
+## modulate rather than a shader, deliberately: modulate can only multiply, so
+## it cannot truly desaturate - but it is a render change with no new files
+## and no .import churn, and this is placeholder signalling. A shader is the
+## upgrade path when the art arrives.
+func resistance_tint() -> Color:
+	var armor := float(sim.get("armor", 0))
+	var shield := float(sim.get("shield", 0))
+	if armor <= 0.0 and shield <= 0.0:
+		return Color.WHITE
+	# Each point of armour cools the whole sprite toward steel, to a floor that
+	# stays legible.
+	var warmth := clampf(1.0 - armor * 0.035, 0.5, 1.0)
+	# A shield drains the WARM channels and leaves blue alone, so the creature
+	# reads cold rather than merely dark. Lifting blue instead does nothing on
+	# an unarmoured target, where blue is already at 1.0 - which is exactly how
+	# the first version of this failed its own test.
+	var chill := clampf(1.0 - shield * 0.12, 0.55, 1.0)
+	return Color(warmth * chill, warmth * 0.98 * chill, warmth)
+
+## The height this enemy actually draws at, boss scale included. Exposed so a
+## test can compare a boss against its kind without reaching into the sprite.
+func drawn_height() -> float:
+	return float(Enemies.DEFS[kind]["sprite_px"]) * _boss_display_scale
 
 ## Overrides this enemy's stats with a boss definition, after setup().
 ##
@@ -211,6 +248,7 @@ func make_boss(definition: Dictionary) -> void:
 	# the same separation Tower.DISPLAY_SCALE keeps from the placement radius.
 	_boss_display_scale = float(definition["display_scale"])
 	apply_sprite_height()
+	refresh_resistance_visual()
 	_update_health_bar()
 
 func to_candidate() -> Dictionary:

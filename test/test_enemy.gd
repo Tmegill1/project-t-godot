@@ -866,3 +866,92 @@ func test_armour_reduces_a_hit_without_stopping_it() -> bool:
 		"armour absorbed exactly its own value")
 	e.free()
 	return true
+
+# --------------------------------------------------------------------------
+# Resistance is legible on the sprite (spec 2026-08-25 section 7)
+# --------------------------------------------------------------------------
+#
+# DISPLAY ONLY. sim/damage.gd reads sim["armor"] and sim["shield"]; nothing
+# reads the tint. It exists because a player needs to know a thing is tough
+# BEFORE it reaches the towers, and because the owner is replacing it with
+# real art later.
+
+func test_an_unresisting_enemy_is_drawn_untinted() -> bool:
+	var e := _ready_enemy()
+	e.setup(&"goblin", _straight_path(), 1)
+	assert_eq(e.resistance_tint(), Color.WHITE, "the control is drawn plain")
+	e.free()
+	return true
+
+func test_an_armoured_enemy_reads_colder_than_an_unarmoured_one() -> bool:
+	var plain := _ready_enemy()
+	plain.setup(&"goblin", _straight_path(), 20)
+	var armoured := _ready_enemy()
+	armoured.setup(&"ogre", _straight_path(), 20)
+	assert_true(armoured.resistance_tint().r < plain.resistance_tint().r,
+		"armour drains warmth from the sprite")
+	plain.free(); armoured.free()
+	return true
+
+func test_a_late_ogre_reads_colder_than_an_early_one() -> bool:
+	var early := _ready_enemy()
+	early.setup(&"ogre", _straight_path(), 1)
+	var late := _ready_enemy()
+	late.setup(&"ogre", _straight_path(), 20)
+	assert_true(late.resistance_tint().r < early.resistance_tint().r,
+		"a wave 20 ogre reads harder than a wave 1 one")
+	early.free(); late.free()
+	return true
+
+func test_a_shielded_enemy_reads_bluer() -> bool:
+	var e := _ready_enemy()
+	e.setup(&"bat", _straight_path(), 20)
+	var t := e.resistance_tint()
+	assert_true(t.b > t.r, "a shield casts blue")
+	e.free()
+	return true
+
+# A wave-40 ogre in endless play must still be a readable sprite rather than
+# a silhouette.
+func test_the_tint_never_goes_dark_enough_to_hide_the_creature() -> bool:
+	var e := _ready_enemy()
+	e.setup(&"ogre", _straight_path(), 40)
+	assert_true(e.resistance_tint().v > 0.35, "still legible however armoured")
+	e.free()
+	return true
+
+# The aura changes a shield mid-flight, so the look has to follow it.
+func test_the_visual_follows_a_shield_granted_after_spawn() -> bool:
+	var e := _ready_enemy()
+	e.setup(&"goblin", _straight_path(), 1)
+	assert_eq(e.resistance_tint(), Color.WHITE, "precondition: plain")
+	e.sim["shield"] = 1
+	e.refresh_resistance_visual()
+	assert_true(e.resistance_tint() != Color.WHITE,
+		"a goblin the shaman shielded stops reading as plain")
+	e.free()
+	return true
+
+# The tint must not reach the rules. Same separation Tower.DISPLAY_SCALE keeps
+# from Placement.tower_radius, and guarded the same way.
+func test_the_tint_changes_nothing_about_how_the_enemy_takes_damage() -> bool:
+	var a := _ready_enemy()
+	a.setup(&"ogre", _straight_path(), 20)
+	var before: float = a.sim["health"]
+	var armor: int = a.sim["armor"]
+	a.refresh_resistance_visual()
+	assert_eq(float(a.sim["health"]), before, "health untouched by a repaint")
+	assert_eq(int(a.sim["armor"]), armor, "and so is armour")
+	a.free()
+	return true
+
+func test_a_boss_draws_larger_than_its_kind() -> bool:
+	var plain := _ready_enemy()
+	plain.setup(&"troll", _straight_path(), 20)
+	var boss := _ready_enemy()
+	boss.setup(&"troll", _straight_path(), 20)
+	boss.make_boss(Bosses.on_wave(20))
+	assert_true(boss.drawn_height() > plain.drawn_height(),
+		"the wave 20 boss is markedly larger than an ordinary troll")
+	plain.free(); boss.free()
+	return true
