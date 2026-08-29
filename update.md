@@ -4,7 +4,7 @@
 not yet built, and what is still open. `CONTINUE.md` records what *is*; this
 records what *should be*.
 
-Last updated: 2026-08-26.
+Last updated: 2026-08-29.
 
 ---
 
@@ -14,7 +14,8 @@ Last updated: 2026-08-26.
 |---|---|
 | Core slice, tower upgrades, free placement, two art swaps | ✅ merged |
 | **Slice 0** — wave economy, measured gold curve, visible limits, maps 2 and 3 | ✅ merged and **deployed** |
-| **Slice 1** — roster, resistance, bosses | ✅ all ten tasks done, on `feat/slice-1-roster-resistance-bosses`, **not merged** |
+| **Slice 1** — roster, resistance, bosses | ✅ merged |
+| **Leak model** — cost by kind and by how alive it arrived | ✅ done, on `feat/leak-model`, **not merged** |
 | Slice 2 — tactical powers | ⬜ decided, not designed |
 | Slice 3 — versioned save + meta-progression | ⬜ decided, not designed |
 | Slice 4 — hero | ⬜ decided, not designed |
@@ -150,26 +151,55 @@ path when the real art lands.
 
 ## Known problems, not yet scheduled
 
-### 1. Every leak costs the same, past wave 5 ⚠ highest priority
+### 1. ~~Every leak costs the same, past wave 5~~ ✅ FIXED
 
-`Leak.resolve` switches to `min(4, remaining health)` after wave 5, and every
-enemy has ≥4 health from wave 10 on, so **the cap always binds**:
+`Leak.resolve` used to switch to `min(4, remaining health)` after wave 5, and
+every enemy has ≥4 health from wave 10 on, so the cap always bound: goblin,
+bat, shaman and ogre all cost exactly 4, `life_loss` was dead data at every
+wave that mattered, and the run was always exactly five leaks from over
+whatever leaked.
 
-| Wave | Goblin | Ogre | Bat |
+**The rule is now `ceil(life_loss × remaining ÷ max_health)`**, floored at one.
+The flat cap, the wave-5 boundary and the `wave` parameter are all deleted —
+the rule cannot compound, because it is bounded by a number from the table
+rather than by one that grows with the wave. Two properties fall out: *which*
+kind leaked decides the damage, and an enemy that limps in nearly dead costs
+less than one that walks through untouched.
+
+| Arriving at | Goblin | Bat | Shaman | Ogre | Boss |
+|---|---|---|---|---|---|
+| full health | 1 | 2 | 3 | **5** | 6 / 10 |
+| 30% health | 1 | 1 | 1 | 2 | 6 / 10 |
+
+(The boss override was already correct before this — added by `ba6b484` during
+the camps pass — and is untouched. It is a *declared* figure from
+`data/bosses.gd`, never derived from health, which is the whole lesson the cap
+was there to enforce.)
+
+**The measurement said not to retune anything.** Waves 1–20 were run back to
+back against boards of 4/8/12/16 towers, ungraded and maxed, under both rules:
+
+| Board | Old rule ends | New rule ends | Lives per leak |
 |---|---|---|---|
-| 1–5 | 1 | 4 | 2 |
-| 10–20 | **4** | **4** | **4** |
+| 4 ungraded | wave 6 | wave 6 | 3.92 → 2.27 |
+| 8 ungraded | wave 9 | wave 9 | 3.88 → 2.34 |
+| 12 ungraded | wave 10 | wave 10 | 3.79 → 2.45 |
+| 16 ungraded | wave 12 | wave 12 | 3.79 → 2.53 |
+| 4 maxed | wave 19 | **wave 20** | 3.58 → 1.64 |
+| 8 / 12 / 16 maxed | survives | survives | — |
 
-The run is always exactly **5 leaks from over**, whatever leaked. **A boss
-reaching the goal costs the same as a bat** — still true after slice 1, and
-now more visibly wrong, because there are bosses to notice it with. Per-kind `life_loss` becomes dead
-data, and the ogre's `life_loss: 5` is **never read at any wave**, because the
-cap is 4.
+Per-leak cost falls by about 37%, and **the wave a run ends on is unchanged in
+seven of eight boards**, moving by one in the eighth. Once a board is being
+overrun the leak volume compounds far faster than the price falls, so a third
+off the price buys at most one wave. `Economy.STARTING_LIVES` therefore stays
+at **20**, which still affords exactly four worst-case ordinary leaks — pinned
+by `test_the_life_budget_affords_several_worst_case_ordinary_leaks`.
 
-Not a careless bug — the cap exists because the uncapped health rule meant one
-wave-20 leak ended the run. Fixing it properly needs a per-kind or per-wave
-leak model and its own measurement pass. **Strongest candidate for the next
-slice.**
+**One redundancy removed by mutation testing.** The first implementation
+clamped both the incoming health to `max_health` *and* the result to
+`life_loss`. Both survived mutation, because each masked the other; clamping
+the health alone is what bounds the rule, and the second clamp was unreachable
+dead code.
 
 ### 2. The web build has never actually been played
 

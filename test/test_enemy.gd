@@ -163,15 +163,17 @@ func test_physics_process_does_not_flip_the_sprite_on_a_waypoint_arrival_tick() 
 func test_physics_process_reaching_the_goal_emits_leaked_with_the_resolved_value_and_marks_dead() -> bool:
 	var e := _ready_enemy()
 	var single_point_path := PackedVector2Array([Vector2(0, 0)])
-	# Bat at wave 6 (past Leak.LIFE_LOSS_SCALING_WAVE = 5) puts Leak.resolve on
-	# its health-based branch with an uncapped result (health 3, life_loss 2 -
-	# neither hits MAX_LIFE_LOSS_PER_LEAK = 4). That makes this scenario
-	# sensitive to the two dict fields passed to Leak.resolve being swapped:
-	# an ogre-at-wave-3 scenario tried first had both fields individually
-	# exceed the cap, so a life_loss/health swap was invisible (both routes
-	# saturated to the same capped value of 4) - confirmed by actually
-	# running that mutation before settling on this scenario.
+	# The enemy arrives DAMAGED, and that is the whole point of the scenario.
+	# A leak now costs life_loss scaled by health/max_health, so an enemy that
+	# walks through untouched costs exactly its flat price and the ratio is
+	# never exercised - and worse, at full health every pairwise swap of the
+	# three dict fields Enemy passes produces the identical answer, because
+	# health and max_health are equal and the ratio collapses to 1. Chipping
+	# the bat to a third of its health is what makes this test able to see
+	# whether Enemy wires those fields to the right keys at all.
 	e.setup(&"bat", single_point_path, 6)
+	var full_health: float = e.sim["max_health"]
+	e.sim["health"] = 1.0
 	var starting_health: float = e.sim["health"]
 
 	# GDScript lambdas capture locals by value, not by reference, so a plain
@@ -183,9 +185,14 @@ func test_physics_process_reaching_the_goal_emits_leaked_with_the_resolved_value
 
 	e._physics_process(0.016)
 
-	var expected: int = Leak.resolve(
-		{"life_loss": Enemies.DEFS[&"bat"]["life_loss"], "health": starting_health}, 6)
-	assert_true(expected < Leak.MAX_LIFE_LOSS_PER_LEAK, "precondition: this scenario's result is not cap-saturated")
+	var expected: int = Leak.resolve({
+		"life_loss": Enemies.DEFS[&"bat"]["life_loss"],
+		"health": starting_health, "max_health": full_health})
+	var undamaged: int = Leak.resolve({
+		"life_loss": Enemies.DEFS[&"bat"]["life_loss"],
+		"health": full_health, "max_health": full_health})
+	assert_true(expected < undamaged,
+		"precondition: a chipped bat costs strictly less than a whole one, so the ratio is live here")
 	assert_eq(captured["count"], 1, "leaked fires exactly once")
 	assert_eq(captured["value"], expected, "leaked carries whatever Leak.resolve computes for this enemy/wave")
 	assert_eq(e.sim["alive"], false, "reaching the goal marks the enemy not-alive")
@@ -978,11 +985,14 @@ func test_a_boss_leaking_costs_its_own_declared_lives() -> bool:
 	assert_eq(cost.size(), 1, "it leaked")
 	assert_eq(int(cost[0]), int(Bosses.on_wave(20)["life_loss"]),
 		"and cost the Warlord's own figure, not the ordinary cap")
-	assert_true(int(cost[0]) > Leak.MAX_LIFE_LOSS_PER_LEAK,
-		"which is strictly worse than any rank-and-file leak")
+	assert_true(int(cost[0]) > int(Enemies.DEFS[&"ogre"]["life_loss"]),
+		"which is strictly worse than the worst rank-and-file leak")
 	return true
 
-func test_an_ordinary_enemy_leaking_is_still_capped() -> bool:
+# The ordinary counterpart, and the board-side witness for the rule change:
+# an ogre that walks through untouched costs the ogre's own five, not the
+# flat four every kind used to cost from wave 10 on.
+func test_an_ordinary_enemy_leaking_costs_its_kinds_own_price() -> bool:
 	var e := _ready_enemy()
 	e.setup(&"ogre", PackedVector2Array([Vector2.ZERO, Vector2(1.0, 0.0)]), 20)
 	var cost := []
@@ -992,8 +1002,8 @@ func test_an_ordinary_enemy_leaking_is_still_capped() -> bool:
 		if cost.size() > 0:
 			break
 	assert_eq(cost.size(), 1, "it leaked")
-	assert_eq(int(cost[0]), Leak.MAX_LIFE_LOSS_PER_LEAK,
-		"the cap still holds for everything that is not a boss")
+	assert_eq(int(cost[0]), int(Enemies.DEFS[&"ogre"]["life_loss"]),
+		"a whole ogre costs the ogre's price, at wave 20 as at wave 1")
 	return true
 
 # --------------------------------------------------------------------------

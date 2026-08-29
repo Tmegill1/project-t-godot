@@ -28,8 +28,9 @@ const DEFS := {
 		"kind": &"troll", "label": "Troll Chieftain",
 		"health": 220, "speed": 45.0, "armor": 6, "shield": 0,
 		"reward": 150, "display_scale": 1.6,
-		# Past MAX_LIFE_LOSS_PER_LEAK on purpose, and well under the 20-life
-		# budget so losing the Chieftain once is a blow rather than the run.
+		# Past the worst ordinary leak (the ogre's 5) on purpose, and well
+		# under the 20-life budget so losing the Chieftain once is a blow
+		# rather than the run.
 		"life_loss": 6,
 	},
 	# The run's final fight. Health well past twice the first boss's, armour

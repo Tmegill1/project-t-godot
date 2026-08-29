@@ -3,18 +3,19 @@
 **Point an assistant at this file and say "continue this project."** It contains
 everything needed to resume with no prior conversation.
 
-Last updated: 2026-08-29 · Branch `master` · **everything through slice 1 is
-merged. Suite green at 13,423 checks across 41 files.**
+Last updated: 2026-08-29 · Branch `feat/leak-model` · **everything through
+slice 1 is merged. Suite green at 13,425 checks across 41 files.**
 
-**HEAD `90a1ce9` is committed but NOT PUSHED.** `origin/master` is at
-`9662465`. Pushing republishes the live public site, so confirm with the owner
-first — CI runs the whole suite before it exports, but the deploy is public
-either way.
+**`master` is TWO COMMITS AHEAD of `origin/master`, and `feat/leak-model` is
+unmerged on top of that.** `origin/master` is at `9662465`. Pushing
+republishes the live public site, so confirm with the owner first — CI runs
+the whole suite before it exports, but the deploy is public either way.
 
 Since the last update: the three maps migrated to a **text format** with a
 Godot painting scene (§12), fences and fires became **camps** instead of
-scatter (§13), and the **Sell button** was fixed — it had been rendering 38px
-below the bottom edge of the viewport.
+scatter (§13), the **Sell button** was fixed — it had been rendering 38px
+below the bottom edge of the viewport — and **what a leak costs was rewritten**
+(§14).
 
 > **Slice 0's spec and plan are
 > [`docs/superpowers/specs/2026-08-24-slice-0-design.md`](docs/superpowers/specs/2026-08-24-slice-0-design.md)
@@ -769,3 +770,38 @@ so a fit test must sum the children itself; and the inspector needs its own
 `bind()` (game.gd binds it separately from the panel) or every row is
 text-less and reports the bare 56px tap minimum instead of the 69px three lines
 of tier text actually take.
+
+---
+
+## 14. What a leak costs
+
+`Leak.resolve` returns `ceil(life_loss × remaining_health ÷ max_health)`,
+floored at one, with a boss's declared `boss_life_loss` bypassing the rule
+entirely. It takes no `wave` argument and reads no constant — the cost is a
+function of the enemy alone.
+
+**What this replaced, because it is the kind of thing that gets "restored".**
+The old rule was a flat per-kind cost through wave 5 and
+`min(4, ceil(remaining_health))` after it. Both halves failed. The health term
+was unbounded and enemy health compounds every wave, so by wave 20 one leak
+ended the run — which is what the cap of 4 was added to stop. The cap then
+flattened everything it was meant to bound: from wave 10 on every ordinary
+enemy has at least 4 health, so goblin, bat, shaman and ogre all cost exactly
+4, `life_loss` was dead data at every wave that mattered, and the run was
+always exactly five leaks from over no matter what leaked.
+
+Taking the **ratio** rather than the absolute health gets both properties at
+once, because it is bounded above by a table value rather than by one that
+grows with the wave. So the cap has nothing left to do.
+
+**Do not add a second clamp.** Clamping the incoming health to `max_health` is
+what bounds the whole rule — a `left` no greater than `full` makes the ratio no
+greater than 1, which makes the result no greater than the kind's own price. An
+explicit ceiling of `life_loss` on the result is unreachable dead code, and
+worse than useless, because it masks the clamp that is doing the work. Both
+survived mutation testing when both were present; removing one killed both
+mutants. This is the standing lesson of §6 arriving in a new place.
+
+**Retuning was measured and rejected.** See `update.md` §1 for the table: per
+leak the cost falls about 37%, but the wave a run ends on is unchanged in seven
+of eight boards, so `Economy.STARTING_LIVES` stays at 20.

@@ -668,8 +668,9 @@ func test_enemy_leak_subtracts_lives_by_the_value_leak_resolve_produces() -> boo
 	b.lives_changed.connect(func(l): lives_events.append(l))
 	var lives_before := b.get_lives()
 
-	var expected_loss := Leak.resolve(
-		{"life_loss": Enemies.DEFS[&"bat"]["life_loss"], "health": enemy.sim["health"]}, b.get_wave())
+	var expected_loss := Leak.resolve({
+		"life_loss": Enemies.DEFS[&"bat"]["life_loss"],
+		"health": enemy.sim["health"], "max_health": enemy.sim["max_health"]})
 	enemy.leaked.emit(expected_loss)
 
 	assert_eq(b.get_lives(), lives_before - expected_loss, "lives dropped by exactly the value the leaked signal carried")
