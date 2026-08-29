@@ -69,3 +69,42 @@ func test_fork_is_independent_and_reproducible() -> bool:
 		assert_almost_eq(forked_a.next(), forked_b.next(), 1e-15,
 			"forked stream %d reproducible" % i)
 	return true
+
+# --------------------------------------------------------------------------
+# float_range
+# --------------------------------------------------------------------------
+
+func test_float_range_stays_within_its_bounds() -> bool:
+	var r := Rng.new(12345)
+	for i in 200:
+		var v := r.float_range(-2.5, 7.5)
+		assert_true(v >= -2.5 and v < 7.5, "sample %d is in range: %f" % [i, v])
+	return true
+
+func test_float_range_swaps_reversed_bounds_like_int_range() -> bool:
+	var a := Rng.new(99)
+	var b := Rng.new(99)
+	assert_almost_eq(a.float_range(10.0, 2.0), b.float_range(2.0, 10.0), 0.0001,
+		"reversed bounds give the same answer, matching int_range")
+	return true
+
+func test_float_range_is_reproducible_from_a_seed() -> bool:
+	var a := Rng.new(777)
+	var b := Rng.new(777)
+	for i in 20:
+		assert_almost_eq(a.float_range(0.0, 1.0), b.float_range(0.0, 1.0), 0.0000001,
+			"draw %d matches" % i)
+	return true
+
+func test_float_range_actually_varies() -> bool:
+	var r := Rng.new(4242)
+	var seen := {}
+	for i in 50:
+		seen[snappedf(r.float_range(0.0, 1.0), 0.01)] = true
+	assert_true(seen.size() > 20, "50 draws produce many distinct values, got %d" % seen.size())
+	return true
+
+func test_float_range_with_equal_bounds_returns_that_value() -> bool:
+	var r := Rng.new(1)
+	assert_almost_eq(r.float_range(3.0, 3.0), 3.0, 0.0001, "a zero-width range is its own value")
+	return true

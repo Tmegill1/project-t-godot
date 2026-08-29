@@ -15,13 +15,24 @@ const _MAX_FIRE_TILES := 7
 ## overlays. Ground sits at -1 rather than 0 for no reason beyond history: a
 ## grid overlay used to occupy 0 between them, and the values were left alone
 ## when it was removed rather than renumbering every layer.
-const _Z_GROUND := -1
+## Four terrain layers, bottom to top. The ordering is load-bearing: the blend
+## pass is offset half a tile, so tiles from cells NEXT to a road spill 24px
+## onto it - and at 50% alpha that washed the road out and made it read
+## thinner than it is. The road therefore draws ABOVE the blend, not with the
+## ground it is chosen alongside.
+const _Z_GROUND := -3
+const _Z_GROUND_BLEND := -2
+const _Z_ROAD := -1
+## Between ground and props: detail scatters over the terrain but under
+## anything the player is meant to read as an object.
+const _Z_DETAIL := 0
 const _Z_OVERLAY := 1
 
 var _tiles: Array = []
 var _rows := 0
 var _cols := 0
 var _decorations := {}  # Vector2i -> Sprite2D
+var _decoration_slots := {}  # Vector2i -> StringName
 var _biome: StringName = Biomes.FIRST
 
 ## Sprites that count as solid props, recorded as they are created.
@@ -51,9 +62,11 @@ func render(tiles: Array, rng: Rng = null, biome: StringName = Biomes.FIRST) -> 
 	for child in get_children():
 		child.free()
 	_decorations.clear()
+	_decoration_slots.clear()
 	_prop_sprites.clear()
 
 	_draw_ground()
+	_scatter_detail(rng)
 	_draw_endpoints()
 	_scatter_decoration(rng)
 	_draw_blocked(rng)
@@ -70,6 +83,20 @@ func render(tiles: Array, rng: Rng = null, biome: StringName = Biomes.FIRST) -> 
 ## while a tower clipping into a rock reads as a bug. This only measures
 ## correctly because _place scales uniformly (see its doc comment); under the
 ## stretch-to-square behaviour it replaced, displayed size was a distortion.
+## Which cell each scattered decoration was assigned to, and what it is.
+##
+## Exposed because the SCATTER RULE (which cells get a spike, which get a fire)
+## and the RENDER (where in that cell the sprite actually lands) are different
+## questions, and jitter made the second a bad proxy for the first. Tests used
+## to recover the cell by comparing a sprite's position against tile origins,
+## which stopped working the moment a prop was allowed to overhang - and would
+## have gone on "working" by silently testing nothing.
+func decoration_cells() -> Dictionary:
+	var out := {}
+	for cell in _decorations:
+		out[cell] = _decoration_slots.get(cell, &"")
+	return out
+
 func prop_footprints() -> Array:
 	var out: Array = []
 	for child in get_children():
@@ -140,17 +167,66 @@ const PROP_SCALE := {
 	&"tree": 1.0, &"stone": 1.0, &"spike": 1.0, &"fire": 0.8,
 }
 
+## How far a prop may wander from its cell's centre, as a fraction of a tile.
+##
+## THE single largest contributor to the board reading as a grid. Every sprite
+## used to be positioned at col * TILE_SIZE, so trees, stones, spikes and fires
+## all drew a 48px lattice however varied the ground beneath them was - and
+## nothing in the scene ever crossed a cell boundary. Props may now overhang
+## their cell, which is the point.
+##
+## 0.28 rather than more: past about a third the prop visibly belongs to the
+## wrong tile, and props from adjacent cells start colliding.
+const PROP_JITTER := 0.28
+
+## How much a prop's size may vary from its slot's nominal scale.
+##
+## Repetition of an identical sprite reads as tiling even when the positions
+## are broken up. Kept modest because prop_footprints derives a blocking radius
+## from displayed size, so this is not purely cosmetic - a bigger tree really
+## does block more.
+const PROP_SCALE_JITTER := 0.18
+
+## The most a prop may be rotated, in degrees.
+##
+## Deliberately small. These are painted, top-down props with a clear up
+## direction; past a few degrees they read as knocked over rather than as
+## naturally placed.
+const PROP_ROTATION_DEGREES := 7.0
+
+## Slots that must not rotate at all. Flame art has an unambiguous up.
+const _NO_ROTATE: Array[StringName] = [&"fire"]
+
 ## Places a prop and records it as one, so prop_footprints can find it.
-func _place_prop(slot: StringName, col: int, row: int) -> Sprite2D:
+## Places a prop and records it as one, so prop_footprints can find it.
+##
+## `rng` is required rather than optional: a prop placed without one would sit
+## dead centre on the lattice, which is the thing this whole layer exists to
+## avoid, and an optional argument makes forgetting it silent.
+func _place_prop(slot: StringName, col: int, row: int, rng: Rng) -> Sprite2D:
 	# load() here, not in Biomes: data/ stays engine-free (test_sim_purity.gd).
 	var texture: Texture2D = load(Biomes.prop_path(_biome, slot))
-	var box := Tiles.TILE_SIZE * float(PROP_SCALE.get(slot, 1.0))
+	var jitter_scale := 1.0 + rng.float_range(-PROP_SCALE_JITTER, PROP_SCALE_JITTER)
+	var box := Tiles.TILE_SIZE * float(PROP_SCALE.get(slot, 1.0)) * jitter_scale
 	# _place centres a sprite inside the box it is given, and the box is
 	# anchored at the tile's origin - so a box smaller than a tile has to be
 	# offset by the difference or the prop sits in the tile's top-left corner
 	# instead of the middle of it.
 	var inset := Vector2.ONE * (Tiles.TILE_SIZE - box) / 2.0
-	var sprite := _place(texture, col, row, box, _Z_OVERLAY, inset)
+	var wander := Vector2(
+		rng.float_range(-PROP_JITTER, PROP_JITTER),
+		rng.float_range(-PROP_JITTER, PROP_JITTER)) * Tiles.TILE_SIZE
+	var sprite := _place(texture, col, row, box, _Z_OVERLAY, inset + wander)
+	# Mirroring doubles the apparent variety for nothing. Unlike a road piece,
+	# a prop carries no directional meaning, so there is no mask to contradict.
+	sprite.flip_h = rng.int_range(0, 1) == 1
+	if not _NO_ROTATE.has(slot):
+		# Rotated about the sprite's own middle rather than its top-left, or a
+		# rotation would also translate it.
+		sprite.offset = sprite.texture.get_size() / 2.0
+		sprite.position += sprite.texture.get_size() / 2.0 * sprite.scale
+		sprite.rotation_degrees = rng.float_range(
+			-PROP_ROTATION_DEGREES, PROP_ROTATION_DEGREES)
 	_prop_sprites[sprite] = true
 	return sprite
 
@@ -184,7 +260,34 @@ func _place_prop(slot: StringName, col: int, row: int) -> Sprite2D:
 ## when the decoration seed changes; drawing from the passed rng here would
 ## also shift the whole decoration stream, since _draw_ground runs first.
 func _draw_ground() -> void:
-	var variants := Rng.new(Seeds.DEFAULT_GROUND_SEED)
+	_draw_ground_layer(Rng.new(Seeds.DEFAULT_GROUND_SEED), Vector2.ZERO, 1.0)
+	# The offset pass. Its own Rng, so it picks different cards from the first
+	# layer rather than laying the identical board on top of itself at 50%,
+	# which would cancel nothing.
+	_draw_ground_blend(Rng.new(Seeds.DEFAULT_GROUND_SEED + 1))
+
+## The second ground pass: same cards, offset half a tile, half transparent.
+##
+## Ground only, and it deliberately covers ROAD cells too - a road tile is
+## drawn after at full opacity and its own z, so the blend never shows through
+## one. Skipping road cells would leave a hard rectangle of un-blended ground
+## around every road, which is a worse grid than the one being removed.
+func _draw_ground_blend(rng: Rng) -> void:
+	var shift := Vector2.ONE * (Tiles.TILE_SIZE * GROUND_BLEND_OFFSET)
+	for r in _rows:
+		for c in _cols:
+			if _is_road(c, r):
+				continue
+			var tile := _place_tile(load(Biomes.ground_path(
+				_biome, rng.int_range(0, Biomes.GROUND_VARIANTS - 1))),
+				c, r, GROUND_OVERFILL)
+			tile.position += shift
+			tile.flip_h = rng.int_range(0, 1) == 1
+			tile.flip_v = rng.int_range(0, 1) == 1
+			tile.modulate = Color(1.0, 1.0, 1.0, GROUND_BLEND_ALPHA)
+			tile.z_index = _Z_GROUND_BLEND
+
+func _draw_ground_layer(variants: Rng, _shift: Vector2, _alpha: float) -> void:
 	for r in _rows:
 		for c in _cols:
 			# load() rather than a texture from Biomes: data/ is held
@@ -192,17 +295,45 @@ func _draw_ground() -> void:
 			# a path becomes a resource. Godot's ResourceLoader caches by
 			# path, so the repeated calls are dictionary hits.
 			if _is_road(c, r):
-				# Never flipped: a road piece is chosen by its edge mask, so
-				# mirroring one draws a north-east corner where the mask says
-				# north-west.
-				_place_tile(load(Biomes.road_path(_biome, edge_mask(c, r))), c, r)
+				# Drawn at _Z_ROAD so the offset blend pass cannot spill over
+				# it - see the z-order note above.
+				var mask := edge_mask(c, r)
+				var road := _place_tile(
+					load(Biomes.road_path(_biome, mask)), c, r)
+				road.z_index = _Z_ROAD
+				# Flipped only along axes its own mask is SYMMETRIC about.
+				# The old rule was never flip at all, on the grounds that
+				# mirroring a piece draws a north-east corner where the mask
+				# says north-west - true of a corner, and false of a straight.
+				# A long run of straights is where the road's periodicity
+				# actually lives (measured at +33 excess against the grass's
+				# +7), and every one of them is symmetric.
+				if mask_allows_flip_h(mask):
+					road.flip_h = variants.int_range(0, 1) == 1
+				if mask_allows_flip_v(mask):
+					road.flip_v = variants.int_range(0, 1) == 1
 			else:
 				var tile := _place_tile(load(Biomes.ground_path(
-					_biome, variants.int_range(0, Biomes.GROUND_VARIANTS - 1))), c, r)
+					_biome, variants.int_range(0, Biomes.GROUND_VARIANTS - 1))),
+					c, r, GROUND_OVERFILL)
 				# One of four orientations, which is what turns six ground
 				# cards into twenty-four. See the note above _draw_ground.
 				tile.flip_h = variants.int_range(0, 1) == 1
 				tile.flip_v = variants.int_range(0, 1) == 1
+
+## Whether mirroring a piece horizontally still satisfies its own mask.
+##
+## flip_h swaps EAST (2) and WEST (8), so the mask survives only when it holds
+## both or neither. A straight E-W run and a N-S run both qualify; an
+## north-east corner does not, and flipping one would draw a north-WEST corner
+## where the mask says north-east.
+static func mask_allows_flip_h(mask: int) -> bool:
+	return (mask & 2 != 0) == (mask & 8 != 0)
+
+## Whether mirroring vertically still satisfies the mask. flip_v swaps NORTH
+## (1) and SOUTH (4), on the same reasoning as mask_allows_flip_h.
+static func mask_allows_flip_v(mask: int) -> bool:
+	return (mask & 1 != 0) == (mask & 4 != 0)
 
 ## The four orthogonal neighbours of a cell that are road, as a bitmask.
 ## Bit order is fixed: N=1, E=2, S=4, W=8. Out of bounds is not road.
@@ -235,6 +366,41 @@ func edge_mask(c: int, r: int) -> int:
 ## all 66 ground and road PNGs in all three biomes - plus one.
 const TILE_BLEED := 6
 
+## How much larger than its cell a GROUND tile draws.
+##
+## Cropping the card border (TILE_BLEED) removed the black gutters, but left a
+## hard edge at every cell boundary where two independently-chosen cards meet -
+## visible as a faint darker seam, and the reason each dirt patch reads as
+## exactly one square. Overfilling by a few percent makes neighbours overlap so
+## there is no boundary to see.
+##
+## GROUND ONLY. A road tile is chosen by its edge mask, so overfilling one
+## draws its leading border over its neighbour's ROAD instead of over grass -
+## the same reason road tiles are never flipped. _place_tile takes the overfill
+## as an argument for exactly that reason.
+const GROUND_OVERFILL := 1.08
+
+## Opacity of the second, half-tile-offset ground layer.
+##
+## MEASURED. Prop jitter and the detail layer both improved how the board
+## READS, but neither touched the thing that makes it a grid: excess
+## autocorrelation at a lag of exactly one tile sat at +7.7 before any of this
+## work and +6.5 after both, because every cell still carried one discrete card
+## and nothing changed that.
+##
+## This does. A second full ground pass is drawn offset by half a tile, so its
+## card boundaries land on the FIRST layer's centres. The composite has no
+## single 48px boundary line anywhere, because wherever one layer has an edge
+## the other has a middle.
+##
+## Half-transparent rather than opaque: at 1.0 the offset layer simply becomes
+## the grid, shifted 24px. The two have to be visible through each other for
+## their boundaries to cancel rather than replace.
+const GROUND_BLEND_ALPHA := 0.5
+
+## Where the second ground layer sits relative to the first, in tiles.
+const GROUND_BLEND_OFFSET := 0.5
+
 ## Draws a ground or road tile STRETCHED to fill its cell exactly.
 ##
 ## Deliberately not _place. A tile is a cell of a grid and has to cover its
@@ -248,7 +414,8 @@ const TILE_BLEED := 6
 ## doc comment says that only measures correctly because _place scales
 ## uniformly. That stays true: props still go through _place, and nothing
 ## drawn here is ever recorded as a prop.
-func _place_tile(texture: Texture2D, col: int, row: int) -> Sprite2D:
+func _place_tile(texture: Texture2D, col: int, row: int,
+		overfill := 1.0) -> Sprite2D:
 	var s := Sprite2D.new()
 	s.texture = texture
 	s.centered = false
@@ -257,10 +424,13 @@ func _place_tile(texture: Texture2D, col: int, row: int) -> Sprite2D:
 	s.region_rect = Rect2(TILE_BLEED, TILE_BLEED,
 		texture.get_width() - TILE_BLEED * 2.0,
 		texture.get_height() - TILE_BLEED * 2.0)
-	s.position = Vector2(col * Tiles.TILE_SIZE, row * Tiles.TILE_SIZE)
+	# Overfill grows the tile about its own centre, so the surplus spills
+	# evenly onto all four neighbours rather than pushing the grid off-origin.
+	var spill := Tiles.TILE_SIZE * (overfill - 1.0) / 2.0
+	s.position = Vector2(col * Tiles.TILE_SIZE - spill, row * Tiles.TILE_SIZE - spill)
 	s.scale = Vector2(
-		float(Tiles.TILE_SIZE) / s.region_rect.size.x,
-		float(Tiles.TILE_SIZE) / s.region_rect.size.y)
+		float(Tiles.TILE_SIZE) * overfill / s.region_rect.size.x,
+		float(Tiles.TILE_SIZE) * overfill / s.region_rect.size.y)
 	# Unlike _place, plain LINEAR here - no mipmap chain. Either of two
 	# reasons would be enough on its own. First, region_enabled is set two
 	# lines up: a mip level averages across the region's boundary, and for
@@ -303,7 +473,8 @@ func _scatter_decoration(rng: Rng) -> void:
 	var shuffled := rng.shuffle(buildable)
 	for i in spike_count:
 		var t: Vector2i = shuffled[i]
-		_decorations[t] = _place_prop(&"spike", t.x, t.y)
+		_decorations[t] = _place_prop(&"spike", t.x, t.y, rng)
+		_decoration_slots[t] = &"spike"
 
 	var path_adjacent: Array = []
 	for r in _rows:
@@ -319,7 +490,64 @@ func _scatter_decoration(rng: Rng) -> void:
 	var shuffled_adjacent := rng.shuffle(path_adjacent)
 	for i in fire_count:
 		var t: Vector2i = shuffled_adjacent[i]
-		_decorations[t] = _place_prop(&"fire", t.x, t.y)
+		_decorations[t] = _place_prop(&"fire", t.x, t.y, rng)
+		_decoration_slots[t] = &"fire"
+
+## How many detail sprites to scatter per tile of map.
+##
+## This is the layer that answers "the ground reads as squares". The ground
+## itself was already fixed as far as it can be - four orientations over six
+## cards, and a measured 61% cut in periodicity - and it still reads as a grid
+## because every card is a discrete square of content with its own colour cast.
+## Nothing else in the scene crosses a cell boundary, so the eye has nothing to
+## read across the seam.
+##
+## Detail is scattered in CONTINUOUS world space rather than per cell, so it
+## lands wherever it lands and routinely straddles boundaries. That is the
+## entire point: it is the only thing in the scene that spans a seam.
+const DETAIL_PER_TILE := 1.6
+
+## Which prop art the detail layer borrows, and at what fraction of a tile.
+##
+## PLACEHOLDER. The illustrated sheet ships no small detail pieces, so this
+## reuses the props at a size where they read as ground texture - a stone at a
+## quarter scale is a pebble, a tree at a third is a shrub. Replace with real
+## detail art when there is any; the layer's shape does not change.
+const DETAIL_SOURCES := {
+	&"stone": 0.26,
+	&"tree": 0.30,
+}
+
+## Scatters non-blocking ground detail across the whole map.
+##
+## NEVER recorded in _prop_sprites, so prop_footprints never sees it and no
+## placement rule moves. Decoration only - it may sit under a tower, over a
+## road edge, anywhere. That freedom is what lets it ignore the grid.
+func _scatter_detail(rng: Rng) -> void:
+	var slots := DETAIL_SOURCES.keys()
+	var count := int(float(_cols * _rows) * DETAIL_PER_TILE)
+	var width := float(_cols * Tiles.TILE_SIZE)
+	var height := float(_rows * Tiles.TILE_SIZE)
+	for i in count:
+		var slot: StringName = slots[rng.int_range(0, slots.size() - 1)]
+		var texture: Texture2D = load(Biomes.prop_path(_biome, slot))
+		var box := Tiles.TILE_SIZE * float(DETAIL_SOURCES[slot]) \
+			* rng.float_range(0.75, 1.25)
+		var sprite := Sprite2D.new()
+		sprite.texture = texture
+		sprite.centered = true
+		sprite.scale = Vector2.ONE * (box / maxf(
+			float(texture.get_width()), float(texture.get_height())))
+		# Continuous, not per cell. A detail sprite has no tile.
+		sprite.position = Vector2(rng.float_range(0.0, width), rng.float_range(0.0, height))
+		sprite.rotation_degrees = rng.float_range(0.0, 360.0)
+		sprite.flip_h = rng.int_range(0, 1) == 1
+		# Slightly translucent and slightly darkened, so it reads as part of
+		# the ground rather than as a small object sitting on it.
+		sprite.modulate = Color(0.92, 0.92, 0.92, rng.float_range(0.55, 0.85))
+		sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		sprite.z_index = _Z_DETAIL
+		add_child(sprite)
 
 func _draw_blocked(rng: Rng) -> void:
 	var excluded := {}
@@ -344,7 +572,7 @@ func _draw_blocked(rng: Rng) -> void:
 		stones[shuffled[i]] = true
 
 	for t in blocked:
-		_place_prop(&"stone" if stones.has(t) else &"tree", t.x, t.y)
+		_place_prop(&"stone" if stones.has(t) else &"tree", t.x, t.y, rng)
 
 func _is_adjacent_to_walkable(row: int, col: int) -> bool:
 	# The loop variable below is untyped Variant (an array literal's element

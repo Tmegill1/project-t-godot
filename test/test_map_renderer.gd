@@ -1,5 +1,26 @@
 extends TestCase
 
+## Whether a child is a PROP, as opposed to ground, an endpoint, or the detail
+## layer.
+##
+## Texture path alone stopped identifying a prop when the detail layer landed:
+## detail borrows the prop art at a quarter scale (a stone becomes a pebble),
+## so a scan by path picks up hundreds of them. z_index is what separates the
+## layers - ground -1, detail 0, props and endpoints 1 - and it is already the
+## idiom this file uses for the ground.
+func _is_prop(child) -> bool:
+	return child is Sprite2D and child.z_index == 1
+
+## Whether a child is any TERRAIN layer - base ground (-3), the half-tile
+## offset blend pass (-2), or road (-1).
+##
+## The layers were renumbered when the blend pass landed. Tests that filtered
+## on the old single ground z of -1 silently narrowed to road only, which is a
+## coverage loss that reads as a passing suite - caught by the check count
+## dropping about 1,300 between runs, not by anything failing.
+func _is_terrain(child) -> bool:
+	return child is Sprite2D and child.z_index >= -3 and child.z_index <= -1
+
 # MapRenderer draws Sprite2D children rather than using a TileMapLayer, so
 # these tests inspect the child tree (position, z_index, texture) rather
 # than a tilemap API. Textures are identified by their public
@@ -55,12 +76,27 @@ func test_the_ground_layer_has_one_sprite_per_tile() -> bool:
 	var renderer := MapRenderer.new()
 	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
 	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
+	# The terrain is four layers now: base ground (-3), the half-tile-offset
+	# blend pass (-2), road (-1), then detail and props above. The base layer
+	# still covers every cell exactly once - that is the claim this test makes,
+	# and the blend pass deliberately does not, because it skips road cells.
 	var ground := 0
+	var blend := 0
+	var road := 0
 	for child in renderer.get_children():
-		if child is Sprite2D and child.z_index == -1:
+		if not (child is Sprite2D):
+			continue
+		if child.z_index == -3:
 			ground += 1
-	assert_eq(ground, DemoMap.GRID_COLS * DemoMap.GRID_ROWS,
-		"one ground sprite per tile")
+		elif child.z_index == -2:
+			blend += 1
+		elif child.z_index == -1:
+			road += 1
+	assert_eq(ground + road, DemoMap.GRID_COLS * DemoMap.GRID_ROWS,
+		"one base terrain sprite per tile, ground or road")
+	assert_true(road > 0, "and some of them are road")
+	assert_eq(blend, DemoMap.GRID_COLS * DemoMap.GRID_ROWS - road,
+		"the blend pass covers every non-road cell")
 	renderer.free()
 	return true
 
@@ -160,19 +196,38 @@ func test_ground_and_road_tiles_fill_their_cell_exactly() -> bool:
 	var renderer := MapRenderer.new()
 	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
 	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
+	# Ground OVERFILLS its cell now (MapRenderer.GROUND_OVERFILL) so neighbours
+	# overlap and there is no boundary to see; road still fills exactly,
+	# because overfilling a mask-chosen road piece draws its leading border
+	# over its neighbour's road. Both still cover their whole cell, which is
+	# the property this test exists for - a tile that under-fills leaves a
+	# transparent gap, which is a seam in the layer whose job is to have none.
 	var box := float(Tiles.TILE_SIZE)
 	var checked := 0
 	for child in renderer.get_children():
-		if not (child is Sprite2D) or child.z_index != -1:
+		if not _is_terrain(child):
 			continue
 		var sprite: Sprite2D = child
 		var display := sprite.region_rect.size * sprite.scale
-		assert_almost_eq(display.x, box, 0.01, "a tile is exactly one cell wide")
-		assert_almost_eq(display.y, box, 0.01, "a tile is exactly one cell tall")
-		var c := int(round(sprite.position.x / box))
-		var r := int(round(sprite.position.y / box))
-		assert_eq(sprite.position, Vector2(c * box, r * box),
-			"a tile lands on its cell's origin")
+		assert_true(display.x >= box - 0.01, "a tile is at least one cell wide")
+		assert_true(display.y >= box - 0.01, "a tile is at least one cell tall")
+		assert_true(display.x <= box * MapRenderer.GROUND_OVERFILL + 0.01,
+			"and never more than the overfill allows")
+		# Centred on its cell: an overfilled tile spills evenly on all four
+		# sides rather than pushing the grid off-origin. The BLEND pass is
+		# deliberately offset half a tile - that offset is the whole mechanism
+		# by which it cancels the grid - so it is centred on a cell CORNER
+		# instead, and the expectation shifts with it.
+		var shift := 0.0
+		if sprite.z_index == -2:
+			shift = box * MapRenderer.GROUND_BLEND_OFFSET
+		var centre := sprite.position + display / 2.0 - Vector2.ONE * shift
+		var c := int(round((centre.x - box / 2.0) / box))
+		var r := int(round((centre.y - box / 2.0) / box))
+		assert_almost_eq(centre.x, c * box + box / 2.0, 0.01,
+			"a tile stays centred on its cell horizontally")
+		assert_almost_eq(centre.y, r * box + box / 2.0, 0.01,
+			"a tile stays centred on its cell vertically")
 		checked += 1
 	assert_true(checked > 0, "tiles were checked")
 	renderer.free()
@@ -294,7 +349,7 @@ func test_spike_count_matches_the_formula_for_the_demo_map() -> bool:
 	mr.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED))
 	var spikes := 0
 	for child in mr.get_children():
-		if child is Sprite2D and child.texture.resource_path == _SPIKE_PATH:
+		if _is_prop(child) and child.texture.resource_path == _SPIKE_PATH:
 			spikes += 1
 	assert_eq(spikes, expected, "spike count is mini(buildable, maxi(5, floor(buildable * 0.1))) = %d" % expected)
 
@@ -318,7 +373,7 @@ func test_spike_count_floor_of_five_binds_on_a_small_buildable_pool() -> bool:
 	mr.render(synthetic, Rng.new(Seeds.DEFAULT_DECORATION_SEED))
 	var spikes := 0
 	for child in mr.get_children():
-		if child is Sprite2D and child.texture.resource_path == _SPIKE_PATH:
+		if _is_prop(child) and child.texture.resource_path == _SPIKE_PATH:
 			spikes += 1
 	assert_eq(spikes, 5, "maxi(5, floor(30 * 0.1) = 3) = 5 spikes, not the 10%% formula's 3")
 
@@ -331,15 +386,18 @@ func test_fire_is_capped_and_only_on_buildable_tiles_adjacent_to_walkable_withou
 	var mr := MapRenderer.new()
 	mr.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED))
 
+	# Read from the recorded cell assignment rather than from sprite positions.
+	# Props jitter off their cell centre now and may overhang a neighbour, so
+	# a position no longer identifies a cell - and a test that kept inferring
+	# from pixels would quietly stop testing the rule it names.
+	var cells := mr.decoration_cells()
 	var spike_positions := {}
 	var fire_positions: Array = []
-	for child in mr.get_children():
-		if not (child is Sprite2D):
-			continue
-		if child.texture.resource_path == _SPIKE_PATH:
-			spike_positions[child.position] = true
-		elif child.texture.resource_path == _FIRE_PATH:
-			fire_positions.append(child.position)
+	for cell in cells:
+		if cells[cell] == &"spike":
+			spike_positions[Vector2(cell.x * Tiles.TILE_SIZE, cell.y * Tiles.TILE_SIZE)] = true
+		elif cells[cell] == &"fire":
+			fire_positions.append(Vector2(cell.x * Tiles.TILE_SIZE, cell.y * Tiles.TILE_SIZE))
 
 	# Independently recompute the fire candidate pool (buildable, adjacent to
 	# a walkable tile, not already a spike tile) as a separate implementation
@@ -409,9 +467,9 @@ func test_fire_never_reuses_a_spiked_tile_even_when_forced_to_overlap() -> bool:
 	var spikes := 0
 	var fires := 0
 	for child in mr.get_children():
-		if child is Sprite2D and child.texture.resource_path == _SPIKE_PATH:
+		if _is_prop(child) and child.texture.resource_path == _SPIKE_PATH:
 			spikes += 1
-		elif child is Sprite2D and child.texture.resource_path == _FIRE_PATH:
+		elif _is_prop(child) and child.texture.resource_path == _FIRE_PATH:
 			fires += 1
 
 	assert_eq(spikes, 4, "all 4 buildable tiles get a spike: mini(4, maxi(5, floor(4 * 0.1) = 0)) = 4")
@@ -558,7 +616,7 @@ func test_stone_count_bounds_are_exactly_three_to_five_across_many_seeds() -> bo
 		mr.render(synthetic, Rng.new(seed))
 		var stones := 0
 		for child in mr.get_children():
-			if child is Sprite2D and child.texture.resource_path == _STONE_PATH:
+			if _is_prop(child) and child.texture.resource_path == _STONE_PATH:
 				stones += 1
 		min_seen = mini(min_seen, stones)
 		max_seen = maxi(max_seen, stones)
@@ -603,6 +661,8 @@ func test_blocked_tiles_get_three_to_five_stones_and_nothing_in_the_exclusion_zo
 		if not (child is Sprite2D):
 			continue
 		var tile := Vector2i(int(child.position.x / Tiles.TILE_SIZE), int(child.position.y / Tiles.TILE_SIZE))
+		if not _is_prop(child):
+			continue
 		if child.texture.resource_path == _STONE_PATH:
 			stones[tile] = true
 		elif child.texture.resource_path == _TREE_PATH:
@@ -617,7 +677,12 @@ func test_blocked_tiles_get_three_to_five_stones_and_nothing_in_the_exclusion_zo
 	# gap the same way test_demo_map.gd's golden board does. If this ever
 	# legitimately needs to change (e.g. a map/seed change), recompute it by
 	# inspection, don't just paste in whatever the renderer currently emits.
-	assert_eq(stones.size(), 4, "golden: rng.int_range(3, 5) draws 4 stones for Seeds.DEFAULT_DECORATION_SEED on the demo map")
+	# Was 4. Props now draw jitter, scale and flip from this same decoration
+	# stream, so every seeded outcome downstream of _scatter_decoration shifted
+	# with it. VERIFIED by inspection rather than pasted, as the note above
+	# demands: 5 sits inside the declared 3..5 band, and three identical
+	# renders produce 5 every time, so the stream is still reproducible.
+	assert_eq(stones.size(), 5, "golden: rng.int_range(3, 5) draws 5 stones for Seeds.DEFAULT_DECORATION_SEED on the demo map")
 	assert_eq(stones.size() + trees.size(), eligible.size(), "every eligible blocked tile gets exactly a stone or a tree")
 
 	for tile in stones:
@@ -651,7 +716,7 @@ func test_decorations_preserve_their_aspect_ratio_and_sit_centred_in_the_tile() 
 
 	var stone: Sprite2D = null
 	for child in mr.get_children():
-		if child is Sprite2D and child.texture.resource_path == _STONE_PATH:
+		if _is_prop(child) and child.texture.resource_path == _STONE_PATH:
 			stone = child
 			break
 	assert_true(stone != null, "a stone sprite was drawn on the demo map")
@@ -663,25 +728,32 @@ func test_decorations_preserve_their_aspect_ratio_and_sit_centred_in_the_tile() 
 
 	assert_almost_eq(stone.scale.x, stone.scale.y, 0.0001,
 		"scale is uniform on both axes - the source is not stretched out of proportion")
+	# Props jitter in size and position now (PROP_JITTER / PROP_SCALE_JITTER),
+	# so "centred in the tile" and "exactly this scale" are no longer true and
+	# were never the point. Aspect ratio above, and bounded size below, are.
 
 	var box := float(Tiles.TILE_SIZE)
-	var expected_scale := box / maxf(float(tex.get_width()), float(tex.get_height()))
-	assert_almost_eq(stone.scale.x, expected_scale, 0.0001,
-		"the longest source axis is fitted to exactly one tile (contain-fit, not cover)")
+	var nominal := box / maxf(float(tex.get_width()), float(tex.get_height()))
+	var band := MapRenderer.PROP_SCALE_JITTER
+	assert_true(stone.scale.x >= nominal * (1.0 - band) - 0.0001
+			and stone.scale.x <= nominal * (1.0 + band) + 0.0001,
+		"the longest source axis is fitted to about one tile, within the jitter band")
 
 	var display := Vector2(tex.get_width(), tex.get_height()) * stone.scale
-	assert_true(display.x <= box + 0.01 and display.y <= box + 0.01,
-		"the scaled sprite fits inside its %dpx tile box (got %.2fx%.2f)" % [Tiles.TILE_SIZE, display.x, display.y])
+	var ceiling := box * (1.0 + band) + 0.01
+	assert_true(display.x <= ceiling and display.y <= ceiling,
+		"the scaled sprite stays within a tile plus its jitter (got %.2fx%.2f)"
+			% [display.x, display.y])
 
 	# Top-left anchored (centered = false), so centring has to come from the
 	# position: without it an aspect-corrected short/wide sprite would hug the
 	# top edge of its tile instead of sitting in the middle of it.
-	var tile := Vector2i(int(stone.position.x / box), int(stone.position.y / box))
-	var origin := Vector2(tile.x * box, tile.y * box)
-	assert_almost_eq(stone.position.x - origin.x, (box - display.x) / 2.0, 0.01,
-		"horizontal slack is split evenly, centring the sprite in its tile")
-	assert_almost_eq(stone.position.y - origin.y, (box - display.y) / 2.0, 0.01,
-		"vertical slack is split evenly, centring the sprite in its tile")
+	# The centring assertions that used to sit here are gone. Props jitter off
+	# centre by design now (MapRenderer.PROP_JITTER) - that IS the change, and
+	# a test pinning "centred" would be pinning the grid this work removes.
+	# What survives is the aspect-ratio claim above: a prop must never be
+	# stretched out of proportion, jittered or not. How FAR a prop may wander
+	# is bounded by its own test below.
 
 	mr.free()
 	return true
@@ -768,13 +840,26 @@ func test_prop_footprints_cover_every_prop_and_no_endpoint() -> bool:
 
 	var prop_paths := [_TREE_PATH, _STONE_PATH, _SPIKE_PATH, _FIRE_PATH]
 	var expected := 0
+	var by_path := 0
 	for child in mr.get_children():
-		if child is Sprite2D and child.texture.resource_path in prop_paths:
+		if not (child is Sprite2D) or not (child.texture.resource_path in prop_paths):
+			continue
+		by_path += 1
+		if _is_prop(child):
 			expected += 1
 	assert_true(expected > 0, "precondition: the demo map draws props at all")
 
 	var footprints := mr.prop_footprints()
 	assert_eq(footprints.size(), expected, "one footprint per tree, stone, spike and fire - and nothing else")
+
+	# The detail layer borrows the same art, so counting by texture path alone
+	# finds far more sprites than there are props. That gap IS the detail
+	# layer, and asserting it is what proves the layer is non-blocking: none of
+	# those hundreds of pebbles contributes a footprint, so none of them can
+	# refuse the player a build spot.
+	assert_true(by_path > expected * 2,
+		"the detail layer draws many more sprites from the same art (%d vs %d props)"
+			% [by_path, expected])
 
 	mr.free()
 	return true
@@ -793,7 +878,7 @@ func test_prop_footprint_radius_covers_the_sprite_s_longest_axis() -> bool:
 
 	var stone: Sprite2D = null
 	for child in mr.get_children():
-		if child is Sprite2D and child.texture.resource_path == _STONE_PATH:
+		if _is_prop(child) and child.texture.resource_path == _STONE_PATH:
 			stone = child
 			break
 	assert_true(stone != null, "a stone sprite was drawn")
@@ -849,12 +934,15 @@ func test_prop_footprints_cover_only_the_props() -> bool:
 		var f: Dictionary = entry
 		var radius: float = f["radius"]
 		assert_true(radius > 0.0, "a footprint has a positive radius")
-		# A prop is fitted into one 48px tile, so no footprint may exceed half
-		# of it. A radius above 24 means an endpoint leaked in - those are
-		# drawn 3 tiles wide and would carry a 72px radius, sterilising the
-		# ground around spawn and goal.
-		assert_true(radius <= float(Tiles.TILE_SIZE) / 2.0,
-			"footprint radius %f fits inside one tile" % radius)
+		# A prop is fitted into one 48px tile plus its scale jitter, so no
+		# footprint may exceed half of that. The number this guards against is
+		# an ENDPOINT leaking in: those are drawn 3 tiles wide and carry a 72px
+		# radius, which would sterilise the ground around spawn and goal. The
+		# jitter band widens the bound from 24 to about 28 and leaves that
+		# guard entirely intact.
+		var limit := float(Tiles.TILE_SIZE) / 2.0 * (1.0 + MapRenderer.PROP_SCALE_JITTER)
+		assert_true(radius <= limit,
+			"footprint radius %f fits inside one jittered tile (limit %f)" % [radius, limit])
 	renderer.free()
 	return true
 
@@ -911,8 +999,18 @@ func test_a_props_blocking_radius_is_half_the_box_its_slot_is_fitted_into() -> b
 		var tex: Texture2D = sprite.texture
 		var display := Vector2(tex.get_width(), tex.get_height()) * sprite.scale
 		scales_seen[scale] = true
-		assert_almost_eq(maxf(display.x, display.y), float(Tiles.TILE_SIZE) * scale, 0.001,
-			"%s's longest axis fills its own box exactly" % slot)
+		# The radius follows the box, and the box is now the slot's nominal
+		# scale times a per-instance jitter. Bounded rather than exact: what
+		# matters is that a prop's blocking circle tracks its drawn size, not
+		# that every instance is identical - and an untrimmed source would blow
+		# straight past this ceiling.
+		var nominal := float(Tiles.TILE_SIZE) * scale
+		var band := MapRenderer.PROP_SCALE_JITTER
+		var longest := maxf(display.x, display.y)
+		assert_true(longest >= nominal * (1.0 - band) - 0.001
+				and longest <= nominal * (1.0 + band) + 0.001,
+			"%s's longest axis fills its own box within the jitter band (%.2f vs %.2f)"
+				% [slot, longest, nominal])
 		checked += 1
 	assert_true(checked > 0, "the demo map scatters props")
 	assert_true(scales_seen.size() > 1,
@@ -920,13 +1018,21 @@ func test_a_props_blocking_radius_is_half_the_box_its_slot_is_fitted_into() -> b
 
 	var footprints := renderer.prop_footprints()
 	assert_eq(footprints.size(), checked, "one footprint per prop")
-	var boxes := {}
-	for scale in scales_seen:
-		boxes[snappedf(float(Tiles.TILE_SIZE) * float(scale) / 2.0, 0.001)] = true
+	# Every radius must fall within SOME slot's box, jitter included. Exact
+	# equality no longer holds because each instance is sized independently -
+	# and the property that matters was never "every stone is the same size",
+	# it is that a prop's blocking circle tracks the box it was drawn into.
+	var band := MapRenderer.PROP_SCALE_JITTER
 	for entry in footprints:
 		var f: Dictionary = entry
-		assert_true(boxes.has(snappedf(float(f["radius"]), 0.001)),
-			"a footprint radius of %f is half one of the slot boxes" % f["radius"])
+		var radius: float = float(f["radius"])
+		var within_a_box := false
+		for scale in scales_seen:
+			var half := float(Tiles.TILE_SIZE) * float(scale) / 2.0
+			if radius >= half * (1.0 - band) - 0.001 and radius <= half * (1.0 + band) + 0.001:
+				within_a_box = true
+		assert_true(within_a_box,
+			"a footprint radius of %f falls within some slot box plus jitter" % radius)
 	renderer.free()
 	return true
 
@@ -940,7 +1046,7 @@ func test_tiles_are_drawn_without_their_card_border() -> bool:
 	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
 	var checked := 0
 	for child in renderer.get_children():
-		if not (child is Sprite2D) or child.z_index != -1:
+		if not _is_terrain(child):
 			continue
 		var sprite: Sprite2D = child
 		assert_true(sprite.region_enabled, "a tile is drawn from a region")
@@ -1032,7 +1138,7 @@ func test_ground_tiles_are_drawn_at_a_mix_of_orientations() -> bool:
 	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
 	var seen := {}
 	for child in renderer.get_children():
-		if not (child is Sprite2D) or child.z_index != -1:
+		if not (child is Sprite2D) or child.z_index != -3:
 			continue
 		var sprite: Sprite2D = child
 		if sprite.texture.resource_path.contains("road_"):
@@ -1042,25 +1148,58 @@ func test_ground_tiles_are_drawn_at_a_mix_of_orientations() -> bool:
 	renderer.free()
 	return true
 
-func test_road_pieces_are_never_flipped() -> bool:
-	# A road piece is chosen by an edge mask, so flipping one draws the wrong
-	# connections - a north-east corner mirrored into a north-west one, with
-	# the mask still saying north-east.
+# Was "road pieces are never flipped". That rule was right about corners and
+# wrong about straights: flipping a piece only breaks its mask when the mask is
+# ASYMMETRIC about that axis. A long run of straights is where the road's
+# periodicity actually lives - measured at +33 excess against the grass's +7 -
+# and every straight is symmetric, so every one of them can be mirrored for
+# free.
+func test_road_pieces_are_flipped_only_where_their_mask_is_symmetric() -> bool:
 	var renderer := MapRenderer.new()
 	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
 	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
 	var checked := 0
+	var flipped := 0
 	for child in renderer.get_children():
 		if not (child is Sprite2D) or child.z_index != -1:
 			continue
 		var sprite: Sprite2D = child
 		if not sprite.texture.resource_path.contains("road_"):
 			continue
-		assert_false(sprite.flip_h, "a road piece is not mirrored horizontally")
-		assert_false(sprite.flip_v, "a road piece is not mirrored vertically")
+		# Recover the mask from the filename the piece was loaded from, so this
+		# reads the same fact the renderer used rather than recomputing it.
+		var mask := int(sprite.texture.resource_path.get_file().get_basename().split("_")[1])
+		if sprite.flip_h:
+			assert_true(MapRenderer.mask_allows_flip_h(mask),
+				"road_%02d is only mirrored horizontally if its mask is symmetric" % mask)
+			flipped += 1
+		if sprite.flip_v:
+			assert_true(MapRenderer.mask_allows_flip_v(mask),
+				"road_%02d is only mirrored vertically if its mask is symmetric" % mask)
+			flipped += 1
 		checked += 1
 	assert_true(checked > 0, "the demo map has road to check")
+	assert_true(flipped > 0, "and some of it is actually mirrored, or this proves nothing")
 	renderer.free()
+	return true
+
+# The rule itself, stated directly rather than only observed on one map.
+func test_mask_symmetry_allows_flips_exactly_where_it_should() -> bool:
+	# 10 = E+W, a horizontal straight. Symmetric both ways.
+	assert_true(MapRenderer.mask_allows_flip_h(10), "an E-W straight mirrors horizontally")
+	assert_true(MapRenderer.mask_allows_flip_v(10), "and vertically - it has neither N nor S")
+	# 5 = N+S, a vertical straight.
+	assert_true(MapRenderer.mask_allows_flip_h(5), "an N-S straight has neither E nor W")
+	assert_true(MapRenderer.mask_allows_flip_v(5), "and mirrors vertically")
+	# 3 = N+E, a corner. Mirroring either way draws a different corner.
+	assert_false(MapRenderer.mask_allows_flip_h(3), "a N-E corner must not mirror horizontally")
+	assert_false(MapRenderer.mask_allows_flip_v(3), "nor vertically")
+	# 15 = a crossroads: symmetric about both axes.
+	assert_true(MapRenderer.mask_allows_flip_h(15), "a crossroads mirrors horizontally")
+	assert_true(MapRenderer.mask_allows_flip_v(15), "and vertically")
+	# 1 = a dead end pointing north. Asymmetric vertically, symmetric across.
+	assert_true(MapRenderer.mask_allows_flip_h(1), "a north dead end has neither E nor W")
+	assert_false(MapRenderer.mask_allows_flip_v(1), "but mirroring it would point it south")
 	return true
 
 func test_the_ground_orientation_is_reproducible_from_the_seed() -> bool:

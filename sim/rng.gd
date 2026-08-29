@@ -32,6 +32,19 @@ func int_range(lo: int, hi: int) -> int:
 		hi = swap
 	return lo + int(next() * float(hi - lo + 1))
 
+## Float in [lo, hi). Mirrors int_range's argument handling, including the
+## swap, so the two read the same at a call site.
+##
+## Added for the map renderer's prop jitter, which needs continuous variation
+## rather than a whole number of anything - a prop nudged by an integer number
+## of pixels still lands on a lattice, just a finer one.
+func float_range(lo: float, hi: float) -> float:
+	if hi < lo:
+		var swap := lo
+		lo = hi
+		hi = swap
+	return lo + next() * (hi - lo)
+
 ## A uniformly chosen element. Returns null on an empty array.
 func pick(items: Array):
 	if items.is_empty():
