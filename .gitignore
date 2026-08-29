@@ -7,3 +7,8 @@ export/
 # along with an [autoload] entry in project.godot that must be stripped before
 # committing. Neither belongs to the game.
 mcp_interaction_server.gd
+
+# Run logs from ai-supervisor (the Claude -> Codex usage watcher). The task and
+# handoff files next to them are deliberately NOT ignored: they describe the
+# work, not the run.
+.ai/*.log
