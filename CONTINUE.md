@@ -3,11 +3,18 @@
 **Point an assistant at this file and say "continue this project."** It contains
 everything needed to resume with no prior conversation.
 
-Last updated: 2026-08-26 · Branch `feat/slice-1-roster-resistance-bosses` ·
-**everything through slice 0 is merged and deployed. Slice 1 — the roster,
-armour and shields, damage types, the shaman aura, bosses and the measured
-health curve — is implemented on this branch, suite green at 10148 checks
-across 41 files, and not yet merged.**
+Last updated: 2026-08-29 · Branch `master` · **everything through slice 1 is
+merged. Suite green at 13,423 checks across 41 files.**
+
+**HEAD `90a1ce9` is committed but NOT PUSHED.** `origin/master` is at
+`9662465`. Pushing republishes the live public site, so confirm with the owner
+first — CI runs the whole suite before it exports, but the deploy is public
+either way.
+
+Since the last update: the three maps migrated to a **text format** with a
+Godot painting scene (§12), fences and fires became **camps** instead of
+scatter (§13), and the **Sell button** was fixed — it had been rendering 38px
+below the bottom edge of the viewport.
 
 > **Slice 0's spec and plan are
 > [`docs/superpowers/specs/2026-08-24-slice-0-design.md`](docs/superpowers/specs/2026-08-24-slice-0-design.md)
@@ -77,8 +84,9 @@ Two documents hold the reasoning:
 
 ## 2. Where things stand
 
-**All 23 tasks complete. The game is playable end to end** — main menu → game →
-win or lose → retry or menu, with sound.
+**The game is playable end to end** — main menu → game → win or lose → next map
+or menu, with sound, across three maps and twenty waves with bosses on 10
+and 20.
 
 | Layer | State |
 |---|---|
@@ -90,7 +98,9 @@ win or lose → retry or menu, with sound.
 | `audio/` — pooled playback, 17 core-slice events | ✅ complete |
 | Web export | ✅ preset + build; **boots and renders in a browser; not yet played in one** |
 | Deploy | ✅ live at **https://tmegill1.github.io/project-t-godot/** — every push to `master` republishes, at the address GitHub assigns (no custom domain) |
-| Tests | ✅ 10148 checks across 41 files, exit 0 |
+| Tests | ✅ 13,423 checks across 41 files, exit 0 |
+| Map authoring | ✅ text format (`data/maps/*.txt`) + a `@tool` painting scene — see §12 |
+| Decoration | ✅ camps (wall + fires) in forest; scattered landmarks in ice/desert — see §13 |
 | Enemies | ✅ five — goblin, bat, shaman, ogre (rank and file) and troll (**boss only**) |
 | Resistance | ✅ armour on ogres/trolls, shields on bats/shamans, both scaling by wave |
 | Damage types | ✅ physical and magic, with soft edges and a damage floor |
@@ -659,3 +669,103 @@ Play a full run before changing any number. The balance has never been playteste
 and every value came across from a prototype whose own notes call them
 placeholders; `sim/harness.gd` can simulate whole waves headlessly — upgrade
 tiers included — so tuning does not mean sitting through twenty of them.
+
+---
+
+## 12. Making maps
+
+Maps are **plain text**, one character per tile, in `data/maps/*.txt`:
+`S` spawn, `G` goal, `=` road, `#` blocked, `.` buildable. `data/map_format.gd`
+parses, formats and validates them; `data/maps.gd` reads the file named by each
+map's `"layout"` field. The old algorithmic builders (`demo_map.gd`, `map2.gd`,
+`map3.gd`) are **deleted** — the shape of a map is now the file.
+
+**To paint one:** open `tools/map_editor.tscn` in the Godot editor, select the
+`Layer` node, and use Godot's own TileMap panel — rectangle fill, bucket, line,
+undo, all free. Then select the root node and tick `load_map` (pull a committed
+map in), `export_map` (write your painting out), or `check_map` (report problems
+without writing) in the Inspector.
+
+**The game only ever reads the `.txt`.** `tools/` is excluded from the export,
+the editor is a `@tool` script rather than an addon (so the no-addons rule
+holds), and none of it ships — verified by loading the live `.pck` and
+confirming the scene, IO module, baker and palette are all absent. Delete the
+editor tomorrow and every map still loads. Adding a map is a `.txt` plus one
+`Maps.DEFS` entry.
+
+Export **refuses** a map with problems, naming the cell: *"the spawn at column
+0, row 0 cannot reach the goal"*. All three shipped maps round-trip
+byte-identical through the real scene, which is what stops an edit rewriting a
+whole file and burying the actual change in noise.
+
+**`PathFinder.get_all_spawn_paths` cannot tell you whether a spawn can reach the
+goal.** It returns a two-point *fallback* path for one that cannot, because
+`Movement.advance` indexes into a path and derives arrival from its length — so
+every path must have a start and an end whatever the map looks like. Counting
+its results therefore always equals counting spawns, and a test doing exactly
+that passed on a map with a wall across it. Use
+`PathFinder.unreachable_spawns`.
+
+---
+
+## 13. Decoration: camps, and what a prop slot actually is
+
+Fences and fires do not scatter. They appear only as **camps**: a run of 3–5
+abutting wall sections with one or two fire pits behind them, sited 2–3 tiles
+back from the road and one tile clear of the map border. Anything that used to
+be a lone fence is now a tree or a rock.
+
+The reason is that a palisade and a fire pit are *manufactured* objects. A
+boulder alone in a field is a boulder; a fence alone in a field is a fence
+around nothing.
+
+**Camp walls skip the jitter every other prop gets** — alignment is the whole
+effect, since the art only abuts at exact tile pitch. That also means they skip
+the road clamp jitter carries (`_room_towards`), so they are safe *only* because
+the siting rules hold them clear of the lane. Relaxing any siting rule makes
+`test_no_prop_overhangs_the_road` fail, which is how that dependency was found.
+
+**A prop slot name does not tell you what the art is.** `Biomes.PROP_SLOTS` is
+the same four names in every biome, but `spike` is a 95x63 wooden palisade in
+forest, a 37x79 totem on a post in ice, and a 42x35 skull pile in desert. Only
+the palisade tiles into a wall — five totems in a row would be a worse version
+of the problem camps fix. `Biomes.has_wall_art()` carries that fact and camps
+are forest-only because of it; ice and desert scatter their spike as the
+landmark it actually is. **Check the PNG dimensions before writing any layout
+rule over a slot name.**
+
+Camps cost build space, measured rather than assumed: legal tower positions on
+a half-tile lattice went 46.3% → 42.1% on The Pass, 54.7% → 51.7% on The Fork,
+50.1% → 45.5% on The Coils. Against a 16-tower limit and 542 legal spots on the
+tightest map, nowhere near binding — but re-measure if camp counts or widths
+grow. The variant that held the prop count steady was built and rejected: it
+stripped The Pass to six scattered props.
+
+`update.md` records what would finish the idea — wall art for the other two
+biomes, a corner piece, and hand-authored settlements in the map text rather
+than rolled camps.
+
+---
+
+## 14. The sidebar has to fit
+
+The 140px column right of the map holds the build palette **or** the tower
+inspector, never both. Stacked they needed 924px of a 672px viewport, and the
+last row — **Sell** — rendered 38px below the bottom edge: built, wired, and
+covered by a test that pressed it and asserted the board sold, while no player
+could reach it. Every test asked "does this button work"; none asked "is it on
+the screen."
+
+Selecting a tower hands the column to the inspector; ESC or a tap on empty
+ground hands it back. Worst case is now 465px of 672.
+
+**The viewport height is the map's pixel height** (`GameBoard.required_content_size`),
+so the shortest shipped map is the binding constraint — a new, shorter map can
+put this back. `test_tower_panel.gd` pins it.
+
+Two traps if you touch this: a `Container` returns `(0, 0)` from
+`get_combined_minimum_size()` outside a live tree *and* whenever it is hidden,
+so a fit test must sum the children itself; and the inspector needs its own
+`bind()` (game.gd binds it separately from the panel) or every row is
+text-less and reports the bare 56px tap minimum instead of the 69px three lines
+of tier text actually take.
