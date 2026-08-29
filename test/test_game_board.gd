@@ -1546,3 +1546,72 @@ func test_a_boss_pays_its_own_bounty() -> bool:
 		"and paid a bounty in the boss's league, not a rank-and-file reward")
 	e.free()
 	return true
+
+# --------------------------------------------------------------------------
+# Escape clears the current selection
+# --------------------------------------------------------------------------
+#
+# Bound to the ui_cancel ACTION rather than a raw keycode: it is Escape by
+# default, it survives remapping, and it is what every other Godot UI in the
+# project would use.
+
+func _escape() -> InputEventAction:
+	var e := InputEventAction.new()
+	e.action = &"ui_cancel"
+	e.pressed = true
+	return e
+
+func test_escape_deselects_a_selected_tower() -> bool:
+	var board := _ready_board()
+	board.select_tower_kind(&"basic")
+	board._try_place(_find_placeable_positions(board, 1)[0])
+	board._select_tower(board._towers_root.get_child(0))
+	assert_true(board.get_selected_tower() != null, "precondition: a tower is selected")
+	board._unhandled_input(_escape())
+	assert_true(board.get_selected_tower() == null, "escape cleared it")
+	board.free()
+	return true
+
+# The same gesture cancels a pending build, which is the other thing "the
+# thing I am currently doing" can mean. Escaping out of a half-made decision
+# should not leave a ghost following the cursor.
+func test_escape_cancels_a_pending_build_selection() -> bool:
+	var board := _ready_board()
+	board.select_tower_kind(&"mortar")
+	assert_eq(board.get_selected_kind(), &"mortar", "precondition: a kind is armed")
+	board._unhandled_input(_escape())
+	assert_eq(board.get_selected_kind(), &"", "escape disarmed it")
+	board.free()
+	return true
+
+func test_escape_with_nothing_selected_is_harmless() -> bool:
+	var board := _ready_board()
+	board._unhandled_input(_escape())
+	assert_true(board.get_selected_tower() == null, "still nothing selected")
+	assert_eq(board.get_selected_kind(), &"", "and nothing armed")
+	board.free()
+	return true
+
+# A released Escape must not fire the same action twice.
+func test_only_the_press_clears_the_selection() -> bool:
+	var board := _ready_board()
+	board.select_tower_kind(&"basic")
+	var release := InputEventAction.new()
+	release.action = &"ui_cancel"
+	release.pressed = false
+	board._unhandled_input(release)
+	assert_eq(board.get_selected_kind(), &"basic", "a release changes nothing")
+	board.free()
+	return true
+
+# Escape after the run has ended must not reach the board, matching every
+# other input it already ignores once _run_finished is set.
+func test_escape_is_ignored_once_the_run_is_over() -> bool:
+	var board := _ready_board()
+	board.select_tower_kind(&"basic")
+	board.force_game_over_for_test()
+	board._unhandled_input(_escape())
+	assert_eq(board.get_selected_kind(), &"basic",
+		"the board stops listening when the run is finished")
+	board.free()
+	return true

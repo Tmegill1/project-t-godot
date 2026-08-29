@@ -144,6 +144,15 @@ func get_map_name() -> StringName: return _map_name
 func get_tower_count(kind: StringName) -> int:
 	return _counts.get(kind, 0)
 
+## The tower the player has tapped, or null. Exposed so a test can assert on
+## selection without reaching into the board's private state.
+func get_selected_tower() -> Tower:
+	return _selected_tower
+
+## The build kind the player has armed, or empty.
+func get_selected_kind() -> StringName:
+	return _selected_kind
+
 ## The itemised payout from the most recent wave clear, for the HUD and tests.
 ## Duplicated so a caller cannot edit the board's own record.
 func get_last_wave_reward() -> Dictionary:
@@ -398,6 +407,14 @@ func _on_wave_cleared() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if _run_finished:
 		return
+	# Escape clears whatever the player is in the middle of - a selected tower
+	# or a half-made build decision. Bound to the ACTION rather than a raw
+	# keycode: ui_cancel is Escape by default, survives remapping, and is what
+	# the rest of Godot's UI already listens for.
+	if event.is_action_pressed(&"ui_cancel"):
+		clear_selection()
+		get_viewport().set_input_as_handled()
+		return
 	if event is InputEventMouseMotion:
 		_update_ghost(get_global_mouse_position())
 		return
@@ -450,6 +467,22 @@ func _update_ghost(world: Vector2) -> void:
 	_ghost_range.radius = float(def["range"])
 	_ghost_range.tint = def["color"]
 	_ghost_range.queue_redraw()
+
+## Drops both kinds of selection: the tower being inspected and the build kind
+## being placed. One call, because to a player they are one thing - "stop what
+## I am doing" - and leaving the ghost following the cursor after an Escape
+## would read as the key not having worked.
+func clear_selection() -> void:
+	_deselect_tower()
+	_selected_kind = &""
+	# Guarded the way select_tower_kind's own ghost access is: under the test
+	# harness these @onready fields are unresolved, and touching one aborts the
+	# rest of the function - which would silently skip nothing here, since the
+	# state above has already landed, but only because it is ordered this way.
+	if _ghost != null:
+		_ghost.visible = false
+	if _ghost_range != null:
+		_ghost_range.visible = false
 
 func _handle_tap(world: Vector2) -> void:
 	var hit := _tower_at(world)
