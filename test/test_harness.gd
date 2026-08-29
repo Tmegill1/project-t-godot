@@ -254,7 +254,7 @@ func test_splash_radius_boundary_at_wave_ten() -> bool:
 	var r := Harness.run_wave({"wave": 10, "towers": towers, "path": _path()})
 	assert_eq(r["kills"], 0, "exact: a single mortar cannot break wave 10 once armour applies")
 	assert_eq(r["leaks"], 77, "exact: three fewer leaks than the < mutant")
-	assert_eq(r["lives_lost"], 308, "exact: lives lost at this exact leak count")
+	assert_eq(r["lives_lost"], 310, "exact: lives lost at this exact leak count")
 	# 108, not the 120 this paid before the wave gold modifier landed. Wave 10
 	# pays at 0.875, and kill_reward rounds PER KILL rather than on the total,
 	# so this is not simply 120 * 0.875 (which would be 105) - it is the sum of
@@ -398,16 +398,18 @@ func test_wave_twenty_undefended_completes_at_the_default_tick_size() -> bool:
 	# is still the fastest thing in the game, so this number is the direct
 	# regression witness for the Critical: a revert to the un-clamped step
 	# turns it back into DEFAULT_MAX_TICKS.
-	assert_eq(r["ticks"], 4941, "wave 20 undefended takes exactly this many ticks")
+	assert_eq(r["ticks"], 6742, "wave 20 undefended takes exactly this many ticks")
 	# Derived, not hardcoded: "every enemy walks off the end" is the claim, and
 	# a literal restates the roster's size instead - so it fails whenever a kind
 	# is legitimately added, teaching the reader to bump the number.
 	assert_eq(r["leaks"], _total_spawn_count(20), "every wave-20 enemy walks off the end")
-	# Lives lost stays exact. Leak.resolve caps at 4 per leak from wave 6 on,
-	# so this is leaks * 4 today - and pinning the product is what would catch
-	# the cap changing without the leak count changing.
-	assert_eq(r["lives_lost"], _total_spawn_count(20) * Leak.MAX_LIFE_LOSS_PER_LEAK,
-		"lives lost at wave 20's health-based leak cost")
+	# Lives lost stays exact. Every ordinary leak sits at the cap; the boss
+	# does NOT, and costs its own declared figure instead - so this is no
+	# longer simply leaks * 4.
+	assert_eq(r["lives_lost"],
+		(_total_spawn_count(20) - 1) * Leak.MAX_LIFE_LOSS_PER_LEAK
+			+ int(Bosses.on_wave(20)["life_loss"]),
+		"lives lost at wave 20's leak costs, boss included")
 	return true
 
 # The one-line-of-intent test. Waves 19 and 20 soft-locked the game for six
@@ -502,8 +504,8 @@ func test_a_slowing_tower_makes_a_wave_take_longer() -> bool:
 	# in the same spirit as the undefended wave-1 pin above. "Longer" alone
 	# cannot catch a slow that never EXPIRES - that direction is also longer.
 	# An exact count can: drop the per-tick Slow.tick and this number moves.
-	assert_eq(slowed["ticks"], 5136, "wave 20 against one Deep Freeze fast tower takes exactly this long")
-	assert_eq(plain["ticks"], 4941, "and the same build without the slow takes exactly this long")
+	assert_eq(slowed["ticks"], 7054, "wave 20 against one Deep Freeze fast tower takes exactly this long")
+	assert_eq(plain["ticks"], 6742, "and the same build without the slow takes exactly this long")
 	return true
 
 # The termination guard from the soft-lock fix, re-run with slowing in play.
@@ -659,8 +661,8 @@ func test_shields_are_spent_in_the_harness_rather_than_absorbing_forever() -> bo
 	# EXACT, and the exactness is the point. "kills > 0" passes even when every
 	# shield is immortal, because the unshielded goblins and ogres still die -
 	# measured directly, dropping the write-back takes this from 41 to 15.
-	assert_eq(r["kills"], 33, "exact: shields are spent, so shielded enemies die too")
-	assert_eq(r["leaks"], 44, "exact: and this many still get through")
+	assert_eq(r["kills"], 34, "exact: shields are spent, so shielded enemies die too")
+	assert_eq(r["leaks"], 43, "exact: and this many still get through")
 	return true
 
 # The damage type must reach the fight, in BOTH runners.
@@ -700,7 +702,7 @@ func test_the_shaman_aura_reaches_the_harness() -> bool:
 	var r := Harness.run_wave({"wave": 10, "towers": towers, "path": _path()})
 	# EXACT: measured at 33 with the aura running and 41 without it, because
 	# every charge it grants is one more hit the towers have to spend.
-	assert_eq(r["kills"], 33, "the aura's charges cost the defence eight kills")
+	assert_eq(r["kills"], 34, "the aura's charges cost the defence eight kills")
 	assert_true(_wave_has_shamans(10), "precondition: wave 10 actually fields shamans")
 	return true
 
@@ -709,3 +711,44 @@ func _wave_has_shamans(wave: int) -> bool:
 		if entry["kind"] == &"shaman":
 			return true
 	return false
+
+# --------------------------------------------------------------------------
+# The harness spawns bosses with the BOSS's numbers
+# --------------------------------------------------------------------------
+#
+# These exist because Task 7's harness boss wiring silently did not land: the
+# spawn dictionary kept no boss fields at all, so the harness simulated the
+# wave-20 Warlord as an ordinary troll scaled by the wave modifier, and every
+# test stayed green because none of them asserted the boss's stats. It did not
+# even crash, because e.get("boss", false) defaults safely.
+#
+# The whole claim of this file is that a wave simulated here is the wave the
+# player fights. A boss the harness models wrong is that claim failing at
+# exactly the fight that matters most.
+
+func test_a_boss_leak_costs_the_harness_its_declared_lives() -> bool:
+	var r := Harness.run_wave({"wave": 20, "towers": [], "path": _path()})
+	var ordinary := _total_spawn_count(20) - 1
+	var expected := ordinary * Leak.MAX_LIFE_LOSS_PER_LEAK \
+		+ int(Bosses.on_wave(20)["life_loss"])
+	assert_eq(r["lives_lost"], expected,
+		"every ordinary leak at the cap, plus the boss at its own cost")
+	assert_true(expected > _total_spawn_count(20) * Leak.MAX_LIFE_LOSS_PER_LEAK,
+		"which is strictly worse than if the boss were capped like everything else")
+	return true
+
+# The wave-20 boss is far tougher than a troll scaled by the wave modifier, so
+# a heavy defence that clears the wave must take measurably longer than one
+# facing an ordinary troll would.
+func test_the_harness_boss_carries_its_own_health_not_its_kinds() -> bool:
+	var towers: Array = []
+	for col in [3, 5, 7, 9, 11, 13]:
+		towers.append({"kind": &"long", "position": Grid.tile_to_world_center(col, 3),
+			"tiers": {&"sustained": 2, &"burst": 4}})
+	var r := Harness.run_wave({"wave": 10, "towers": towers, "path": _path()})
+	# The Chieftain pays 150 where a troll pays 150 too, so gold cannot tell
+	# them apart - the kill count can: everything dies, boss included.
+	assert_eq(r["kills"], _total_spawn_count(10),
+		"the boss is killable and is counted among the kills")
+	assert_eq(r["leaks"], 0, "nothing got through")
+	return true

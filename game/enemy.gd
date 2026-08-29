@@ -30,6 +30,9 @@ var _flip := false
 ## data/bosses.gd rather than from its kind's table.
 var is_boss := false
 var boss_reward := 0
+## What this boss costs on leak, bypassing Leak's ordinary cap. Zero for
+## everything that is not a boss.
+var boss_life_loss := 0
 ## How much larger a boss draws than its kind. 1.0 for everything else.
 var _boss_display_scale := 1.0
 
@@ -156,8 +159,11 @@ func _physics_process(delta: float) -> void:
 
 	if result["reached_goal"]:
 		sim["alive"] = false
-		leaked.emit(Leak.resolve(
-			{"life_loss": Enemies.DEFS[kind]["life_loss"], "health": sim["health"]}, _wave))
+		leaked.emit(Leak.resolve({
+			"life_loss": Enemies.DEFS[kind]["life_loss"],
+			"health": sim["health"],
+			"boss_life_loss": boss_life_loss,
+		}, _wave))
 		queue_free()
 
 ## Speed after any active slow. Movement reads this, never sim["speed"].
@@ -239,6 +245,7 @@ func make_boss(definition: Dictionary) -> void:
 		return
 	is_boss = true
 	boss_reward = int(definition["reward"])
+	boss_life_loss = int(definition["life_loss"])
 	sim["health"] = float(definition["health"])
 	sim["max_health"] = float(definition["health"])
 	sim["speed"] = float(definition["speed"])

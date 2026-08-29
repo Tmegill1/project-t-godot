@@ -100,3 +100,28 @@ func test_the_boss_entry_names_the_boss_kind() -> bool:
 			assert_eq(entry["kind"], Bosses.on_wave(10)["kind"],
 				"the schedule entry carries the boss's own kind")
 	return true
+
+# --------------------------------------------------------------------------
+# Leak cost
+# --------------------------------------------------------------------------
+
+func test_every_boss_declares_what_it_costs_on_leak() -> bool:
+	for wave in Bosses.WAVES:
+		var b := Bosses.on_wave(wave)
+		assert_true(b.has("life_loss"), "wave %d boss declares life_loss" % wave)
+		assert_true(int(b["life_loss"]) > Leak.MAX_LIFE_LOSS_PER_LEAK,
+			"wave %d boss costs more than an ordinary leak" % wave)
+	return true
+
+func test_the_final_boss_costs_more_on_leak_than_the_first() -> bool:
+	assert_true(int(Bosses.on_wave(20)["life_loss"]) > int(Bosses.on_wave(10)["life_loss"]),
+		"letting the Warlord through is worse than the Chieftain")
+	return true
+
+# A boss leak must be a blow, not an instant loss - the player should be able
+# to lose one boss and keep playing.
+func test_no_single_boss_leak_ends_the_run_outright() -> bool:
+	for wave in Bosses.WAVES:
+		assert_true(int(Bosses.on_wave(wave)["life_loss"]) < Economy.STARTING_LIVES,
+			"wave %d boss is survivable once" % wave)
+	return true

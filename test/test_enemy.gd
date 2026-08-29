@@ -955,3 +955,43 @@ func test_a_boss_draws_larger_than_its_kind() -> bool:
 		"the wave 20 boss is markedly larger than an ordinary troll")
 	plain.free(); boss.free()
 	return true
+
+# --------------------------------------------------------------------------
+# A boss leak costs the board its declared lives
+# --------------------------------------------------------------------------
+#
+# The harness has its own witness for this. The board needs one too - dropping
+# the boss cost here was invisible to the whole suite, because every test that
+# covered it went through the harness.
+
+func test_a_boss_leaking_costs_its_own_declared_lives() -> bool:
+	var e := _ready_enemy()
+	# A path whose second point IS the goal, so one tick walks it off the end.
+	e.setup(&"troll", PackedVector2Array([Vector2.ZERO, Vector2(1.0, 0.0)]), 20)
+	e.make_boss(Bosses.on_wave(20))
+	var cost := []
+	e.leaked.connect(func(lives): cost.append(lives))
+	for i in 20:
+		e._physics_process(1.0)
+		if cost.size() > 0:
+			break
+	assert_eq(cost.size(), 1, "it leaked")
+	assert_eq(int(cost[0]), int(Bosses.on_wave(20)["life_loss"]),
+		"and cost the Warlord's own figure, not the ordinary cap")
+	assert_true(int(cost[0]) > Leak.MAX_LIFE_LOSS_PER_LEAK,
+		"which is strictly worse than any rank-and-file leak")
+	return true
+
+func test_an_ordinary_enemy_leaking_is_still_capped() -> bool:
+	var e := _ready_enemy()
+	e.setup(&"ogre", PackedVector2Array([Vector2.ZERO, Vector2(1.0, 0.0)]), 20)
+	var cost := []
+	e.leaked.connect(func(lives): cost.append(lives))
+	for i in 20:
+		e._physics_process(1.0)
+		if cost.size() > 0:
+			break
+	assert_eq(cost.size(), 1, "it leaked")
+	assert_eq(int(cost[0]), Leak.MAX_LIFE_LOSS_PER_LEAK,
+		"the cap still holds for everything that is not a boss")
+	return true

@@ -28,6 +28,9 @@ const DEFS := {
 		"kind": &"troll", "label": "Troll Chieftain",
 		"health": 220, "speed": 45.0, "armor": 6, "shield": 0,
 		"reward": 150, "display_scale": 1.6,
+		# Past MAX_LIFE_LOSS_PER_LEAK on purpose, and well under the 20-life
+		# budget so losing the Chieftain once is a blow rather than the run.
+		"life_loss": 6,
 	},
 	# The run's final fight. Health well past twice the first boss's, armour
 	# heavy enough that only pierce or the largest per-hit damage in the game
@@ -37,6 +40,10 @@ const DEFS := {
 		"kind": &"troll", "label": "Troll Warlord",
 		"health": 900, "speed": 40.0, "armor": 14, "shield": 0,
 		"reward": 500, "display_scale": 2.2,
+		# Half the life budget in a single leak. The Warlord getting past you
+		# should be the worst thing that happens in a run without being the
+		# last thing.
+		"life_loss": 10,
 	},
 }
 

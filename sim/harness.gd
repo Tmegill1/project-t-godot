@@ -69,7 +69,13 @@ static func run_wave(config: Dictionary) -> Dictionary:
 		while spawned < schedule.size() and schedule[spawned]["at_ms"] <= elapsed:
 			var s: Dictionary = schedule[spawned]
 			var kind: StringName = s["kind"]
-			var health := float(Enemies.scaled_health(kind, modifiers["health_modifier"]))
+			# A boss is an ordinary enemy with different numbers - same
+			# dictionary, same rules downstream, only the stats overridden.
+			# Enemy.make_boss does exactly this on the live board.
+			var boss: Dictionary = Bosses.on_wave(wave) if s.get("boss", false) else {}
+			var is_boss := not boss.is_empty()
+			var health := float(boss["health"]) if is_boss \
+				else float(Enemies.scaled_health(kind, modifiers["health_modifier"]))
 			enemies.append({
 				"id": next_id,
 				"kind": kind,
@@ -77,15 +83,21 @@ static func run_wave(config: Dictionary) -> Dictionary:
 				"path_index": Movement.starting_path_index(path[0], path),
 				"health": health,
 				"max_health": health,
-				"speed": Enemies.scaled_speed(kind, modifiers["speed_modifier"]),
+				"speed": float(boss["speed"]) if is_boss \
+					else Enemies.scaled_speed(kind, modifiers["speed_modifier"]),
 				"alive": true,
 				"dying": false,
 				"slow": Slow.none(),
 				# Read by sim/damage.gd. The live board sets the same two keys in
 				# Enemy.setup; if only one side carried them, every balance number
 				# this harness produces would be a fiction.
-				"armor": int(Enemies.resistance_for(kind, wave)["armor"]),
-				"shield": int(Enemies.resistance_for(kind, wave)["shield"]),
+				"armor": int(boss["armor"]) if is_boss \
+					else int(Enemies.resistance_for(kind, wave)["armor"]),
+				"shield": int(boss["shield"]) if is_boss \
+					else int(Enemies.resistance_for(kind, wave)["shield"]),
+				"boss": is_boss,
+				"reward_override": int(boss["reward"]) if is_boss else 0,
+				"boss_life_loss": int(boss["life_loss"]) if is_boss else 0,
 			})
 			next_id += 1
 			spawned += 1
@@ -105,9 +117,13 @@ static func run_wave(config: Dictionary) -> Dictionary:
 			e["path_index"] = m["path_index"]
 			if m["reached_goal"]:
 				leaks += 1
-				lives_lost += Leak.resolve(
-					{"life_loss": Enemies.DEFS[e["kind"]]["life_loss"], "health": e["health"]},
-					wave)
+				lives_lost += Leak.resolve({
+					"life_loss": Enemies.DEFS[e["kind"]]["life_loss"],
+					"health": e["health"],
+					# A boss carries its own cost here too, or the harness
+					# under-reports exactly the leak that matters most.
+					"boss_life_loss": int(e.get("boss_life_loss", 0)),
+				}, wave)
 				e["alive"] = false
 			else:
 				survivors.append(e)

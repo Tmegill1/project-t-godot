@@ -99,3 +99,65 @@ func test_resolve_does_not_mutate_the_enemy() -> bool:
 	Leak.resolve(enemy, 6)
 	assert_eq(enemy, {"life_loss": 1, "health": 12.0}, "enemy dictionary is untouched")
 	return true
+
+# --------------------------------------------------------------------------
+# A boss costs more than the cap
+# --------------------------------------------------------------------------
+#
+# MAX_LIFE_LOSS_PER_LEAK exists for a real reason: the health-based rule was
+# unbounded and enemy health compounds, so by wave 20 a single leak ended the
+# run. But it also flattened everything - from wave 10 on, a bat, an ogre and
+# a 900-health troll all cost exactly 4, so a boss reaching the goal was
+# indistinguishable from the weakest thing in the game.
+#
+# A boss carries its OWN cost and is exempt from the cap. Bounded by the
+# table rather than by the enemy's health, so the reason the cap exists never
+# comes back.
+
+func test_a_boss_costs_its_own_declared_life_loss() -> bool:
+	var boss := {"life_loss": 5, "health": 900.0, "boss_life_loss": 10}
+	assert_eq(Leak.resolve(boss, 20), 10, "its own cost, not the cap")
+	return true
+
+func test_a_boss_cost_is_not_clamped_by_the_ordinary_cap() -> bool:
+	var boss := {"life_loss": 5, "health": 900.0, "boss_life_loss": 10}
+	assert_true(Leak.resolve(boss, 20) > Leak.MAX_LIFE_LOSS_PER_LEAK,
+		"a boss is exactly the case the cap must not flatten")
+	return true
+
+# Bounded by the TABLE, not by health. The cap exists because a health-based
+# cost compounds without limit; a boss must not reintroduce that.
+func test_a_boss_cost_does_not_scale_with_its_health() -> bool:
+	var small := {"life_loss": 5, "health": 10.0, "boss_life_loss": 10}
+	var huge := {"life_loss": 5, "health": 99999.0, "boss_life_loss": 10}
+	assert_eq(Leak.resolve(small, 20), Leak.resolve(huge, 20),
+		"the cost is declared, not derived from what is left standing")
+	return true
+
+func test_an_ordinary_enemy_is_still_capped() -> bool:
+	var ogre := {"life_loss": 5, "health": 500.0}
+	assert_eq(Leak.resolve(ogre, 20), Leak.MAX_LIFE_LOSS_PER_LEAK,
+		"the cap still holds for everything that is not a boss")
+	return true
+
+func test_a_zero_or_absent_boss_cost_falls_through_to_the_ordinary_rule() -> bool:
+	var no_key := {"life_loss": 2, "health": 30.0}
+	var zero := {"life_loss": 2, "health": 30.0, "boss_life_loss": 0}
+	assert_eq(Leak.resolve(no_key, 20), Leak.MAX_LIFE_LOSS_PER_LEAK, "absent")
+	assert_eq(Leak.resolve(zero, 20), Leak.MAX_LIFE_LOSS_PER_LEAK, "and zero")
+	return true
+
+func test_an_exempt_boss_still_costs_nothing() -> bool:
+	var exempt := {"life_loss": 5, "health": 900.0, "boss_life_loss": 10,
+		"exempt_from_life_loss": true}
+	assert_eq(Leak.resolve(exempt, 20), 0,
+		"exemption outranks the boss cost, as it outranks everything")
+	return true
+
+# The whole point: a boss leak has to be legible as worse than a bat leak.
+func test_a_boss_leak_hurts_more_than_any_ordinary_leak() -> bool:
+	var bat := {"life_loss": 2, "health": 7.0}
+	var boss := {"life_loss": 5, "health": 900.0, "boss_life_loss": 10}
+	assert_true(Leak.resolve(boss, 20) > Leak.resolve(bat, 20) * 2,
+		"a boss getting through is not just another leak")
+	return true
