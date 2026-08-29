@@ -1189,21 +1189,24 @@ func test_road_pieces_are_flipped_only_where_their_mask_is_symmetric() -> bool:
 
 # The rule itself, stated directly rather than only observed on one map.
 func test_mask_symmetry_allows_flips_exactly_where_it_should() -> bool:
-	# 10 = E+W, a horizontal straight. Symmetric both ways.
-	assert_true(MapRenderer.mask_allows_flip_h(10), "an E-W straight mirrors horizontally")
-	assert_true(MapRenderer.mask_allows_flip_v(10), "and vertically - it has neither N nor S")
-	# 5 = N+S, a vertical straight.
-	assert_true(MapRenderer.mask_allows_flip_h(5), "an N-S straight has neither E nor W")
-	assert_true(MapRenderer.mask_allows_flip_v(5), "and mirrors vertically")
+	# 10 = E+W, a horizontal straight. Mirrors ALONG its length only.
+	assert_true(MapRenderer.mask_allows_flip_h(10), "an E-W straight mirrors along its length")
+	assert_false(MapRenderer.mask_allows_flip_v(10),
+		"but NOT across its width - that swaps verges that are not painted alike, "
+		+ "and the road visibly steps between segments")
+	# 5 = N+S, a vertical straight. The mirror image of the above.
+	assert_false(MapRenderer.mask_allows_flip_h(5), "an N-S straight must not mirror across")
+	assert_true(MapRenderer.mask_allows_flip_v(5), "only along its length")
 	# 3 = N+E, a corner. Mirroring either way draws a different corner.
 	assert_false(MapRenderer.mask_allows_flip_h(3), "a N-E corner must not mirror horizontally")
 	assert_false(MapRenderer.mask_allows_flip_v(3), "nor vertically")
 	# 15 = a crossroads: symmetric about both axes.
 	assert_true(MapRenderer.mask_allows_flip_h(15), "a crossroads mirrors horizontally")
 	assert_true(MapRenderer.mask_allows_flip_v(15), "and vertically")
-	# 1 = a dead end pointing north. Asymmetric vertically, symmetric across.
-	assert_true(MapRenderer.mask_allows_flip_h(1), "a north dead end has neither E nor W")
-	assert_false(MapRenderer.mask_allows_flip_v(1), "but mirroring it would point it south")
+	# 1 = a dead end pointing north. It runs along neither axis, so neither
+	# flip is safe.
+	assert_false(MapRenderer.mask_allows_flip_h(1), "a dead end runs along no axis")
+	assert_false(MapRenderer.mask_allows_flip_v(1), "so neither mirror is safe")
 	return true
 
 func test_the_ground_orientation_is_reproducible_from_the_seed() -> bool:

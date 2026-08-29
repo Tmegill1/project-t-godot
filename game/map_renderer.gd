@@ -358,19 +358,25 @@ func _draw_ground_layer(variants: Rng, _shift: Vector2, _alpha: float) -> void:
 				tile.flip_h = variants.int_range(0, 1) == 1
 				tile.flip_v = variants.int_range(0, 1) == 1
 
-## Whether mirroring a piece horizontally still satisfies its own mask.
+## Whether mirroring a piece horizontally leaves the road looking the same.
 ##
-## flip_h swaps EAST (2) and WEST (8), so the mask survives only when it holds
-## both or neither. A straight E-W run and a N-S run both qualify; an
-## north-east corner does not, and flipping one would draw a north-WEST corner
-## where the mask says north-east.
+## Requires the road to RUN horizontally - east AND west - so the mirror is
+## along its length. A first version asked only whether the mask was symmetric
+## about the axis, which also allows the flip when the piece has NEITHER east
+## nor west. That is the case that broke it: a horizontal straight has no north
+## or south, so it was allowed to flip VERTICALLY, and that mirrors the road's
+## cross-section. The verges are not painted the same top and bottom, so the
+## road visibly stepped up and down between segments.
+##
+## Connectivity was never the whole question. A flip has to preserve the ART,
+## and mirroring across a road's width does not.
 static func mask_allows_flip_h(mask: int) -> bool:
-	return (mask & 2 != 0) == (mask & 8 != 0)
+	return (mask & 2 != 0) and (mask & 8 != 0)
 
-## Whether mirroring vertically still satisfies the mask. flip_v swaps NORTH
-## (1) and SOUTH (4), on the same reasoning as mask_allows_flip_h.
+## Whether mirroring vertically leaves the road looking the same. Requires
+## north AND south, on the same reasoning as mask_allows_flip_h.
 static func mask_allows_flip_v(mask: int) -> bool:
-	return (mask & 1 != 0) == (mask & 4 != 0)
+	return (mask & 1 != 0) and (mask & 4 != 0)
 
 ## The four orthogonal neighbours of a cell that are road, as a bitmask.
 ## Bit order is fixed: N=1, E=2, S=4, W=8. Out of bounds is not road.

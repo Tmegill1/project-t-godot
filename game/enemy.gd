@@ -70,7 +70,13 @@ func setup(enemy_kind: StringName, path: PackedVector2Array, wave: int, rng: Rng
 	# walk_0 is the creature standing, so it is what sprite_px is a height OF.
 	# Every other frame - mid-stride, mid-fall, flat - is drawn at this same
 	# scale rather than renormalised to its own height.
-	_frame_scale = float(Enemies.DEFS[kind]["sprite_px"]) * _boss_display_scale \
+	# The kind's own scale, WITHOUT any boss multiplier. make_boss runs after
+	# setup(), so folding _boss_display_scale in here silently used 1.0 - the
+	# boss was never drawn larger, and apply_sprite_height's (standing - drawn)
+	# arithmetic then pushed it off the road because only one half of the sum
+	# knew about the scale. The multiplier is applied at draw time instead,
+	# where both halves see it.
+	_frame_scale = float(Enemies.DEFS[kind]["sprite_px"]) \
 		/ float(_sprite.texture.get_height())
 	apply_sprite_height()
 	refresh_resistance_visual()
@@ -95,8 +101,11 @@ func setup(enemy_kind: StringName, path: PackedVector2Array, wave: int, rng: Rng
 ## were and the body goes down.
 func apply_sprite_height() -> void:
 	var standing := float(Enemies.DEFS[kind]["sprite_px"]) * _boss_display_scale
-	var drawn := float(_sprite.texture.get_height()) * _frame_scale
-	_sprite.scale = Vector2.ONE * _frame_scale
+	# Both terms below carry the boss multiplier, or the two disagree and the
+	# creature is displaced by the difference.
+	var drawn_scale := _frame_scale * _boss_display_scale
+	var drawn := float(_sprite.texture.get_height()) * drawn_scale
+	_sprite.scale = Vector2.ONE * drawn_scale
 	_sprite.position.y = (standing - drawn) / 2.0
 
 ## The one scale every frame of this kind is drawn at, from its standing

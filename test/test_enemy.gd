@@ -995,3 +995,71 @@ func test_an_ordinary_enemy_leaking_is_still_capped() -> bool:
 	assert_eq(int(cost[0]), Leak.MAX_LIFE_LOSS_PER_LEAK,
 		"the cap still holds for everything that is not a boss")
 	return true
+
+# --------------------------------------------------------------------------
+# A boss stands on the path, and is actually drawn bigger
+# --------------------------------------------------------------------------
+#
+# Reported from a play session: the troll walked in the grass beside the road
+# rather than along it. Two bugs in one place - make_boss set the display
+# scale but _frame_scale had already been computed in setup() with the scale
+# still at 1.0, so the boss was never drawn larger AND apply_sprite_height's
+# (standing - drawn) / 2 pushed it 18.6px down, off the road.
+
+func test_an_enemys_sprite_is_centred_on_its_path_position() -> bool:
+	# The node's position IS the path point, so a standing creature's sprite
+	# must sit on it with no vertical offset - otherwise it walks beside the
+	# road instead of along it.
+	for kind in Enemies.KINDS:
+		var e := _ready_enemy()
+		e.setup(kind, _straight_path(), 1)
+		assert_almost_eq(e.get_node("Sprite").position.y, 0.0, 0.01,
+			"%s stands on its path point" % kind)
+		e.free()
+	return true
+
+func test_a_boss_also_stands_on_its_path_position() -> bool:
+	for wave in Bosses.WAVES:
+		var e := _ready_enemy()
+		var definition := Bosses.on_wave(wave)
+		e.setup(definition["kind"], _straight_path(), wave)
+		e.make_boss(definition)
+		assert_almost_eq(e.get_node("Sprite").position.y, 0.0, 0.01,
+			"the wave %d boss stands on the path, not beside it" % wave)
+		e.free()
+	return true
+
+func test_a_boss_is_actually_drawn_larger_than_its_kind() -> bool:
+	for wave in Bosses.WAVES:
+		var definition := Bosses.on_wave(wave)
+		var plain := _ready_enemy()
+		plain.setup(definition["kind"], _straight_path(), wave)
+		var boss := _ready_enemy()
+		boss.setup(definition["kind"], _straight_path(), wave)
+		boss.make_boss(definition)
+		var plain_scale: float = plain.get_node("Sprite").scale.y
+		var boss_scale: float = boss.get_node("Sprite").scale.y
+		assert_almost_eq(boss_scale, plain_scale * float(definition["display_scale"]), 0.001,
+			"the wave %d boss draws at its declared display_scale" % wave)
+		assert_true(boss_scale > plain_scale,
+			"and is visibly bigger than an ordinary one of its kind")
+		plain.free(); boss.free()
+	return true
+
+# The walk cycle must not move the creature off the path either: every frame
+# is drawn at the kind's one standing scale, so a short mid-stride frame sits
+# a little higher rather than sinking.
+func test_the_sprite_stays_on_the_path_across_the_whole_walk_cycle() -> bool:
+	var e := _ready_enemy()
+	e.setup(&"ogre", _straight_path(), 1)
+	var sprite: Sprite2D = e.get_node("Sprite")
+	var standing: float = float(Enemies.DEFS[&"ogre"]["sprite_px"])
+	for frame in Enemies.walk_frames(&"ogre"):
+		sprite.texture = load("res://assets/art/enemies/ogre/walk_%d.png" % frame)
+		e.apply_sprite_height()
+		var drawn: float = sprite.texture.get_height() * sprite.scale.y
+		var bottom: float = sprite.position.y + drawn / 2.0
+		assert_almost_eq(bottom, standing / 2.0, 0.01,
+			"frame %d keeps its feet on the same line" % frame)
+	e.free()
+	return true
