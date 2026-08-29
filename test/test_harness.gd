@@ -10,9 +10,9 @@ extends TestCase
 ## line-by-line mapping and what was deliberately not ported.
 
 func _path() -> PackedVector2Array:
-	Grid.set_active(DemoMap.GRID_COLS, DemoMap.GRID_ROWS)
+	Grid.set_active(Maps.cols(&"demoMap"), Maps.rows(&"demoMap"))
 	return PathFinder.get_path_from_spawn_to_goal(
-		DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED)))
+		Maps.build_tiles(&"demoMap"))
 
 ## Every spawn a wave issues, INCLUDING its boss.
 ##
@@ -590,7 +590,7 @@ func test_kills_pay_through_the_killing_towers_gold_effects() -> bool:
 # game that had no such cap.
 
 func test_every_wave_terminates_on_the_fork_at_the_doubled_tick_size() -> bool:
-	var paths := PathFinder.get_all_spawn_paths(Map2.build(Rng.new(Seeds.DEFAULT_MAP2_SEED)))
+	var paths := PathFinder.get_all_spawn_paths(Maps.build_tiles(&"map2"))
 	assert_eq(paths.size(), 2, "precondition: The Fork has two routes to sweep")
 	for i in paths.size():
 		for wave in range(1, Waves.MAX_WAVES + 1):
@@ -603,7 +603,7 @@ func test_every_wave_terminates_on_the_fork_at_the_doubled_tick_size() -> bool:
 	return true
 
 func test_every_wave_terminates_on_the_coils_at_the_doubled_tick_size() -> bool:
-	var paths := PathFinder.get_all_spawn_paths(Map3.build(Rng.new(Seeds.DEFAULT_MAP3_SEED)))
+	var paths := PathFinder.get_all_spawn_paths(Maps.build_tiles(&"map3"))
 	assert_eq(paths.size(), 1, "precondition: The Coils has one route to sweep")
 	for wave in range(1, Waves.MAX_WAVES + 1):
 		var r := Harness.run_wave({"wave": wave, "towers": [], "path": paths[0],
@@ -616,8 +616,8 @@ func test_every_wave_terminates_on_the_coils_at_the_doubled_tick_size() -> bool:
 # The default tick size too, matching how The Pass is covered at both.
 func test_every_wave_terminates_on_the_new_maps_at_the_default_tick_size() -> bool:
 	var routes: Array[PackedVector2Array] = []
-	routes.append_array(PathFinder.get_all_spawn_paths(Map2.build(Rng.new(Seeds.DEFAULT_MAP2_SEED))))
-	routes.append_array(PathFinder.get_all_spawn_paths(Map3.build(Rng.new(Seeds.DEFAULT_MAP3_SEED))))
+	routes.append_array(PathFinder.get_all_spawn_paths(Maps.build_tiles(&"map2")))
+	routes.append_array(PathFinder.get_all_spawn_paths(Maps.build_tiles(&"map3")))
 	assert_eq(routes.size(), 3, "precondition: three routes across the two new maps")
 	for i in routes.size():
 		for wave in range(1, Waves.MAX_WAVES + 1):

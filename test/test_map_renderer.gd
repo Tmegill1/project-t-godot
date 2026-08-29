@@ -47,7 +47,7 @@ func _overlay_signature(mr: MapRenderer) -> Dictionary:
 	return sig
 
 func test_render_is_deterministic_for_the_same_seed() -> bool:
-	Grid.set_active(DemoMap.GRID_COLS, DemoMap.GRID_ROWS)
+	Grid.set_active(Maps.cols(&"demoMap"), Maps.rows(&"demoMap"))
 	var tiles := _demo_tiles()
 	var a := MapRenderer.new()
 	a.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED))
@@ -59,7 +59,7 @@ func test_render_is_deterministic_for_the_same_seed() -> bool:
 	return true
 
 func test_a_different_seed_gives_a_different_layout() -> bool:
-	Grid.set_active(DemoMap.GRID_COLS, DemoMap.GRID_ROWS)
+	Grid.set_active(Maps.cols(&"demoMap"), Maps.rows(&"demoMap"))
 	var tiles := _demo_tiles()
 	var a := MapRenderer.new()
 	a.render(tiles, Rng.new(1))
@@ -74,7 +74,7 @@ func test_the_ground_layer_has_one_sprite_per_tile() -> bool:
 	# The corner lattice drew (cols+1)*(rows+1) sprites offset half a tile.
 	# The edge mask draws one per tile, on the grid.
 	var renderer := MapRenderer.new()
-	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
+	var tiles := Maps.build_tiles(&"demoMap")
 	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
 	# The terrain is four layers now: base ground (-3), the half-tile-offset
 	# blend pass (-2), road (-1), then detail and props above. The base layer
@@ -92,10 +92,10 @@ func test_the_ground_layer_has_one_sprite_per_tile() -> bool:
 			blend += 1
 		elif child.z_index == -1:
 			road += 1
-	assert_eq(ground + road, DemoMap.GRID_COLS * DemoMap.GRID_ROWS,
+	assert_eq(ground + road, Maps.cols(&"demoMap") * Maps.rows(&"demoMap"),
 		"one base terrain sprite per tile, ground or road")
 	assert_true(road > 0, "and some of them are road")
-	assert_eq(blend, DemoMap.GRID_COLS * DemoMap.GRID_ROWS - road,
+	assert_eq(blend, Maps.cols(&"demoMap") * Maps.rows(&"demoMap") - road,
 		"the blend pass covers every non-road cell")
 	renderer.free()
 	return true
@@ -149,7 +149,7 @@ func test_spawn_and_goal_count_as_road() -> bool:
 
 func test_every_road_cell_draws_the_piece_its_mask_names() -> bool:
 	var renderer := MapRenderer.new()
-	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
+	var tiles := Maps.build_tiles(&"demoMap")
 	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
 	var checked := 0
 	for child in renderer.get_children():
@@ -175,11 +175,11 @@ func test_the_demo_map_needs_the_dead_end_pieces() -> bool:
 	# spawn and the goal, where the road enters from one side only. This test
 	# fails the day someone reintroduces a rotation scheme.
 	var renderer := MapRenderer.new()
-	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
+	var tiles := Maps.build_tiles(&"demoMap")
 	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
 	var dead_ends := 0
-	for r in DemoMap.GRID_ROWS:
-		for c in DemoMap.GRID_COLS:
+	for r in Maps.rows(&"demoMap"):
+		for c in Maps.cols(&"demoMap"):
 			if tiles[r][c] in Tiles.WALKABLE and renderer.edge_mask(c, r) in [1, 2, 4, 8]:
 				dead_ends += 1
 	assert_eq(dead_ends, 2, "the demo map's road has two dead ends")
@@ -194,7 +194,7 @@ func test_ground_and_road_tiles_fill_their_cell_exactly() -> bool:
 	# have none. The property worth keeping is unchanged and is stated more
 	# directly here: a tile lands on its cell's origin and covers the cell.
 	var renderer := MapRenderer.new()
-	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
+	var tiles := Maps.build_tiles(&"demoMap")
 	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
 	# Ground OVERFILLS its cell now (MapRenderer.GROUND_OVERFILL) so neighbours
 	# overlap and there is no boundary to see; road still fills exactly,
@@ -247,7 +247,7 @@ func test_a_non_square_tile_source_is_the_case_this_covers() -> bool:
 	return true
 
 func test_render_defaults_to_the_default_decoration_seed_when_no_rng_is_given() -> bool:
-	Grid.set_active(DemoMap.GRID_COLS, DemoMap.GRID_ROWS)
+	Grid.set_active(Maps.cols(&"demoMap"), Maps.rows(&"demoMap"))
 	var tiles := _demo_tiles()
 
 	var defaulted := MapRenderer.new()
@@ -264,7 +264,7 @@ func test_render_defaults_to_the_default_decoration_seed_when_no_rng_is_given() 
 	return true
 
 func test_endpoints_are_placed_and_scaled_correctly() -> bool:
-	Grid.set_active(DemoMap.GRID_COLS, DemoMap.GRID_ROWS)
+	Grid.set_active(Maps.cols(&"demoMap"), Maps.rows(&"demoMap"))
 	var tiles := _demo_tiles()
 
 	var spawn_tile := Vector2i(-1, -1)
@@ -335,7 +335,7 @@ func test_endpoints_are_placed_and_scaled_correctly() -> bool:
 	return true
 
 func test_spike_count_matches_the_formula_for_the_demo_map() -> bool:
-	Grid.set_active(DemoMap.GRID_COLS, DemoMap.GRID_ROWS)
+	Grid.set_active(Maps.cols(&"demoMap"), Maps.rows(&"demoMap"))
 	var tiles := _demo_tiles()
 
 	var buildable := 0
@@ -381,7 +381,7 @@ func test_spike_count_floor_of_five_binds_on_a_small_buildable_pool() -> bool:
 	return true
 
 func test_fire_is_capped_and_only_on_buildable_tiles_adjacent_to_walkable_without_a_spike() -> bool:
-	Grid.set_active(DemoMap.GRID_COLS, DemoMap.GRID_ROWS)
+	Grid.set_active(Maps.cols(&"demoMap"), Maps.rows(&"demoMap"))
 	var tiles := _demo_tiles()
 	var mr := MapRenderer.new()
 	mr.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED))
@@ -628,7 +628,7 @@ func test_stone_count_bounds_are_exactly_three_to_five_across_many_seeds() -> bo
 	return true
 
 func test_blocked_tiles_get_three_to_five_stones_and_nothing_in_the_exclusion_zone() -> bool:
-	Grid.set_active(DemoMap.GRID_COLS, DemoMap.GRID_ROWS)
+	Grid.set_active(Maps.cols(&"demoMap"), Maps.rows(&"demoMap"))
 	var tiles := _demo_tiles()
 
 	# Independently recomputes the exclusion zone and the eligible blocked
@@ -709,7 +709,7 @@ func test_blocked_tiles_get_three_to_five_stones_and_nothing_in_the_exclusion_zo
 # Expected geometry is derived from the texture's own dimensions rather than
 # hardcoded, so the rule is what is pinned, not one particular PNG's size.
 func test_decorations_preserve_their_aspect_ratio_and_sit_centred_in_the_tile() -> bool:
-	Grid.set_active(DemoMap.GRID_COLS, DemoMap.GRID_ROWS)
+	Grid.set_active(Maps.cols(&"demoMap"), Maps.rows(&"demoMap"))
 	var tiles := _demo_tiles()
 	var mr := MapRenderer.new()
 	mr.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED))
@@ -759,7 +759,7 @@ func test_decorations_preserve_their_aspect_ratio_and_sit_centred_in_the_tile() 
 	return true
 
 func test_render_called_twice_does_not_double_up_sprites() -> bool:
-	Grid.set_active(DemoMap.GRID_COLS, DemoMap.GRID_ROWS)
+	Grid.set_active(Maps.cols(&"demoMap"), Maps.rows(&"demoMap"))
 	var tiles := _demo_tiles()
 	var mr := MapRenderer.new()
 
@@ -797,7 +797,7 @@ func test_render_called_twice_does_not_double_up_sprites() -> bool:
 # test_art_import.gd, which reads mipmaps/generate off the committed
 # .import files for both sides of the split.
 func test_map_sprites_select_a_filter_that_actually_samples_the_mipmap_chain() -> bool:
-	Grid.set_active(DemoMap.GRID_COLS, DemoMap.GRID_ROWS)
+	Grid.set_active(Maps.cols(&"demoMap"), Maps.rows(&"demoMap"))
 	var tiles := _demo_tiles()
 	var mr := MapRenderer.new()
 	mr.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED))
@@ -833,7 +833,7 @@ func test_map_sprites_select_a_filter_that_actually_samples_the_mipmap_chain() -
 # and the goal - which is exactly where a player most wants a last line of
 # defence. The road corridor already keeps towers off the endpoints themselves.
 func test_prop_footprints_cover_every_prop_and_no_endpoint() -> bool:
-	Grid.set_active(DemoMap.GRID_COLS, DemoMap.GRID_ROWS)
+	Grid.set_active(Maps.cols(&"demoMap"), Maps.rows(&"demoMap"))
 	var tiles := _demo_tiles()
 	var mr := MapRenderer.new()
 	mr.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED))
@@ -871,7 +871,7 @@ func test_prop_footprints_cover_every_prop_and_no_endpoint() -> bool:
 # under-cover here, but the rule the test pins is the one that stays correct
 # for whichever prop is least square.
 func test_prop_footprint_radius_covers_the_sprite_s_longest_axis() -> bool:
-	Grid.set_active(DemoMap.GRID_COLS, DemoMap.GRID_ROWS)
+	Grid.set_active(Maps.cols(&"demoMap"), Maps.rows(&"demoMap"))
 	var tiles := _demo_tiles()
 	var mr := MapRenderer.new()
 	mr.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED))
@@ -902,7 +902,7 @@ func test_prop_footprint_radius_covers_the_sprite_s_longest_axis() -> bool:
 
 func test_props_come_from_the_biome_being_rendered() -> bool:
 	var forest := MapRenderer.new()
-	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
+	var tiles := Maps.build_tiles(&"demoMap")
 	forest.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
 	var forest_paths := {}
 	for child in forest.get_children():
@@ -926,7 +926,7 @@ func test_prop_footprints_cover_only_the_props() -> bool:
 	# Endpoints are excluded on purpose - they are drawn 3 tiles wide and a
 	# footprint from one would sterilise the ground around spawn and goal.
 	var renderer := MapRenderer.new()
-	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
+	var tiles := Maps.build_tiles(&"demoMap")
 	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
 	var footprints := renderer.prop_footprints()
 	assert_true(footprints.size() > 0, "the demo map scatters props")
@@ -951,7 +951,7 @@ func test_every_prop_sprite_contributes_exactly_one_footprint() -> bool:
 	# blocking circle at all and towers build straight through it, which no
 	# other assertion here would notice.
 	var renderer := MapRenderer.new()
-	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
+	var tiles := Maps.build_tiles(&"demoMap")
 	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
 	var props := 0
 	for child in renderer.get_children():
@@ -980,7 +980,7 @@ func test_a_props_blocking_radius_is_half_the_box_its_slot_is_fitted_into() -> b
 	# the wrong invariant, because the property that matters is that the
 	# radius follows the box, not that every box is a whole tile.
 	var renderer := MapRenderer.new()
-	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
+	var tiles := Maps.build_tiles(&"demoMap")
 	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
 	# Read the slot off each prop sprite rather than out of the footprint:
 	# prop_footprints' dictionaries are a sim-facing contract that
@@ -1042,7 +1042,7 @@ func test_tiles_are_drawn_without_their_card_border() -> bool:
 	# the map reads as a grid of cards in black gutters. The renderer draws
 	# the interior of each tile instead.
 	var renderer := MapRenderer.new()
-	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
+	var tiles := Maps.build_tiles(&"demoMap")
 	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
 	var checked := 0
 	for child in renderer.get_children():
@@ -1134,7 +1134,7 @@ func _run_from(img: Image, x: int, y: int, dx: int, dy: int) -> int:
 # larger than the step inside one.
 func test_ground_tiles_are_drawn_at_a_mix_of_orientations() -> bool:
 	var renderer := MapRenderer.new()
-	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
+	var tiles := Maps.build_tiles(&"demoMap")
 	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
 	var seen := {}
 	for child in renderer.get_children():
@@ -1156,7 +1156,7 @@ func test_ground_tiles_are_drawn_at_a_mix_of_orientations() -> bool:
 # free.
 func test_road_pieces_are_flipped_only_where_their_mask_is_symmetric() -> bool:
 	var renderer := MapRenderer.new()
-	var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
+	var tiles := Maps.build_tiles(&"demoMap")
 	renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
 	var checked := 0
 	var flipped := 0
@@ -1208,7 +1208,7 @@ func test_the_ground_orientation_is_reproducible_from_the_seed() -> bool:
 	var second := []
 	for pass_index in 2:
 		var renderer := MapRenderer.new()
-		var tiles := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
+		var tiles := Maps.build_tiles(&"demoMap")
 		renderer.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
 		for child in renderer.get_children():
 			if child is Sprite2D and child.z_index == -1:

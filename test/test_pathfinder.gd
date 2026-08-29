@@ -29,8 +29,8 @@ func test_path_does_not_enter_non_walkable_tiles() -> bool:
 	return true
 
 func test_real_map_path_is_connected_and_reaches_goal() -> bool:
-	Grid.set_active(DemoMap.GRID_COLS, DemoMap.GRID_ROWS)
-	var map := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
+	Grid.set_active(Maps.cols(&"demoMap"), Maps.rows(&"demoMap"))
+	var map := Maps.build_tiles(&"demoMap")
 	var paths := PathFinder.get_all_spawn_paths(map)
 	assert_eq(paths.size(), 1, "The Pass has one spawn")
 	var p: PackedVector2Array = paths[0]
@@ -74,8 +74,8 @@ func test_every_path_has_at_least_two_points() -> bool:
 		var walled: PackedVector2Array = p
 		assert_true(walled.size() >= 2, "walled-off path has a start and an end")
 
-	Grid.set_active(DemoMap.GRID_COLS, DemoMap.GRID_ROWS)
-	var map := DemoMap.build(Rng.new(Seeds.DEFAULT_DEMO_MAP_SEED))
+	Grid.set_active(Maps.cols(&"demoMap"), Maps.rows(&"demoMap"))
+	var map := Maps.build_tiles(&"demoMap")
 	for p in PathFinder.get_all_spawn_paths(map):
 		var real: PackedVector2Array = p
 		assert_true(real.size() >= 2, "real map path has a start and an end")
