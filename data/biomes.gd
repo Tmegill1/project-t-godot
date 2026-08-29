@@ -12,9 +12,9 @@ class_name Biomes
 const FIRST := &"forest"
 
 const DEFS := {
-	&"forest": {"label": "Forest", "dir": "res://assets/art/forest"},
-	&"ice": {"label": "Ice", "dir": "res://assets/art/ice"},
-	&"desert": {"label": "Desert", "dir": "res://assets/art/desert"},
+	&"forest": {"label": "Forest", "dir": "res://assets/art/forest", "wall_prop": true},
+	&"ice": {"label": "Ice", "dir": "res://assets/art/ice", "wall_prop": false},
+	&"desert": {"label": "Desert", "dir": "res://assets/art/desert", "wall_prop": false},
 }
 
 const KINDS: Array[StringName] = [&"forest", &"ice", &"desert"]
@@ -23,6 +23,22 @@ const PROP_SLOTS: Array[StringName] = [&"tree", &"stone", &"spike", &"fire"]
 
 static func get_def(biome: StringName) -> Dictionary:
 	return DEFS[biome]
+
+## Whether this biome's "spike" art is a WALL SECTION that tiles into a run.
+##
+## The slot name is shared across biomes but the ART IS NOT THE SAME KIND OF
+## OBJECT. Forest's is a 95x63 wooden palisade with flat ends and continuous
+## rails: sections at tile pitch abut into a fence. Ice's is a 37x79 totem on a
+## post and desert's a 42x35 skull pile - upright landmarks, not wall pieces.
+## Five palisade sections make a wall; five identical totems in a row make a
+## row of five identical totems, which reads worse than scattering them does.
+##
+## So camps - a wall with fires standing behind it - are a forest idea, and the
+## other two biomes scatter their spike as the landmark it actually is. This is
+## a fact about the art, so it lives beside the art paths; when a biome gets
+## real wall art, flipping its flag is the whole change.
+static func has_wall_art(biome: StringName) -> bool:
+	return bool(DEFS[biome].get("wall_prop", false))
 
 static func prop_path(biome: StringName, slot: StringName) -> String:
 	return "%s/%s.png" % [DEFS[biome]["dir"], slot]

@@ -334,10 +334,351 @@ func test_endpoints_are_placed_and_scaled_correctly() -> bool:
 	mr.free()
 	return true
 
-func test_spike_count_matches_the_formula_for_the_demo_map() -> bool:
+# --------------------------------------------------------------------------
+# Camps
+# --------------------------------------------------------------------------
+
+# Fences and fires used to be scattered uniformly - a palisade section on 10%
+# of buildable tiles, plus up to seven lone campfires beside the lane - and
+# both read as litter, because a palisade and a fire pit are MANUFACTURED
+# objects that imply somebody put them there. They now appear only as camps:
+# a horizontal wall with fires standing behind it.
+#
+# The tests those replaced counted props. Every property below that makes a
+# camp legible - that its sections abut, that they line up, that a fire has a
+# wall in front of it - is invisible to a count, which is why the old suite
+# would have passed just as happily on the scattered version.
+
+## Maximal horizontal runs of fence cells, as [row, first_col, length].
+func _fence_runs(cells: Dictionary) -> Array:
+	var fence_rows := {}
+	for cell in cells:
+		if cells[cell] != &"spike":
+			continue
+		if not fence_rows.has(cell.y):
+			fence_rows[cell.y] = []
+		fence_rows[cell.y].append(cell.x)
+	var runs: Array = []
+	for row in fence_rows:
+		var cols: Array = fence_rows[row]
+		cols.sort()
+		var start: int = cols[0]
+		var length := 1
+		for i in range(1, cols.size()):
+			if cols[i] == cols[i - 1] + 1:
+				length += 1
+				continue
+			runs.append([row, start, length])
+			start = cols[i]
+			length = 1
+		runs.append([row, start, length])
+	return runs
+
+func _rendered(map_name: StringName) -> MapRenderer:
+	Grid.set_active(Maps.cols(map_name), Maps.rows(map_name))
+	var mr := MapRenderer.new()
+	mr.render(Maps.build_tiles(map_name), Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
+	return mr
+
+# A lone fence is the whole defect this replaced. Checked on all three shipped
+# maps rather than the demo alone: camp siting depends on where a map's road
+# leaves two clear rows at the right distance, so a rule that happens to hold
+# on one layout says little about the next.
+func test_every_fence_belongs_to_a_run_no_shorter_than_a_camp() -> bool:
+	for map_name in [&"demoMap", &"map2", &"map3"]:
+		var mr := _rendered(map_name)
+		var runs := _fence_runs(mr.decoration_cells())
+		assert_true(not runs.is_empty(), "%s got camps at all" % map_name)
+		for run in runs:
+			assert_true(run[2] >= MapRenderer.CAMP_MIN_WIDTH,
+				"%s: run at row %d col %d is %d long - no lone fences" % [map_name, run[0], run[1], run[2]])
+			# The upper bound is the other half of the rule: _build_camp claims
+			# a one-tile margin around itself precisely so two camps cannot
+			# butt together into one unreadable wall across the map.
+			assert_true(run[2] <= MapRenderer.CAMP_MAX_WIDTH,
+				"%s: run at row %d col %d is %d long - two camps merged" % [map_name, run[0], run[1], run[2]])
+		assert_true(runs.size() <= MapRenderer.CAMP_COUNT,
+			"%s has at most CAMP_COUNT camps, got %d" % [map_name, runs.size()])
+		mr.free()
+	return true
+
+# Alignment is the entire reason a run reads as a wall rather than as the
+# scattered junk it replaced: the palisade art has flat ends and continuous
+# rails, so segments only abut when they sit exactly a tile apart, unrotated
+# and unmirrored. _place_prop's jitter, rotation and flip would each break the
+# join - so this pins that camp fences do NOT go through it.
+func test_camp_fences_sit_exactly_on_their_cell_centres_unrotated_and_unmirrored() -> bool:
+	var mr := _rendered(&"demoMap")
+	var checked := 0
+	for cell in mr._decorations:
+		if mr._decoration_slots[cell] != &"spike":
+			continue
+		var sprite: Sprite2D = mr._decorations[cell]
+		var centre := Vector2(float(cell.x) + 0.5, float(cell.y) + 0.5) * float(Tiles.TILE_SIZE)
+		assert_almost_eq(sprite.position.x, centre.x, 0.01,
+			"fence at %s sits on its cell centre in x" % str(cell))
+		assert_almost_eq(sprite.position.y, centre.y, 0.01,
+			"fence at %s sits on its cell centre in y" % str(cell))
+		assert_almost_eq(sprite.rotation_degrees, 0.0, 0.0001,
+			"fence at %s is not rotated" % str(cell))
+		assert_false(sprite.flip_h,
+			"fence at %s is not mirrored, so its rails meet its neighbour's" % str(cell))
+		checked += 1
+	assert_true(checked >= MapRenderer.CAMP_MIN_WIDTH,
+		"there were fences to check, got %d" % checked)
+	mr.free()
+	return true
+
+# A fire with no wall in front of it is a lone campfire, which is exactly the
+# prop this change removed. The wall is one row TOWARDS the bottom of the
+# screen, which is also the order they are built in so the wall occludes the
+# fire's base.
+func test_every_fire_stands_behind_a_camp_wall() -> bool:
+	for map_name in [&"demoMap", &"map2", &"map3"]:
+		var mr := _rendered(map_name)
+		var cells := mr.decoration_cells()
+		var fires := 0
+		for cell in cells:
+			if cells[cell] != &"fire":
+				continue
+			fires += 1
+			assert_eq(cells.get(Vector2i(cell.x, cell.y + 1), &""), &"spike",
+				"%s: the fire at %s has a wall directly in front of it" % [map_name, str(cell)])
+		assert_true(fires > 0, "%s got fires" % map_name)
+		mr.free()
+	return true
+
+# Camps deny a CONTIGUOUS run of build space, unlike a scattered prop, and the
+# ring of cells touching the lane is the most valuable ground on the map. A
+# camp there would take exactly the spots a tower wants.
+func test_no_camp_wall_touches_the_road() -> bool:
+	for map_name in [&"demoMap", &"map2", &"map3"]:
+		var mr := _rendered(map_name)
+		var tiles := Maps.build_tiles(map_name)
+		var cells := mr.decoration_cells()
+		for cell in cells:
+			if cells[cell] != &"spike":
+				continue
+			for dr in [-1, 0, 1]:
+				for dc in [-1, 0, 1]:
+					var r: int = cell.y + dr
+					var c: int = cell.x + dc
+					if r < 0 or r >= tiles.size() or c < 0 or c >= tiles[r].size():
+						continue
+					assert_false(tiles[r][c] in Tiles.WALKABLE,
+						"%s: the wall at %s does not touch the lane at (%d, %d)" % [map_name, str(cell), c, r])
+		mr.free()
+	return true
+
+# Against the border it is the fires BEHIND the wall that fall off-screen -
+# and on the top row, under the HUD strip - so the depth that makes a camp
+# read as a camp is the part that gets clipped. Every camp on the first build
+# landed on an edge, because on a map whose road runs through the middle those
+# are the only places with two clear rows at the right distance from it.
+func test_camps_stay_clear_of_the_map_border() -> bool:
+	for map_name in [&"demoMap", &"map2", &"map3"]:
+		var mr := _rendered(map_name)
+		var rows := Maps.rows(map_name)
+		var cols := Maps.cols(map_name)
+		var inset := MapRenderer.CAMP_BORDER_INSET
+		for cell in mr.decoration_cells():
+			var slot: StringName = mr.decoration_cells()[cell]
+			if slot != &"spike" and slot != &"fire":
+				continue
+			assert_true(cell.x >= inset and cell.x <= cols - 1 - inset,
+				"%s: camp cell %s is inside the left/right border inset" % [map_name, str(cell)])
+			assert_true(cell.y >= inset and cell.y <= rows - 1 - inset,
+				"%s: camp cell %s is inside the top/bottom border inset" % [map_name, str(cell)])
+		mr.free()
+	return true
+
+# The three shipped maps cannot test the camp SITING RULES on their own. Each
+# rule is a filter on where a camp may go, and on a real map dropping a filter
+# mostly just moves the camps somewhere else that still satisfies the others -
+# lowering CAMP_MIN_WIDTH to 1 produced no short run at all, because
+# _place_camps still tries the widest fit first. Worse, asserting a run is at
+# least CAMP_MIN_WIDTH long moves its own goalposts when that constant is what
+# changed.
+#
+# So each rule gets a purpose-built map with exactly ONE candidate site, and a
+# paired map where the same site is legal. The pair is the point: the negative
+# alone would pass if camps simply never appeared on synthetic maps.
+
+## A map with a road along row 0 and a buildable pocket, everything else
+## blocked - so a camp has exactly one place it could go.
+func _pocket_map(cols: int, rows: int, pocket_cols: Array, pocket_rows: Array) -> Array:
+	Grid.set_active(cols, rows)
+	var tiles: Array = []
+	for r in rows:
+		var row: Array = []
+		for c in cols:
+			if r == 0:
+				row.append(Tiles.PATH)
+			elif pocket_rows.has(r) and pocket_cols.has(c):
+				row.append(Tiles.BUILDABLE)
+			else:
+				row.append(Tiles.BLOCKED)
+		tiles.append(row)
+	return tiles
+
+func _camp_prop_count(tiles: Array) -> int:
+	var mr := MapRenderer.new()
+	mr.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
+	var camps := 0
+	for slot in mr.decoration_cells().values():
+		if slot == &"spike" or slot == &"fire":
+			camps += 1
+	mr.free()
+	return camps
+
+# A pocket two tiles wide is too narrow for a camp; three is exactly wide
+# enough. Without the pair, a mutation to CAMP_MIN_WIDTH is invisible: on the
+# real maps it changes which sites qualify without ever producing a short run.
+func test_a_pocket_narrower_than_the_minimum_camp_width_gets_no_camp() -> bool:
+	# Rows 2 and 3 sit 2 and 3 tiles from the road on row 0, inside
+	# CAMP_MIN/MAX_ROAD_DISTANCE, and clear of the border inset.
+	var narrow := _pocket_map(9, 8, [3, 4], [2, 3])
+	assert_eq(_camp_prop_count(narrow), 0,
+		"a two-wide pocket is narrower than a camp, so nothing is built there")
+
+	var wide := _pocket_map(9, 8, [3, 4, 5], [2, 3])
+	assert_true(_camp_prop_count(wide) > 0,
+		"the same pocket one tile wider does get a camp - so the negative above means something")
+	return true
+
+## The same idea with the road running down a COLUMN instead of a row.
+##
+## A horizontal road cannot test the distance floor: the border inset already
+## forces the wall to row 2, which is a legal distance from a road on row 0, so
+## a wall can never end up beside it. Reaching the wall from the side is the
+## only way the floor is the binding rule.
+func _side_road_map(cols: int, rows: int, road_col: int,
+		pocket_cols: Array, pocket_rows: Array) -> Array:
+	Grid.set_active(cols, rows)
+	var tiles: Array = []
+	for r in rows:
+		var row: Array = []
+		for c in cols:
+			if c == road_col:
+				row.append(Tiles.PATH)
+			elif pocket_rows.has(r) and pocket_cols.has(c):
+				row.append(Tiles.BUILDABLE)
+			else:
+				row.append(Tiles.BLOCKED)
+		tiles.append(row)
+	return tiles
+
+# The road-distance floor keeps camps off the ring of cells beside the lane,
+# which is the ground a tower most wants - and a camp denies a CONTIGUOUS run
+# of it, unlike a scattered prop. On a real map dropping the floor just moves
+# the camps somewhere else legal; here the only site available IS against the
+# lane.
+func test_a_pocket_touching_the_road_gets_no_camp() -> bool:
+	# Road down column 2. The wall's left end at column 3 is adjacent to it.
+	var touching := _side_road_map(9, 8, 2, [3, 4, 5], [2, 3])
+	assert_eq(_camp_prop_count(touching), 0,
+		"the only site has its wall against the lane, so no camp is built")
+
+	# One column further out: nearest wall cell is 2 from the road, and the
+	# far end is still within CAMP_MAX_ROAD_DISTANCE, so the site qualifies.
+	var backed_off := _side_road_map(9, 8, 2, [4, 5, 6], [2, 3])
+	assert_true(_camp_prop_count(backed_off) > 0,
+		"the same pocket one column further out does get a camp")
+	return true
+
+# Against the border it is the fires BEHIND the wall that fall off-screen, and
+# on the top row they sit under the HUD strip - so the depth that makes a camp
+# read as a camp is exactly what gets clipped.
+func test_a_pocket_against_the_border_gets_no_camp() -> bool:
+	# Columns 0..2 put the wall's left end on the border.
+	var edge := _pocket_map(9, 8, [0, 1, 2], [2, 3])
+	assert_eq(_camp_prop_count(edge), 0,
+		"the only site is against the left border, so no camp is built")
+
+	var inset := _pocket_map(9, 8, [1, 2, 3], [2, 3])
+	assert_true(_camp_prop_count(inset) > 0,
+		"the same pocket shifted one column in does get a camp")
+	return true
+
+# Camps depend on the biome's spike art being a wall section. Only forest's
+# is - ice ships a totem on a post and desert a skull pile - so a camp on
+# those maps would be five identical totems or five identical skulls stood in
+# a perfect row, which is a worse version of the problem camps exist to fix.
+#
+# Rendered at each map's REAL biome, unlike the camp tests above which force
+# forest to exercise the geometry: this is precisely a test about which biome
+# a map draws with.
+func test_camps_are_built_only_where_the_biome_has_wall_art() -> bool:
+	for map_name in [&"demoMap", &"map2", &"map3"]:
+		Grid.set_active(Maps.cols(map_name), Maps.rows(map_name))
+		var biome: StringName = Maps.DEFS[map_name]["biome"]
+		var mr := MapRenderer.new()
+		mr.render(Maps.build_tiles(map_name), Rng.new(Seeds.DEFAULT_DECORATION_SEED), biome)
+		var runs := _fence_runs(mr.decoration_cells())
+		var fires := 0
+		for slot in mr.decoration_cells().values():
+			if slot == &"fire":
+				fires += 1
+		if Biomes.has_wall_art(biome):
+			assert_true(not runs.is_empty(),
+				"%s draws in %s, whose spike art is a wall, so it gets camps" % [map_name, biome])
+			assert_true(fires > 0, "%s gets camp fires" % map_name)
+		else:
+			assert_eq(fires, 0,
+				"%s draws in %s, which has no wall art, so it has no camps and no lone fires" % [map_name, biome])
+			# Its spike is a landmark and stays in the scatter, so two of
+			# them landing side by side is ordinary luck and says nothing -
+			# map3 produces exactly that. What must not appear is a run long
+			# enough to be a WALL. The literal 3 rather than CAMP_MIN_WIDTH is
+			# deliberate: a test whose threshold is the constant it is
+			# checking moves its own goalposts when that constant is mutated,
+			# which is how the first version of the run-length test above
+			# managed to pass with lone fences enabled.
+			for run in runs:
+				assert_true(run[2] < 3,
+					"%s: %s spikes are scattered landmarks, not walls - found a run of %d" % [map_name, biome, run[2]])
+		mr.free()
+	return true
+
+# Exactly one biome has wall art today. Pinned as a literal so that flipping a
+# flag in Biomes.DEFS - which is meant to be the whole change when a biome
+# gets real wall art - cannot happen silently.
+func test_exactly_one_biome_declares_wall_art() -> bool:
+	var walls: Array = []
+	for biome in Biomes.KINDS:
+		if Biomes.has_wall_art(biome):
+			walls.append(biome)
+	assert_eq(walls, [&"forest"],
+		"forest is the only biome whose spike art is a palisade section")
+	return true
+
+# --------------------------------------------------------------------------
+# Scattered decoration
+# --------------------------------------------------------------------------
+
+# Trees and rocks, never fences or fires. A boulder alone in a field is a
+# boulder; a fence alone in a field is a fence around nothing.
+func test_scattered_decoration_is_only_trees_and_rocks() -> bool:
+	for map_name in [&"demoMap", &"map2", &"map3"]:
+		var mr := _rendered(map_name)
+		var cells := mr.decoration_cells()
+		var runs := _fence_runs(cells)
+		var camp_cells := {}
+		for run in runs:
+			for i in run[2]:
+				camp_cells[Vector2i(run[1] + i, run[0])] = true
+				camp_cells[Vector2i(run[1] + i, run[0] - 1)] = true
+		for cell in cells:
+			if camp_cells.has(cell):
+				continue
+			assert_true(cells[cell] == &"tree" or cells[cell] == &"stone",
+				"%s: %s off a camp is a tree or a rock, not a %s" % [map_name, str(cell), cells[cell]])
+		mr.free()
+	return true
+
+func test_scattered_decoration_count_matches_the_formula_for_the_demo_map() -> bool:
 	Grid.set_active(Maps.cols(&"demoMap"), Maps.rows(&"demoMap"))
 	var tiles := _demo_tiles()
-
 	var buildable := 0
 	for r in tiles.size():
 		for c in tiles[r].size():
@@ -347,20 +688,22 @@ func test_spike_count_matches_the_formula_for_the_demo_map() -> bool:
 
 	var mr := MapRenderer.new()
 	mr.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED))
-	var spikes := 0
-	for child in mr.get_children():
-		if _is_prop(child) and child.texture.resource_path == _SPIKE_PATH:
-			spikes += 1
-	assert_eq(spikes, expected, "spike count is mini(buildable, maxi(5, floor(buildable * 0.1))) = %d" % expected)
-
+	var scattered := 0
+	for slot in mr.decoration_cells().values():
+		if slot == &"tree" or slot == &"stone":
+			scattered += 1
+	assert_eq(scattered, expected,
+		"scatter is mini(buildable, maxi(5, floor(buildable * 0.1))) = %d, camps on top" % expected)
 	mr.free()
 	return true
 
 # On the real demo map floor(buildable * 0.1) already exceeds 5, so the
-# maxi(5, ...) floor is never the binding constraint there and a mutation
-# to the literal 5 is invisible to the test above. A small synthetic map
-# (30 buildable tiles: floor(30 * 0.1) = 3) is what actually exercises it.
-func test_spike_count_floor_of_five_binds_on_a_small_buildable_pool() -> bool:
+# maxi(5, ...) floor is never the binding constraint there and a mutation to
+# the literal 5 is invisible to the test above. A small synthetic map (30
+# buildable tiles: floor(30 * 0.1) = 3) is what actually exercises it. It has
+# no road, so it also gets no camps - _camp_fits requires a road within
+# CAMP_MAX_ROAD_DISTANCE - which keeps the count purely the scatter formula.
+func test_scatter_floor_of_five_binds_on_a_small_buildable_pool() -> bool:
 	Grid.set_active(6, 5)
 	var synthetic: Array = []
 	for r in 5:
@@ -371,110 +714,15 @@ func test_spike_count_floor_of_five_binds_on_a_small_buildable_pool() -> bool:
 
 	var mr := MapRenderer.new()
 	mr.render(synthetic, Rng.new(Seeds.DEFAULT_DECORATION_SEED))
-	var spikes := 0
-	for child in mr.get_children():
-		if _is_prop(child) and child.texture.resource_path == _SPIKE_PATH:
-			spikes += 1
-	assert_eq(spikes, 5, "maxi(5, floor(30 * 0.1) = 3) = 5 spikes, not the 10%% formula's 3")
-
-	mr.free()
-	return true
-
-func test_fire_is_capped_and_only_on_buildable_tiles_adjacent_to_walkable_without_a_spike() -> bool:
-	Grid.set_active(Maps.cols(&"demoMap"), Maps.rows(&"demoMap"))
-	var tiles := _demo_tiles()
-	var mr := MapRenderer.new()
-	mr.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED))
-
-	# Read from the recorded cell assignment rather than from sprite positions.
-	# Props jitter off their cell centre now and may overhang a neighbour, so
-	# a position no longer identifies a cell - and a test that kept inferring
-	# from pixels would quietly stop testing the rule it names.
-	var cells := mr.decoration_cells()
-	var spike_positions := {}
-	var fire_positions: Array = []
-	for cell in cells:
-		if cells[cell] == &"spike":
-			spike_positions[Vector2(cell.x * Tiles.TILE_SIZE, cell.y * Tiles.TILE_SIZE)] = true
-		elif cells[cell] == &"fire":
-			fire_positions.append(Vector2(cell.x * Tiles.TILE_SIZE, cell.y * Tiles.TILE_SIZE))
-
-	# Independently recompute the fire candidate pool (buildable, adjacent to
-	# a walkable tile, not already a spike tile) as a separate implementation
-	# of the same rule, so the cap is checked against a known-exceeded pool
-	# on the real demo map (67 candidates) rather than only asserting an
-	# upper bound that a smaller cap would still satisfy vacuously.
-	var pool := 0
-	for r in tiles.size():
-		for c in tiles[r].size():
-			if tiles[r][c] != Tiles.BUILDABLE:
-				continue
-			if spike_positions.has(Vector2(c * Tiles.TILE_SIZE, r * Tiles.TILE_SIZE)):
-				continue
-			var pool_adjacent := false
-			for d in [Vector2i(0, -1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(1, 0)]:
-				var pr: int = r + d.y
-				var pc: int = c + d.x
-				if pr < 0 or pr >= tiles.size() or pc < 0 or pc >= tiles[0].size():
-					continue
-				if tiles[pr][pc] in Tiles.WALKABLE:
-					pool_adjacent = true
-			if pool_adjacent:
-				pool += 1
-	assert_true(pool > 7, "precondition: the demo map's fire-candidate pool exceeds 7, so the cap is actually exercised (got %d)" % pool)
-	assert_eq(fire_positions.size(), 7, "fire is capped at exactly _MAX_FIRE_TILES = 7 when the pool exceeds it, got %d" % fire_positions.size())
-
-	for pos in fire_positions:
-		var c := int(pos.x / Tiles.TILE_SIZE)
-		var r := int(pos.y / Tiles.TILE_SIZE)
-		assert_eq(tiles[r][c], Tiles.BUILDABLE, "fire only lands on a buildable tile (col %d row %d)" % [c, r])
-		assert_false(spike_positions.has(pos), "fire never lands on a tile that already took a spike (col %d row %d)" % [c, r])
-
-		var adjacent_to_walkable := false
-		for d in [Vector2i(0, -1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(1, 0)]:
-			var nr: int = r + d.y
-			var nc: int = c + d.x
-			if nr < 0 or nr >= tiles.size() or nc < 0 or nc >= tiles[0].size():
-				continue
-			if tiles[nr][nc] in Tiles.WALKABLE:
-				adjacent_to_walkable = true
-		assert_true(adjacent_to_walkable, "fire tile (col %d row %d) is orthogonally adjacent to a walkable tile" % [c, r])
-
-	mr.free()
-	return true
-
-# On the real demo map, whether a spiked tile ever gets reconsidered for
-# fire (were the exclusion check broken) depends on shuffle luck - the pool
-# is large (67 candidates) and only 7 are drawn, so a broken exclusion may
-# simply never happen to draw one of the ~24 spiked tiles. This map removes
-# luck from the equation: 4 buildable tiles, each sandwiched between two
-# path tiles (so all 4 are walkable-adjacent), and nothing else buildable.
-# spike_count = mini(4, maxi(5, floor(4 * 0.1) = 0)) = 4, so *every*
-# buildable tile gets a spike, deterministically, regardless of shuffle
-# order. If the fire pass fails to exclude already-spiked tiles, its
-# candidate pool is exactly these same 4 tiles and an overlap is
-# unavoidable; if it excludes them correctly, zero candidates remain.
-func test_fire_never_reuses_a_spiked_tile_even_when_forced_to_overlap() -> bool:
-	Grid.set_active(9, 1)
-	var synthetic: Array = [[
-		Tiles.PATH, Tiles.BUILDABLE, Tiles.PATH, Tiles.BUILDABLE, Tiles.PATH,
-		Tiles.BUILDABLE, Tiles.PATH, Tiles.BUILDABLE, Tiles.PATH,
-	]]
-
-	var mr := MapRenderer.new()
-	mr.render(synthetic, Rng.new(Seeds.DEFAULT_DECORATION_SEED))
-
-	var spikes := 0
-	var fires := 0
-	for child in mr.get_children():
-		if _is_prop(child) and child.texture.resource_path == _SPIKE_PATH:
-			spikes += 1
-		elif _is_prop(child) and child.texture.resource_path == _FIRE_PATH:
-			fires += 1
-
-	assert_eq(spikes, 4, "all 4 buildable tiles get a spike: mini(4, maxi(5, floor(4 * 0.1) = 0)) = 4")
-	assert_eq(fires, 0, "no fire candidates remain once every walkable-adjacent buildable tile already has a spike")
-
+	var scattered := 0
+	var camps := 0
+	for slot in mr.decoration_cells().values():
+		if slot == &"tree" or slot == &"stone":
+			scattered += 1
+		else:
+			camps += 1
+	assert_eq(camps, 0, "a map with no road has no camps to site")
+	assert_eq(scattered, 5, "maxi(5, floor(30 * 0.1) = 3) = 5 props, not the 10%% formula's 3")
 	mr.free()
 	return true
 
@@ -655,13 +903,22 @@ func test_blocked_tiles_get_three_to_five_stones_and_nothing_in_the_exclusion_zo
 	var mr := MapRenderer.new()
 	mr.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED))
 
+	# Scattered decoration is trees and rocks now too, so counting by texture
+	# alone counts both layers - it read 15 stones where the blocked tiles had
+	# 4. _draw_blocked's props are the ones NOT recorded in _decorations
+	# (only the scatter and the camps register there), which is the
+	# discriminator the renderer itself already maintains.
+	var scattered := {}
+	for sprite in mr._decorations.values():
+		scattered[sprite] = true
+
 	var stones := {}
 	var trees := {}
 	for child in mr.get_children():
 		if not (child is Sprite2D):
 			continue
 		var tile := Vector2i(int(child.position.x / Tiles.TILE_SIZE), int(child.position.y / Tiles.TILE_SIZE))
-		if not _is_prop(child):
+		if not _is_prop(child) or scattered.has(child):
 			continue
 		if child.texture.resource_path == _STONE_PATH:
 			stones[tile] = true
@@ -677,12 +934,14 @@ func test_blocked_tiles_get_three_to_five_stones_and_nothing_in_the_exclusion_zo
 	# gap the same way test_demo_map.gd's golden board does. If this ever
 	# legitimately needs to change (e.g. a map/seed change), recompute it by
 	# inspection, don't just paste in whatever the renderer currently emits.
-	# Has moved twice now, both times because something upstream began drawing
-	# from this same decoration stream: first prop jitter, then the detail
-	# layer's resampling when a sprite lands on the road. VERIFIED by
-	# inspection rather than pasted, as the note above demands - 4 sits inside
-	# the declared 3..5 band and is stable across identical renders.
-	assert_eq(stones.size(), 4, "golden: rng.int_range(3, 5) draws 4 stones for Seeds.DEFAULT_DECORATION_SEED on the demo map")
+	# Has moved three times now, every time because something upstream began
+	# drawing from this same decoration stream: first prop jitter, then the
+	# detail layer's resampling when a sprite lands on the road, and now camp
+	# siting, which shuffles its candidate list before _draw_blocked runs.
+	# VERIFIED by inspection rather than pasted, as the note above demands - 5
+	# sits inside the declared 3..5 band, and identical renders agree (pinned
+	# separately by the determinism test at the top of this file).
+	assert_eq(stones.size(), 5, "golden: rng.int_range(3, 5) draws 5 stones for Seeds.DEFAULT_DECORATION_SEED on the demo map")
 	assert_eq(stones.size() + trees.size(), eligible.size(), "every eligible blocked tile gets exactly a stone or a tree")
 
 	for tile in stones:
@@ -1344,12 +1603,17 @@ func test_every_footprint_is_centred_on_its_own_sprite() -> bool:
 		var display := sprite.texture.get_size() * sprite.scale
 		var centre: Vector2 = sprite.position if sprite.centered \
 			else sprite.position + display / 2.0
-		centres[snappedf(centre.x, 0.01)] = snappedf(centre.y, 0.01)
+		# Keyed on the WHOLE position, not on x alone. Keying by x meant two
+		# props sharing a column overwrote each other in this dict, so their
+		# footprints could not match and the test failed for a reason that had
+		# nothing to do with centring. Jittered props rarely collided exactly,
+		# which kept it hidden until camp fences - which sit on exact cell
+		# centres by design - made shared x coordinates ordinary.
+		centres[Vector2(snappedf(centre.x, 0.01), snappedf(centre.y, 0.01))] = true
 	var matched := 0
 	for f in mr.prop_footprints():
 		var pos: Vector2 = f["pos"]
-		if centres.has(snappedf(pos.x, 0.01)) \
-				and centres[snappedf(pos.x, 0.01)] == snappedf(pos.y, 0.01):
+		if centres.has(Vector2(snappedf(pos.x, 0.01), snappedf(pos.y, 0.01))):
 			matched += 1
 	assert_eq(matched, mr.prop_footprints().size(),
 		"every footprint lands on a sprite centre, not half a sprite away")

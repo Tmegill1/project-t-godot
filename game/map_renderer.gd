@@ -68,6 +68,7 @@ func render(tiles: Array, rng: Rng = null, biome: StringName = Biomes.FIRST) -> 
 	_draw_ground()
 	_scatter_detail(rng)
 	_draw_endpoints()
+	_place_camps(rng)
 	_scatter_decoration(rng)
 	_draw_blocked(rng)
 
@@ -505,36 +506,255 @@ func _draw_endpoints() -> void:
 			elif _tiles[r][c] == Tiles.GOAL:
 				_place(_CASTLE, c, r, Tiles.TILE_SIZE * 3, _Z_OVERLAY, offset)
 
+## Fences and fires appear ONLY as part of a camp - never scattered alone.
+##
+## They used to be strewn uniformly: a palisade section on 10% of buildable
+## tiles, plus up to seven lone campfires on tiles beside the lane. Both read
+## as litter rather than as terrain, and the reason is that a palisade and a
+## fire pit are MANUFACTURED things. A boulder alone in a field is a boulder;
+## a five-stake fence alone in a field, with nothing on either side of it and
+## nothing behind it, is a question the map cannot answer.
+##
+## What the art can actually do sets the shape. The palisade is a horizontal
+## section with flat ends and continuous rails, so segments at tile pitch abut
+## into a wall - verified by compositing before this was built. It has no
+## corner piece and no side-on piece, so a camp is A WALL WITH FIRES BEHIND IT
+## rather than a four-sided enclosure. Building the enclosure the idea wants
+## would need two more sprites that do not exist; building it out of the
+## horizontal piece alone would put a fence lying on its side at each end.
+const CAMP_COUNT := 3
+const CAMP_MIN_WIDTH := 3
+const CAMP_MAX_WIDTH := 5
+
+## How far a camp sits from the road it watches, in tiles.
+##
+## Never adjacent. The ring of cells touching the lane is the most valuable
+## ground on the map, and a camp there would deny the player exactly the spots
+## a tower wants - the palisade blocks placement like any other prop, and
+## unlike scattered props it blocks a CONTIGUOUS run. Two to three tiles back
+## still reads as "stationed beside the road" without competing for the cells
+## the player is going to want.
+const CAMP_MIN_ROAD_DISTANCE := 2
+const CAMP_MAX_ROAD_DISTANCE := 3
+
+## How far a camp stays clear of the map border, in tiles.
+##
+## Every camp on the first attempt landed against an edge - the top two rows
+## and column zero - because on a map whose road runs through the middle those
+## are the only places with two clear rows at the right distance from it. It
+## looked wrong for a reason worth keeping: against the border the fires BEHIND
+## the wall are the part that falls off-screen, and the top row sits under the
+## HUD strip, so what gets clipped is exactly the depth that makes a camp read
+## as a camp rather than as a fence with nothing behind it.
+const CAMP_BORDER_INSET := 1
+
+## How far a camp's fire is pulled down towards the wall in front of it, and
+## how much horizontal play it keeps, in pixels.
+##
+## Measured rather than guessed. With both centred on their own cells the
+## fire's sprite bottom sits 14px clear of the wall sprite's top, and that band
+## of bare grass is what made the first build read as "a fire, and separately a
+## fence" rather than as one camp. 12px closes it while leaving the wall's
+## stake tips unobscured.
+const CAMP_FIRE_SETBACK := 12.0
+const CAMP_FIRE_WANDER := 6.0
+
+## Chebyshev distance from a cell to the nearest road, searched outwards and
+## capped - the answer is only ever compared against CAMP_MAX_ROAD_DISTANCE,
+## so a full distance field would be work thrown away.
+func _distance_to_road(col: int, row: int, cap: int) -> int:
+	for d in range(1, cap + 1):
+		for dr in range(-d, d + 1):
+			for dc in range(-d, d + 1):
+				if maxi(absi(dr), absi(dc)) != d:
+					continue
+				if _is_road(col + dc, row + dr):
+					return d
+	return cap + 1
+
+## Whether a camp of `width` fits with its wall on `row` starting at `col`.
+##
+## Needs the wall's row AND the row behind it: the fires stand behind the
+## wall, both so the camp has depth and so the wall occludes their bases.
+func _camp_fits(col: int, row: int, width: int, used: Dictionary) -> bool:
+	# row is the WALL's row; row - 1 holds the fires, so the inset applies to
+	# row - 1 at the top and to row at the bottom.
+	if row - 1 < CAMP_BORDER_INSET or row > _rows - 1 - CAMP_BORDER_INSET:
+		return false
+	if col < CAMP_BORDER_INSET or col + width > _cols - CAMP_BORDER_INSET:
+		return false
+	var near := false
+	for i in width:
+		for r in [row, row - 1]:
+			var cell := Vector2i(col + i, r)
+			if _tiles[r][cell.x] != Tiles.BUILDABLE:
+				return false
+			if _decorations.has(cell) or used.has(cell):
+				return false
+		var d := _distance_to_road(col + i, row, CAMP_MAX_ROAD_DISTANCE)
+		if d < CAMP_MIN_ROAD_DISTANCE:
+			return false  # too close: this is ground the player wants
+		if d <= CAMP_MAX_ROAD_DISTANCE:
+			near = true
+	return near
+
+## Places up to CAMP_COUNT camps. Runs BEFORE _scatter_decoration so the
+## scatter sees the camp cells as taken and fills around them.
+func _place_camps(rng: Rng) -> void:
+	# Only where the biome's art is actually a wall. See Biomes.has_wall_art:
+	# the ice and desert "spike" is a totem and a skull pile, and lining five
+	# of either up in a row would be a worse version of the problem camps were
+	# built to fix.
+	if not Biomes.has_wall_art(_biome):
+		return
+	var sites: Array = []
+	for r in range(1, _rows):
+		for c in range(0, _cols):
+			# Widest first, so a camp claims as much of a run as it can rather
+			# than leaving a two-tile orphan beside it.
+			for w in range(CAMP_MAX_WIDTH, CAMP_MIN_WIDTH - 1, -1):
+				if _camp_fits(c, r, w, {}):
+					sites.append({"col": c, "row": r, "width": w})
+					break
+	if sites.is_empty():
+		return
+
+	var used := {}
+	var placed := 0
+	for site in rng.shuffle(sites):
+		if placed >= CAMP_COUNT:
+			break
+		if not _camp_fits(site["col"], site["row"], site["width"], used):
+			continue  # an earlier camp took part of this run
+		_build_camp(site, rng, used)
+		placed += 1
+
+func _build_camp(site: Dictionary, rng: Rng, used: Dictionary) -> void:
+	var col: int = site["col"]
+	var row: int = site["row"]
+	var width: int = site["width"]
+
+	# Fires FIRST. At equal z_index Godot draws in child order, so placing the
+	# wall afterwards lets it occlude the fire bases behind it. Built the other
+	# way round the fire floats in front of its own fence and the camp reads as
+	# two unrelated props sharing a patch of grass.
+	var fire_count: int = 1 if width < 4 else 2
+	for i in fire_count:
+		var fc: int = col + 1 + i * (width - 2)
+		var cell := Vector2i(clampi(fc, col, col + width - 1), row - 1)
+		if _decorations.has(cell):
+			continue
+		# Aligned and then pulled down against the wall, rather than given the
+		# ordinary jitter. Left to wander a third of a tile on its own a fire
+		# either opens the gap below back up or climbs in front of its own
+		# palisade; inside a built structure it is the relationship to the wall
+		# that has to hold, not the freedom from the lattice. A few pixels of
+		# horizontal play keep two fires in one camp from looking stamped.
+		var sprite := _place_aligned_prop(&"fire", cell.x, cell.y)
+		sprite.position.x += rng.float_range(-CAMP_FIRE_WANDER, CAMP_FIRE_WANDER)
+		sprite.position.y += CAMP_FIRE_SETBACK
+		_decorations[cell] = sprite
+		_decoration_slots[cell] = &"fire"
+
+	for i in width:
+		var cell := Vector2i(col + i, row)
+		_decorations[cell] = _place_aligned_prop(&"spike", cell.x, cell.y)
+		_decoration_slots[cell] = &"spike"
+
+	# Claim the camp and a one-tile margin, so two camps cannot grow together
+	# into one long unreadable fence.
+	for r in range(row - 2, row + 2):
+		for c in range(col - 1, col + width + 1):
+			used[Vector2i(c, r)] = true
+
+## A prop placed exactly on its cell centre: no jitter, rotation, flip or
+## scale variance.
+##
+## The deliberate exception to _place_prop's rule that every prop wanders. A
+## palisade is a BUILT thing - its segments have to line up, or the run stops
+## reading as a wall and goes straight back to the scattered junk this
+## replaced. Here alignment IS the effect, so the jitter that breaks the
+## lattice everywhere else is precisely wrong. It costs the grid nothing:
+## a handful of camp tiles against a whole map of jittered props and a
+## half-tile-offset ground blend.
+##
+## No flip either, unlike _place_prop: mirroring a fence section moves where
+## its rails meet the neighbouring one, which is the join that makes a run
+## read as continuous.
+##
+## CAUTION for any future caller: this skips _room_towards, so unlike
+## _place_prop it does NOTHING to keep its sprite off the road. Camp props are
+## safe only because _camp_fits already holds them CAMP_MIN_ROAD_DISTANCE
+## clear of the lane - relaxing any of the camp siting rules makes
+## test_no_prop_overhangs_the_road fail, which is how that dependency was
+## found. Placing an aligned prop anywhere near a road needs its own clamp.
+func _place_aligned_prop(slot: StringName, col: int, row: int) -> Sprite2D:
+	var texture: Texture2D = load(Biomes.prop_path(_biome, slot))
+	var box := Tiles.TILE_SIZE * float(PROP_SCALE.get(slot, 1.0))
+	var inset := Vector2.ONE * (Tiles.TILE_SIZE - box) / 2.0
+	var sprite := _place(texture, col, row, box, _Z_OVERLAY, inset)
+	# Same centre re-anchoring as _place_prop, for the same reason: a prop's
+	# position is its centre, and prop_footprints reads sprite.centered to find
+	# the blocking circle.
+	var drawn := sprite.texture.get_size() * sprite.scale
+	sprite.centered = true
+	sprite.position += drawn / 2.0
+	_prop_sprites[sprite] = true
+	return sprite
+
+## One scattered prop slot. Weighted so trees stay the common case and the
+## biome's landmark, where it has one, stays occasional.
+func _scatter_slot(rng: Rng) -> StringName:
+	if Biomes.has_wall_art(_biome):
+		return &"stone" if rng.int_range(0, 2) == 0 else &"tree"
+	var roll := rng.int_range(0, 4)
+	if roll == 0:
+		return &"stone"
+	if roll == 1:
+		return &"spike"
+	return &"tree"
+
+## Trees and rocks on open ground. Fences and fires are NOT scattered here -
+## see _place_camps for why.
 func _scatter_decoration(rng: Rng) -> void:
 	var buildable: Array = []
-	for r in _rows:
-		for c in _cols:
-			if _tiles[r][c] == Tiles.BUILDABLE:
-				buildable.append(Vector2i(c, r))
-
-	var spike_count: int = mini(buildable.size(), maxi(5, int(floor(buildable.size() * 0.1))))
-	var shuffled := rng.shuffle(buildable)
-	for i in spike_count:
-		var t: Vector2i = shuffled[i]
-		_decorations[t] = _place_prop(&"spike", t.x, t.y, rng)
-		_decoration_slots[t] = &"spike"
-
-	var path_adjacent: Array = []
+	var buildable_total := 0
 	for r in _rows:
 		for c in _cols:
 			if _tiles[r][c] != Tiles.BUILDABLE:
 				continue
-			if _decorations.has(Vector2i(c, r)):
-				continue
-			if _is_adjacent_to_walkable(r, c):
-				path_adjacent.append(Vector2i(c, r))
+			buildable_total += 1
+			if not _decorations.has(Vector2i(c, r)):
+				buildable.append(Vector2i(c, r))
 
-	var fire_count: int = mini(path_adjacent.size(), _MAX_FIRE_TILES)
-	var shuffled_adjacent := rng.shuffle(path_adjacent)
-	for i in fire_count:
-		var t: Vector2i = shuffled_adjacent[i]
-		_decorations[t] = _place_prop(&"fire", t.x, t.y, rng)
-		_decoration_slots[t] = &"fire"
+	# The same 10% the palisade sections used to take, and camps are placed ON
+	# TOP of it rather than counted against it.
+	#
+	# The alternative - camps drawing from this budget so the total number of
+	# blocking props held steady - was built and measured, and it stripped the
+	# map bare: on the demo map the camps ate most of the allowance and left
+	# six scattered props for the whole field, which is the opposite of what
+	# the decoration is for.
+	#
+	# What it costs is build space, and that was measured too rather than
+	# assumed. Legal tower positions on a half-tile lattice, using the real
+	# placement rule: demo map 46.3% before, 42.1% after; map2 54.7% to 51.7%;
+	# map3 50.1% to 45.5%. Roughly four points, against a 16-tower limit and
+	# 542 legal spots on the tightest map - nowhere near binding.
+	#
+	# Computed from the whole buildable pool rather than the pool left after
+	# camps, so the target does not drift with how much ground camps took.
+	var target: int = mini(buildable_total, maxi(5, int(floor(buildable_total * 0.1))))
+	var count: int = mini(buildable.size(), target)
+	var shuffled := rng.shuffle(buildable)
+	for i in count:
+		var t: Vector2i = shuffled[i]
+		# A biome with no wall art keeps its spike in the scatter, because
+		# there it was never the problem: a skull pile alone in the desert is
+		# a landmark, while a fence alone in a field is a fence around nothing.
+		var slot: StringName = _scatter_slot(rng)
+		_decorations[t] = _place_prop(slot, t.x, t.y, rng)
+		_decoration_slots[t] = slot
 
 ## How many detail sprites to scatter per tile of map.
 ##

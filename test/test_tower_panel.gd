@@ -123,8 +123,13 @@ func test_composed_game_scene_carries_the_tower_inspector_in_the_sidebar() -> bo
 	var inspector = game.get_node_or_null("Hud/TowerPanel/TowerInspector")
 	assert_true(inspector != null, "the sidebar carries an inspector where game.gd looks for it")
 	assert_true(inspector is TowerInspector, "and it is the inspector, not some other Control")
-	assert_true(inspector.offset_top > 0.0,
-		"placed below the build buttons rather than on top of them")
+	# Deliberately the SAME offset as the Buttons container, not below it: the
+	# two share one column and are shown one at a time. See
+	# test_the_build_palette_and_the_inspector_are_never_both_showing. Stacking
+	# them is what pushed Sell off the bottom of the screen.
+	var buttons: Control = game.get_node("Hud/TowerPanel/Buttons")
+	assert_eq(inspector.offset_top, buttons.offset_top,
+		"inspector starts level with the palette it replaces, below the HUD bar")
 	game.free()
 	return true
 
@@ -403,6 +408,112 @@ func test_a_kind_at_its_limit_is_disabled_even_when_affordable() -> bool:
 	panel.bind(board)
 	assert_true(panel._buttons[&"long"].disabled,
 		"maxed out, so unbuildable regardless of gold")
+	panel.free()
+	board.free()
+	return true
+
+# --------------------------------------------------------------------------
+# The sidebar has to FIT
+# --------------------------------------------------------------------------
+
+# Sell used to render 38px below the bottom edge of the viewport. It was
+# built, wired, and covered - test_tower_inspector.gd presses it and asserts
+# the board sells - and still no player could reach it, because the inspector
+# sat at a hardcoded offset_top of 320 and grew 390px into a column only 672
+# tall. Every test asked "does this button work"; none asked "is it on the
+# screen", so the suite stayed green while the feature was gone.
+#
+# Two rules close it. Both are asserted here rather than in the inspector's
+# own suite, because neither is visible from a panel instantiated alone - the
+# height that matters comes from the map, and the exclusivity is the panel's
+# behaviour.
+
+## Bottom edge the inspector's last row reaches, without needing a layout
+## frame - a harness that forbids await never gets one.
+##
+## Sums the CHILDREN's minimum sizes rather than asking the container for its
+## combined minimum. rows.get_combined_minimum_size() returns (0, 0) here: a
+## Container reports zero until it has been laid out inside a live tree, and
+## a hidden one reports zero regardless. The first version of this test used
+## it and computed offset_top + 0, which is under any viewport - it passed
+## with the inspector back at the broken offset of 320. Summing the children
+## is measured against the real rendered layout in the commit message: 414px
+## of minimums against 390px actually drawn, so this over-estimates slightly,
+## which is the safe direction for a fit check.
+func _inspector_content_height(panel: TowerPanel) -> float:
+	var inspector: TowerInspector = panel.get_node("TowerInspector")
+	var rows: VBoxContainer = inspector.get_node("Rows")
+	var total := 0.0
+	for child in rows.get_children():
+		total += (child as Control).get_combined_minimum_size().y
+	total += float(rows.get_theme_constant(&"separation")) * float(rows.get_child_count() - 1)
+	return inspector.offset_top + total
+
+## The shortest shipped map, which is the binding constraint: the viewport is
+## exactly the map's pixel height (GameBoard.required_content_size), so the
+## sidebar has to fit the smallest one, not the one that happens to load first.
+func _shortest_map_height() -> int:
+	var shortest := 1 << 30
+	for name in Maps.DEFS:
+		shortest = mini(shortest, Maps.pixel_size(name).y)
+	return shortest
+
+func test_the_selected_tower_inspector_fits_inside_the_shortest_map() -> bool:
+	var board := _ready_board()
+	var panel := _ready_panel()
+	panel.bind(board)
+	var inspector: TowerInspector = panel.get_node("TowerInspector")
+	inspector.notification(Node.NOTIFICATION_READY)
+	# bind() as well as ready(): game.gd binds the inspector separately from
+	# the panel, and an unbound inspector leaves every row's text empty, so
+	# the buttons report the bare 56px tap minimum instead of the 69px three
+	# lines of tier text actually need. Measuring the empty panel is measuring
+	# the wrong thing.
+	inspector.bind(board)
+
+	var viewport_height := _shortest_map_height()
+	var worst := 0.0
+	var worst_kind := &""
+	for kind in Towers.KINDS:
+		board.set_gold_for_test(999999)
+		board.select_tower_kind(kind)
+		board._try_place(_find_placeable_position(board))
+		var tower: Tower = board._towers_root.get_child(board._towers_root.get_child_count() - 1)
+		inspector.show_tower(tower)
+		var height := _inspector_content_height(panel)
+		if height > worst:
+			worst = height
+			worst_kind = kind
+
+	assert_true(worst <= float(viewport_height),
+		"the whole inspector is on screen: worst kind %s needs %d px of the %d px the shortest map gives"
+			% [worst_kind, int(worst), viewport_height])
+	panel.free()
+	board.free()
+	return true
+
+# The palette and the inspector are the same 140px column in two states.
+# Stacked they needed 924px of 672, which is what pushed Sell off the bottom;
+# side by side is not an option at this width. If a later change makes them
+# both visible, the column overflows again and the test above stops being
+# enough on its own - so the exclusivity is pinned directly.
+func test_the_build_palette_and_the_inspector_are_never_both_showing() -> bool:
+	var board := _ready_board()
+	var panel := _ready_panel()
+	panel.bind(board)
+	var buttons: Control = panel.get_node("Buttons")
+
+	assert_true(buttons.visible, "the palette is what the column shows with nothing selected")
+
+	board.set_gold_for_test(999999)
+	board.select_tower_kind(&"basic")
+	board._try_place(_find_placeable_position(board))
+	var tower: Tower = board._towers_root.get_child(0)
+	board._select_tower(tower)
+	assert_true(not buttons.visible, "selecting a tower hands the column to the inspector")
+
+	board._deselect_tower()
+	assert_true(buttons.visible, "and deselecting hands it back, so the player can build again")
 	panel.free()
 	board.free()
 	return true

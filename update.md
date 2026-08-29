@@ -227,6 +227,44 @@ with two ability bars.
 
 ---
 
+## Camps, and the settlement they are heading towards
+
+Fences and fires no longer scatter. They appear only as **camps**: a palisade
+run of 3-5 sections with one or two fire pits standing behind it, sited 2-3
+tiles back from the road and one tile clear of the map border. Everything that
+used to be a lone fence is now a tree or a rock.
+
+**This is forest-only, and the reason is the art.** The `spike` slot is a
+different object in every biome - forest ships a 95x63 wooden palisade section,
+ice a 37x79 totem on a post, desert a 42x35 skull pile. Only the palisade tiles
+into a wall; five totems or five skulls in a row would be a worse version of
+the problem camps fix. `Biomes.has_wall_art()` carries that fact, and ice and
+desert keep scattering their spike as the landmark it actually is.
+
+### What would finish the idea
+
+1. **Wall art for ice and desert.** One 3/4-view section per biome with flat
+   ends and continuous rails, matching the forest palisade's proportions. Then
+   flipping `wall_prop` to `true` in `Biomes.DEFS` is the entire change.
+2. **A corner and a side-on section.** Camps are a wall with fires behind it
+   rather than an enclosure purely because the horizontal piece is all there
+   is. Two more sprites would allow a real compound.
+3. **Authored settlements, not generated camps.** The camp siting rules are a
+   decent procedural stand-in, but the thing actually wanted is *a settlement
+   on the map that the player is defending* - which should be **placed by hand
+   in the map text**, not rolled. The format and the editor both exist now, so
+   this is a new character in `data/map_format.gd` plus a palette entry in
+   `tools/map_editor_io.gd`. Doing it that way also removes the last piece of
+   build-space denial that varies with the decoration seed.
+
+Camps cost some build space, measured rather than assumed: legal tower
+positions on a half-tile lattice went 46.3% -> 42.1% on the demo map, 54.7% ->
+51.7% on map2, 50.1% -> 45.5% on map3. Against a 16-tower limit and 542 legal
+spots on the tightest map, nowhere near binding - but worth re-measuring if
+camp counts or widths grow.
+
+---
+
 ## Deferred deliberately
 
 - **Phased enemies.** `Targeting.is_targetable` already gates on `phased` and

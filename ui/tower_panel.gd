@@ -18,6 +18,14 @@ func bind(board: GameBoard) -> void:
 	board.gold_changed.connect(_refresh)
 	board.tower_placed.connect(_on_tower_placed)
 	board.tower_sold.connect(_on_tower_sold)
+	# The build palette and the inspector share one 140px column and are shown
+	# one at a time. Stacked, they needed 924px of a 672px viewport and the
+	# last row - Sell - rendered 38px BELOW the bottom edge, which is how a
+	# tested, working button became invisible to the player. Mutually exclusive
+	# is not a space-saving trick: with a tower selected you are managing that
+	# tower, and the palette's job is choosing what to build next.
+	board.tower_selected.connect(_on_tower_selected)
+	board.tower_deselected.connect(_on_tower_deselected)
 
 	# Butt the panel's left edge against the map's right edge; the scene
 	# anchors the other three sides to the viewport. The map is a fixed pixel
@@ -89,6 +97,15 @@ func _on_tower_placed(_kind: StringName) -> void:
 func clear_selection() -> void:
 	for k in _buttons:
 		_buttons[k].button_pressed = false
+
+## Selecting a placed tower swaps the column over to the inspector; ESC or a
+## tap on empty ground brings the palette back (GameBoard.clear_selection and
+## _handle_tap both emit tower_deselected).
+func _on_tower_selected(_tower: Tower) -> void:
+	$Buttons.visible = false
+
+func _on_tower_deselected() -> void:
+	$Buttons.visible = true
 
 func _on_selected(kind: StringName) -> void:
 	_board.select_tower_kind(kind)
