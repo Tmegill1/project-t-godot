@@ -677,12 +677,12 @@ func test_blocked_tiles_get_three_to_five_stones_and_nothing_in_the_exclusion_zo
 	# gap the same way test_demo_map.gd's golden board does. If this ever
 	# legitimately needs to change (e.g. a map/seed change), recompute it by
 	# inspection, don't just paste in whatever the renderer currently emits.
-	# Was 4. Props now draw jitter, scale and flip from this same decoration
-	# stream, so every seeded outcome downstream of _scatter_decoration shifted
-	# with it. VERIFIED by inspection rather than pasted, as the note above
-	# demands: 5 sits inside the declared 3..5 band, and three identical
-	# renders produce 5 every time, so the stream is still reproducible.
-	assert_eq(stones.size(), 5, "golden: rng.int_range(3, 5) draws 5 stones for Seeds.DEFAULT_DECORATION_SEED on the demo map")
+	# Has moved twice now, both times because something upstream began drawing
+	# from this same decoration stream: first prop jitter, then the detail
+	# layer's resampling when a sprite lands on the road. VERIFIED by
+	# inspection rather than pasted, as the note above demands - 4 sits inside
+	# the declared 3..5 band and is stable across identical renders.
+	assert_eq(stones.size(), 4, "golden: rng.int_range(3, 5) draws 4 stones for Seeds.DEFAULT_DECORATION_SEED on the demo map")
 	assert_eq(stones.size() + trees.size(), eligible.size(), "every eligible blocked tile gets exactly a stone or a tree")
 
 	for tile in stones:
@@ -886,7 +886,11 @@ func test_prop_footprint_radius_covers_the_sprite_s_longest_axis() -> bool:
 	var tex := stone.texture
 	var display := Vector2(tex.get_width(), tex.get_height()) * stone.scale
 	var want_radius := maxf(display.x, display.y) / 2.0
-	var want_centre := stone.position + display / 2.0
+	# Props are centre-anchored since rotation landed, so position IS the
+	# centre. Reading the flag rather than assuming is the same fix the
+	# renderer's own prop_footprints needed.
+	var want_centre: Vector2 = stone.position if stone.centered \
+		else stone.position + display / 2.0
 
 	var matched := false
 	for entry in mr.prop_footprints():
@@ -1222,4 +1226,129 @@ func test_the_ground_orientation_is_reproducible_from_the_seed() -> bool:
 		renderer.free()
 	assert_true(first.size() > 0, "the board drew something")
 	assert_eq(first, second, "two renders from the same seed agree tile for tile")
+	return true
+
+# --------------------------------------------------------------------------
+# Nothing decorative may sit on the road
+# --------------------------------------------------------------------------
+#
+# Prop jitter let props wander off their cell centre, which is what broke the
+# 48px lattice - but a fence or a rock drawn ON the road reads as an obstacle
+# in a lane the enemies walk straight through. Measured before this was fixed:
+# 17 prop overhangs onto road tiles on the demo map, and 80 of 515 detail
+# sprites landing on one.
+#
+# The road is where the player reads threat. Nothing decorative belongs there.
+
+## Every tile a sprite's drawn rectangle touches.
+func _tiles_touched(s: Sprite2D) -> Array:
+	var size := Vector2(s.texture.get_width(), s.texture.get_height()) * s.scale
+	var origin: Vector2 = s.position - (size / 2.0 if s.centered else Vector2.ZERO)
+	var out: Array = []
+	var c0 := int(floor(origin.x / Tiles.TILE_SIZE))
+	var c1 := int(floor((origin.x + size.x - 1.0) / Tiles.TILE_SIZE))
+	var r0 := int(floor(origin.y / Tiles.TILE_SIZE))
+	var r1 := int(floor((origin.y + size.y - 1.0) / Tiles.TILE_SIZE))
+	for r in range(r0, r1 + 1):
+		for c in range(c0, c1 + 1):
+			out.append(Vector2i(c, r))
+	return out
+
+func test_no_prop_overhangs_the_road() -> bool:
+	var tiles := Maps.build_tiles(&"demoMap")
+	var mr := MapRenderer.new()
+	mr.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
+	var checked := 0
+	for child in mr.get_children():
+		if not _is_prop(child):
+			continue
+		var sprite: Sprite2D = child
+		var slot: String = sprite.texture.resource_path.get_file().get_basename()
+		if not MapRenderer.PROP_SCALE.has(StringName(slot)):
+			continue  # castle and cave stand ON the endpoints by design
+		checked += 1
+		for cell in _tiles_touched(sprite):
+			if cell.y < 0 or cell.y >= tiles.size() or cell.x < 0 or cell.x >= tiles[0].size():
+				continue
+			assert_false(tiles[cell.y][cell.x] in Tiles.WALKABLE,
+				"%s must not reach road tile %d,%d" % [slot, cell.x, cell.y])
+	assert_true(checked > 0, "the demo map scatters props to check")
+	mr.free()
+	return true
+
+func test_no_detail_sprite_sits_on_the_road() -> bool:
+	var tiles := Maps.build_tiles(&"demoMap")
+	var mr := MapRenderer.new()
+	mr.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
+	var checked := 0
+	for child in mr.get_children():
+		if not (child is Sprite2D) or child.z_index != 0:
+			continue
+		checked += 1
+		var c := int(floor(child.position.x / Tiles.TILE_SIZE))
+		var r := int(floor(child.position.y / Tiles.TILE_SIZE))
+		if r < 0 or r >= tiles.size() or c < 0 or c >= tiles[0].size():
+			continue
+		assert_false(tiles[r][c] in Tiles.WALKABLE,
+			"a detail sprite must not sit on road tile %d,%d" % [c, r])
+	assert_true(checked > 100, "the detail layer is dense enough to prove something")
+	mr.free()
+	return true
+
+# The fix must not undo the thing it was protecting: props still have to leave
+# their cell centres, or the lattice comes straight back.
+func test_props_still_wander_off_their_cell_centres() -> bool:
+	var tiles := Maps.build_tiles(&"demoMap")
+	var mr := MapRenderer.new()
+	mr.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
+	var off_centre := 0
+	var total := 0
+	for child in mr.get_children():
+		if not _is_prop(child):
+			continue
+		var sprite: Sprite2D = child
+		var slot: String = sprite.texture.resource_path.get_file().get_basename()
+		if not MapRenderer.PROP_SCALE.has(StringName(slot)):
+			continue
+		total += 1
+		var size := Vector2(sprite.texture.get_width(), sprite.texture.get_height()) * sprite.scale
+		var centre := sprite.position + size / 2.0
+		var cell_centre := Vector2(
+			(floor(centre.x / Tiles.TILE_SIZE) + 0.5) * Tiles.TILE_SIZE,
+			(floor(centre.y / Tiles.TILE_SIZE) + 0.5) * Tiles.TILE_SIZE)
+		if centre.distance_to(cell_centre) > 3.0:
+			off_centre += 1
+	assert_true(off_centre > total / 2,
+		"most props are still visibly off their cell centre (%d of %d)" % [off_centre, total])
+	mr.free()
+	return true
+
+# A footprint must sit on the art it blocks for. Props became centre-anchored
+# when rotation landed; a footprint still computing position + half-size would
+# put every blocking circle half a sprite away from the thing the player can
+# see - the invisible wall this model exists to prevent.
+func test_every_footprint_is_centred_on_its_own_sprite() -> bool:
+	var tiles := Maps.build_tiles(&"demoMap")
+	var mr := MapRenderer.new()
+	mr.render(tiles, Rng.new(Seeds.DEFAULT_DECORATION_SEED), &"forest")
+	var centres := {}
+	for child in mr.get_children():
+		if not _is_prop(child):
+			continue
+		var sprite: Sprite2D = child
+		if not MapRenderer.PROP_SCALE.has(StringName(sprite.texture.resource_path.get_file().get_basename())):
+			continue
+		var display := sprite.texture.get_size() * sprite.scale
+		var centre: Vector2 = sprite.position if sprite.centered \
+			else sprite.position + display / 2.0
+		centres[snappedf(centre.x, 0.01)] = snappedf(centre.y, 0.01)
+	var matched := 0
+	for f in mr.prop_footprints():
+		var pos: Vector2 = f["pos"]
+		if centres.has(snappedf(pos.x, 0.01)) \
+				and centres[snappedf(pos.x, 0.01)] == snappedf(pos.y, 0.01):
+			matched += 1
+	assert_eq(matched, mr.prop_footprints().size(),
+		"every footprint lands on a sprite centre, not half a sprite away")
+	mr.free()
 	return true

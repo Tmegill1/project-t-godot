@@ -107,8 +107,14 @@ func prop_footprints() -> Array:
 			continue
 		var tex: Texture2D = sprite.texture
 		var display := Vector2(tex.get_width(), tex.get_height()) * sprite.scale
+		# Props are centred (see _place_prop); endpoints and tiles are not.
+		# Reading the flag rather than assuming keeps the blocking circle on
+		# the visible art - the invisible wall this whole footprint model
+		# exists to prevent is exactly what a wrong anchor would manufacture.
+		var centre: Vector2 = sprite.position if sprite.centered \
+			else sprite.position + display / 2.0
 		out.append({
-			"pos": sprite.position + display / 2.0,
+			"pos": centre,
 			"radius": maxf(display.x, display.y) / 2.0,
 		})
 	return out
@@ -213,22 +219,53 @@ func _place_prop(slot: StringName, col: int, row: int, rng: Rng) -> Sprite2D:
 	# offset by the difference or the prop sits in the tile's top-left corner
 	# instead of the middle of it.
 	var inset := Vector2.ONE * (Tiles.TILE_SIZE - box) / 2.0
+	# Jitter is bounded so the drawn sprite cannot reach a ROAD neighbour. A
+	# fence or a rock overhanging the lane enemies walk down reads as an
+	# obstacle in it - the player's eye does not know the footprint stops at
+	# the grass. Wandering is still free in every direction that is not road,
+	# which is where the lattice-breaking actually comes from.
+	var half_over := maxf(0.0, (box - Tiles.TILE_SIZE) / 2.0)
+	var limit := PROP_JITTER * Tiles.TILE_SIZE
 	var wander := Vector2(
-		rng.float_range(-PROP_JITTER, PROP_JITTER),
-		rng.float_range(-PROP_JITTER, PROP_JITTER)) * Tiles.TILE_SIZE
+		rng.float_range(
+			-_room_towards(col, row, -1, 0, half_over, limit),
+			_room_towards(col, row, 1, 0, half_over, limit)),
+		rng.float_range(
+			-_room_towards(col, row, 0, -1, half_over, limit),
+			_room_towards(col, row, 0, 1, half_over, limit)))
 	var sprite := _place(texture, col, row, box, _Z_OVERLAY, inset + wander)
+	# Re-anchored to CENTRED. _place leaves a sprite top-left anchored, which
+	# is right for a tile but wrong for anything that rotates: a rotation about
+	# a top-left origin swings the sprite instead of turning it in place.
+	#
+	# An earlier version set both `offset` and `position` by half the sprite,
+	# which pushes BOTH the same way rather than cancelling - so every rotated
+	# prop was displaced by half its own size, and that is what put a fence and
+	# a rock on the road. Converting the anchor once, here, keeps the geometry
+	# uniform: a prop's position IS its centre.
+	var drawn := sprite.texture.get_size() * sprite.scale
+	sprite.centered = true
+	sprite.position += drawn / 2.0
 	# Mirroring doubles the apparent variety for nothing. Unlike a road piece,
 	# a prop carries no directional meaning, so there is no mask to contradict.
 	sprite.flip_h = rng.int_range(0, 1) == 1
 	if not _NO_ROTATE.has(slot):
-		# Rotated about the sprite's own middle rather than its top-left, or a
-		# rotation would also translate it.
-		sprite.offset = sprite.texture.get_size() / 2.0
-		sprite.position += sprite.texture.get_size() / 2.0 * sprite.scale
 		sprite.rotation_degrees = rng.float_range(
 			-PROP_ROTATION_DEGREES, PROP_ROTATION_DEGREES)
 	_prop_sprites[sprite] = true
 	return sprite
+
+## How far a prop in this cell may move towards one neighbour.
+##
+## Zero towards a road, minus whatever the sprite already overhangs by being
+## larger than its cell - so a prop beside the road is pulled AWAY from it
+## rather than merely stopped at the edge. Full jitter in every other
+## direction, which is what keeps the lattice broken.
+func _room_towards(col: int, row: int, dc: int, dr: int,
+		half_over: float, limit: float) -> float:
+	if _is_road(col + dc, row + dr):
+		return -half_over
+	return limit
 
 ## Ground is one sprite per tile, on the tile grid.
 ##
@@ -538,8 +575,25 @@ func _scatter_detail(rng: Rng) -> void:
 		sprite.centered = true
 		sprite.scale = Vector2.ONE * (box / maxf(
 			float(texture.get_width()), float(texture.get_height())))
-		# Continuous, not per cell. A detail sprite has no tile.
-		sprite.position = Vector2(rng.float_range(0.0, width), rng.float_range(0.0, height))
+		# Continuous, not per cell - a detail sprite has no tile, which is how
+		# it crosses boundaries. But it must not land ON the road: the road is
+		# where the player reads threat, and a pebble or shrub drawn there
+		# looks like something in the lane. Resampled rather than nudged, so
+		# the distribution over the ground stays uniform.
+		# Named `spot`, not `position`: a local called position shadows
+		# Node2D.position and the engine warns about it.
+		var spot := Vector2(rng.float_range(0.0, width), rng.float_range(0.0, height))
+		var attempts := 0
+		while _is_road(int(spot.x / Tiles.TILE_SIZE),
+				int(spot.y / Tiles.TILE_SIZE)) and attempts < 8:
+			spot = Vector2(rng.float_range(0.0, width), rng.float_range(0.0, height))
+			attempts += 1
+		if attempts >= 8:
+			# A map that is nearly all road would spin here. Drop the sprite
+			# rather than place it badly or loop.
+			sprite.free()
+			continue
+		sprite.position = spot
 		sprite.rotation_degrees = rng.float_range(0.0, 360.0)
 		sprite.flip_h = rng.int_range(0, 1) == 1
 		# Slightly translucent and slightly darkened, so it reads as part of
