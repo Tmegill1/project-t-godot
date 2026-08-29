@@ -34,14 +34,14 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # The templates archive is 1.2GB. Caching it keyed on the engine version
       # turns a two-minute download into a few seconds on every run after the
       # first, and it only ever changes when GODOT_VERSION does.
       - name: Cache export templates
         id: templates-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.local/share/godot/export_templates
           key: godot-export-templates-${{ env.GODOT_VERSION }}-stable
@@ -146,9 +146,15 @@ jobs:
           ls -lh export/web | awk 'NR>1 {printf "%-34s %s\n", $9, $5}' >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: export/web
+          # v5 tars with `--exclude=.[^/]*` unless this is set, which would
+          # silently drop the .nojekyll written two steps up. Artifact-based
+          # Pages deploys do not run Jekyll anyway, so nothing would visibly
+          # break - which is exactly why this is worth pinning rather than
+          # discovering later. Keeps the published tree identical to v3's.
+          include-hidden-files: true
 
   deploy:
     needs: build
@@ -158,4 +164,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
