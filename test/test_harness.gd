@@ -27,6 +27,22 @@ func _total_spawn_count(wave: int) -> int:
 		total += 1
 	return total
 
+# What an UNDEFENDED wave costs in lives. Derived from the composition for the
+# same reason _total_spawn_count is: a literal would restate the roster's size
+# and teach the next reader to bump a number instead of asking why it moved.
+#
+# Undefended is what makes it derivable at all - every enemy arrives whole, so
+# each pays its kind's full life_loss with the health ratio at 1. A defended
+# wave has enemies arriving chipped and its cost is not a function of the
+# composition alone.
+func _total_life_loss(wave: int) -> int:
+	var total := 0
+	for entry in Waves.get_composition(wave):
+		total += int(entry["count"]) * int(Enemies.DEFS[entry["kind"]]["life_loss"])
+	if Bosses.has_boss(wave):
+		total += int(Bosses.on_wave(wave)["life_loss"])
+	return total
+
 # --------------------------------------------------------------------------
 # Brief's tests, verbatim.
 # --------------------------------------------------------------------------
@@ -86,7 +102,15 @@ func test_later_waves_are_harder_for_the_same_board() -> bool:
 	# of these four numbers.
 	assert_eq(late["kills"], 0, "wave 12 exact: a single basic tower kills nothing")
 	assert_eq(late["leaks"], 96, "wave 12 exact: 96 of the wave's enemies get through")
-	assert_eq(late["lives_lost"], 384, "wave 12 exact: lives lost at this wave's health-based leak cost")
+	# 222, not the 384 this cost under the flat cap - which was simply 96 x 4,
+	# the clearest possible demonstration that the cap always bound. 222 is
+	# also exactly _total_life_loss(12), the UNDEFENDED cost of the wave: a
+	# single basic tower kills nothing here and never chips an enemy far
+	# enough to round its price down a step, so every leak pays its kind in
+	# full. Left as a literal rather than the helper because this is a
+	# regression pin on one exact simulated result, not a claim about the
+	# composition.
+	assert_eq(late["lives_lost"], 222, "wave 12 exact: lives lost at each leaked kind's own price")
 	assert_eq(late["gold_earned"], 0, "wave 12 exact: no kills means no gold")
 	return true
 
@@ -235,7 +259,12 @@ func test_cooldown_boundary_at_an_evenly_dividing_tick_size() -> bool:
 	var r := Harness.run_wave({"wave": 5, "towers": towers, "path": _path(), "tick_ms": 40.0})
 	assert_eq(r["kills"], 11, "exact: cooldown==0.0 still fires (> not >=)")
 	assert_eq(r["leaks"], 15, "exact: one fewer leak than the >= mutant")
-	assert_eq(r["lives_lost"], 33, "exact: lives lost at this exact leak count")
+	# 27, not the 33 the flat rule gave. Wave 5 was on the OLD rule's flat
+	# branch, where an ogre's 5 was still clipped to 4; it is no longer
+	# clipped, and the mortar's chip damage now rounds several of these
+	# fifteen leaks down. Kills, leaks and gold are all unchanged, which is
+	# the point - the fight is identical and only what a leak COSTS moved.
+	assert_eq(r["lives_lost"], 27, "exact: lives lost at this exact leak count")
 	assert_eq(r["gold_earned"], 55, "exact: gold from exactly these kills")
 	return true
 
@@ -254,7 +283,11 @@ func test_splash_radius_boundary_at_wave_ten() -> bool:
 	var r := Harness.run_wave({"wave": 10, "towers": towers, "path": _path()})
 	assert_eq(r["kills"], 0, "exact: a single mortar cannot break wave 10 once armour applies")
 	assert_eq(r["leaks"], 77, "exact: three fewer leaks than the < mutant")
-	assert_eq(r["lives_lost"], 310, "exact: lives lost at this exact leak count")
+	# 177, against the flat rule's 310 (76 x 4 plus the boss's 6). One short
+	# of _total_life_loss(10)'s 178, because exactly one bat arrives under
+	# half health and so costs 1 rather than 2 - the only enemy in the wave
+	# the mortar chips past a rounding step without killing.
+	assert_eq(r["lives_lost"], 177, "exact: lives lost at this exact leak count")
 	# 108, not the 120 this paid before the wave gold modifier landed. Wave 10
 	# pays at 0.875, and kill_reward rounds PER KILL rather than on the total,
 	# so this is not simply 120 * 0.875 (which would be 105) - it is the sum of
@@ -403,12 +436,11 @@ func test_wave_twenty_undefended_completes_at_the_default_tick_size() -> bool:
 	# a literal restates the roster's size instead - so it fails whenever a kind
 	# is legitimately added, teaching the reader to bump the number.
 	assert_eq(r["leaks"], _total_spawn_count(20), "every wave-20 enemy walks off the end")
-	# Lives lost stays exact. Every ordinary leak sits at the cap; the boss
-	# does NOT, and costs its own declared figure instead - so this is no
-	# longer simply leaks * 4.
-	assert_eq(r["lives_lost"],
-		(_total_spawn_count(20) - 1) * Leak.MAX_LIFE_LOSS_PER_LEAK
-			+ int(Bosses.on_wave(20)["life_loss"]),
+	# Lives lost stays exact. Undefended, every enemy arrives whole, so each
+	# ordinary leak costs its own kind's price - a goblin 1 and an ogre 5,
+	# where all four used to cost a flat 4 - and the boss costs its declared
+	# figure on top.
+	assert_eq(r["lives_lost"], _total_life_loss(20),
 		"lives lost at wave 20's leak costs, boss included")
 	return true
 
@@ -461,11 +493,10 @@ func test_every_wave_undefended_terminates_at_the_doubled_tick_size() -> bool:
 #   the same property (same input -> same output) without a seed to vary.
 # - "late-wave life loss" (wave 5 vs 6, isolated to one goblin via a
 #   `composition` override) — this interface has no composition override,
-#   and Leak.resolve's own wave-5-boundary behaviour is already pinned
-#   directly in test/test_leak.gd (Task 10):
-#   test_switches_over_exactly_after_wave_five et al. Re-deriving it through
-#   a full wave simulation here would not test anything Leak's own suite
-#   doesn't already cover more precisely.
+#   and the behaviour it targeted no longer exists: leak cost stopped being a
+#   function of the wave when the wave-5 boundary and the flat cap were
+#   deleted. What replaced it — the kind's own price scaled by how alive the
+#   enemy arrived — is pinned directly in test/test_leak.gd.
 # - "explicit compositions" (bat-only wave, empty composition) — same
 #   reason: no composition override in this interface, and bat life_loss is
 #   already pinned in test/test_data_tables.gd.
@@ -728,13 +759,17 @@ func _wave_has_shamans(wave: int) -> bool:
 
 func test_a_boss_leak_costs_the_harness_its_declared_lives() -> bool:
 	var r := Harness.run_wave({"wave": 20, "towers": [], "path": _path()})
-	var ordinary := _total_spawn_count(20) - 1
-	var expected := ordinary * Leak.MAX_LIFE_LOSS_PER_LEAK \
-		+ int(Bosses.on_wave(20)["life_loss"])
+	var expected := _total_life_loss(20)
 	assert_eq(r["lives_lost"], expected,
-		"every ordinary leak at the cap, plus the boss at its own cost")
-	assert_true(expected > _total_spawn_count(20) * Leak.MAX_LIFE_LOSS_PER_LEAK,
-		"which is strictly worse than if the boss were capped like everything else")
+		"every ordinary leak at its kind's price, plus the boss at its own cost")
+	# The boss override is what this is really pinning, so the comparison is
+	# against the same wave costed as though the boss paid only the troll's
+	# ordinary price.
+	var if_boss_were_ordinary := expected \
+		- int(Bosses.on_wave(20)["life_loss"]) \
+		+ int(Enemies.DEFS[&"troll"]["life_loss"])
+	assert_true(expected > if_boss_were_ordinary,
+		"which is strictly worse than if the boss leaked like any other troll")
 	return true
 
 # The wave-20 boss is far tougher than a troll scaled by the wave modifier, so

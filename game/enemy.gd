@@ -171,8 +171,9 @@ func _physics_process(delta: float) -> void:
 		leaked.emit(Leak.resolve({
 			"life_loss": Enemies.DEFS[kind]["life_loss"],
 			"health": sim["health"],
+			"max_health": sim["max_health"],
 			"boss_life_loss": boss_life_loss,
-		}, _wave))
+		}))
 		queue_free()
 
 ## Speed after any active slow. Movement reads this, never sim["speed"].

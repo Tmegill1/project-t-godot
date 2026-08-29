@@ -120,10 +120,11 @@ static func run_wave(config: Dictionary) -> Dictionary:
 				lives_lost += Leak.resolve({
 					"life_loss": Enemies.DEFS[e["kind"]]["life_loss"],
 					"health": e["health"],
+					"max_health": e["max_health"],
 					# A boss carries its own cost here too, or the harness
 					# under-reports exactly the leak that matters most.
 					"boss_life_loss": int(e.get("boss_life_loss", 0)),
-				}, wave)
+				})
 				e["alive"] = false
 			else:
 				survivors.append(e)

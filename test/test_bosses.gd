@@ -105,12 +105,21 @@ func test_the_boss_entry_names_the_boss_kind() -> bool:
 # Leak cost
 # --------------------------------------------------------------------------
 
+# Measured against what the ordinary rule can actually produce rather than
+# against a constant. The flat cap this used to compare with is gone: a leak
+# now costs the kind's own life_loss scaled by how alive it arrived, so the
+# worst ordinary leak is the worst kind arriving whole.
 func test_every_boss_declares_what_it_costs_on_leak() -> bool:
+	var worst_ordinary := 0
+	for kind in Enemies.KINDS:
+		worst_ordinary = maxi(worst_ordinary, Leak.resolve({
+			"life_loss": int(Enemies.DEFS[kind]["life_loss"]),
+			"health": 100.0, "max_health": 100.0}))
 	for wave in Bosses.WAVES:
 		var b := Bosses.on_wave(wave)
 		assert_true(b.has("life_loss"), "wave %d boss declares life_loss" % wave)
-		assert_true(int(b["life_loss"]) > Leak.MAX_LIFE_LOSS_PER_LEAK,
-			"wave %d boss costs more than an ordinary leak" % wave)
+		assert_true(int(b["life_loss"]) > worst_ordinary,
+			"wave %d boss costs more than any ordinary leak" % wave)
 	return true
 
 func test_the_final_boss_costs_more_on_leak_than_the_first() -> bool:
