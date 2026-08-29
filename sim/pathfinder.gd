@@ -47,6 +47,41 @@ static func get_all_spawn_paths(map: Array) -> Array[PackedVector2Array]:
 
 	return results
 
+## Spawn tiles from which the goal cannot actually be walked to.
+##
+## get_all_spawn_paths deliberately cannot answer this. It returns a path for
+## EVERY spawn, falling back to a straight two-point line when BFS finds no
+## route, because Movement.advance indexes into a path and derives arrival
+## from its length - so every path must have a start and an end whatever the
+## map looks like. That fallback is right for movement and useless for
+## judging a map: counting paths always equals counting spawns, and a test
+## asserting they match passes on a map with a wall across it.
+##
+## This asks the question honestly, for anything that validates a map rather
+## than walks it.
+static func unreachable_spawns(map: Array) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	var rows := map.size()
+	if rows == 0:
+		return out
+	var cols: int = map[0].size()
+
+	var goal := Vector2i(-1, -1)
+	var spawns: Array[Vector2i] = []
+	for r in rows:
+		for c in cols:
+			if map[r][c] == Tiles.SPAWN:
+				spawns.append(Vector2i(c, r))
+			elif map[r][c] == Tiles.GOAL:
+				goal = Vector2i(c, r)
+
+	if goal.x < 0:
+		return spawns  # no goal at all: nothing can reach it
+	for spawn in spawns:
+		if _bfs(spawn, goal, map, rows, cols).is_empty() and spawn != goal:
+			out.append(spawn)
+	return out
+
 static func _bfs(start: Vector2i, goal: Vector2i, map: Array, rows: int, cols: int) -> Array[Vector2i]:
 	var visited := {start: true}
 	var queue: Array = [[start, [] as Array[Vector2i]]]

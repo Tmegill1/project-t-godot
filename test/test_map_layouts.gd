@@ -43,19 +43,15 @@ func test_every_map_passes_its_own_validator() -> bool:
 
 # The property no structural check can see: a goal you cannot walk to is a map
 # that hangs the game rather than one that plays badly.
+# Was written against get_all_spawn_paths, comparing its result count to the
+# spawn count - which is VACUOUS: that function returns a two-point fallback
+# path for a spawn it cannot route, so the two always match and the assertion
+# passes on a map with a wall across it. PathFinder.unreachable_spawns exists
+# to answer this honestly.
 func test_every_spawn_on_every_map_can_reach_its_goal() -> bool:
 	for name in Maps.DEFS:
-		var t := _tiles(name)
-		var spawns := 0
-		for row in t:
-			for cell in row:
-				if cell == Tiles.SPAWN:
-					spawns += 1
-		var paths := PathFinder.get_all_spawn_paths(t)
-		assert_eq(paths.size(), spawns,
-			"%s: every one of its %d spawns reaches the goal" % [name, spawns])
-		for p in paths:
-			assert_true(p.size() > 1, "%s: and no route is a dead end" % name)
+		assert_eq(PathFinder.unreachable_spawns(_tiles(name)), [],
+			"%s is playable from every spawn" % name)
 	return true
 
 func test_every_map_leaves_room_to_build() -> bool:

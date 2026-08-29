@@ -80,3 +80,51 @@ func test_every_path_has_at_least_two_points() -> bool:
 		var real: PackedVector2Array = p
 		assert_true(real.size() >= 2, "real map path has a start and an end")
 	return true
+
+# --------------------------------------------------------------------------
+# Honest reachability
+# --------------------------------------------------------------------------
+#
+# get_all_spawn_paths cannot answer "is this map playable?" - it returns a
+# two-point fallback path for an unreachable spawn so Movement.advance always
+# has a start and an end. Counting its results therefore always equals
+# counting spawns, and a test comparing the two passes on a map with a wall
+# across it. One of mine did.
+
+func test_unreachable_spawns_is_empty_on_a_playable_map() -> bool:
+	for name in Maps.DEFS:
+		assert_eq(PathFinder.unreachable_spawns(Maps.build_tiles(name)), [],
+			"%s is playable from every spawn" % name)
+	return true
+
+func test_unreachable_spawns_finds_a_walled_off_spawn() -> bool:
+	# Structurally perfect and completely unplayable: no walkable route joins
+	# the two, because buildable ground is not walkable.
+	var walled := MapFormat.parse("S.#.G\n..#..\n..#..")
+	assert_eq(MapFormat.validate(walled), [], "precondition: structurally valid")
+	assert_eq(PathFinder.unreachable_spawns(walled).size(), 1,
+		"the one spawn cannot reach the goal")
+	return true
+
+func test_unreachable_spawns_finds_only_the_blocked_one() -> bool:
+	# Two spawns, one connected by road and one not.
+	var mixed := MapFormat.parse("S====G\n......\nS.....")
+	var blocked := PathFinder.unreachable_spawns(mixed)
+	assert_eq(blocked.size(), 1, "exactly one spawn is cut off")
+	assert_eq(blocked[0], Vector2i(0, 2), "and it is the bottom one")
+	return true
+
+func test_a_map_with_no_goal_reports_every_spawn_unreachable() -> bool:
+	assert_eq(PathFinder.unreachable_spawns(MapFormat.parse("S==\n...\nS..")).size(), 2,
+		"with nothing to reach, no spawn reaches it")
+	return true
+
+# The distinction that makes this useful: get_all_spawn_paths still returns a
+# path for the blocked spawn, which is why it cannot be used for this.
+func test_get_all_spawn_paths_still_returns_a_path_for_an_unreachable_spawn() -> bool:
+	var walled := MapFormat.parse("S.#.G\n..#..\n..#..")
+	assert_eq(PathFinder.get_all_spawn_paths(walled).size(), 1,
+		"a path is still produced, so counting paths proves nothing")
+	assert_eq(PathFinder.unreachable_spawns(walled).size(), 1,
+		"while this reports the truth")
+	return true
