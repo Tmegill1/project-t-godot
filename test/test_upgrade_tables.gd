@@ -224,3 +224,40 @@ func test_no_tier_carries_a_dead_multiplier_key() -> bool:
 				assert_false(effects.has(&"fire_rate_multiplier"),
 					"%s/%s %s has no fire_rate_multiplier" % [kind, branch, tier["label"]])
 	return true
+
+# --------------------------------------------------------------------------
+# effect_summary
+# --------------------------------------------------------------------------
+
+func test_effect_summary_renders_flat_damage_and_fire_rate() -> bool:
+	assert_eq(Upgrades.effect_summary({&"damage_bonus": 12.0}), "+12 damage",
+		"flat damage reads as a plain addition")
+	assert_eq(Upgrades.effect_summary({&"fire_rate_bonus_ms": 400.0}),
+		"fires 0.4s faster", "a fire-rate bonus reads in seconds")
+	return true
+
+func test_effect_summary_joins_several_effects() -> bool:
+	assert_eq(
+		Upgrades.effect_summary({&"damage_bonus": 2.0, &"fire_rate_bonus_ms": 150.0}),
+		"+2 damage · fires 0.15s faster",
+		"effects join in a fixed order regardless of dictionary order")
+	return true
+
+func test_effect_summary_is_empty_for_no_effects() -> bool:
+	assert_eq(Upgrades.effect_summary({}), "", "nothing to say about nothing")
+	return true
+
+# THE anti-drift test. A hand-written description drifts the first time a value
+# is tuned, and this slice tuned all thirty-two of them. Generating the line
+# means the number on screen is the number the tier applies - but only while
+# every key the table uses is one the renderer knows.
+func test_every_tier_renders_a_summary() -> bool:
+	for kind in Towers.KINDS:
+		for branch in Upgrades.BRANCHES:
+			for tier in Upgrades.DEFS[kind][branch]["tiers"]:
+				var summary := Upgrades.effect_summary(tier["effects"])
+				assert_true(summary.length() > 0,
+					"%s/%s %s renders" % [kind, branch, tier["label"]])
+				assert_false(summary.contains("?"),
+					"%s/%s %s has no unrendered key" % [kind, branch, tier["label"]])
+	return true

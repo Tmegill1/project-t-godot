@@ -177,5 +177,67 @@ const DEFS := {
 	},
 }
 
+## The order effects are rendered in, so two tiers carrying the same effects
+## read the same way whatever order their dictionaries happen to iterate in.
+const _SUMMARY_ORDER: Array[StringName] = [
+	&"damage_bonus", &"fire_rate_bonus_ms", &"range_multiplier", &"splash_radius",
+	&"slow_factor", &"pierce_bonus", &"gold_multiplier", &"bonus_gold_per_kill",
+	&"detection",
+]
+
+## A tier's effects as a short line for the panel: "+2 damage · fires 0.15s
+## faster".
+##
+## GENERATED rather than written beside the tier, so the number a player reads
+## is the number the simulation applies. A hand-written description drifts the
+## first time a value is tuned, and the tier's own `description` field - which
+## stays, as the tooltip - is where flavour and dormant-effect notes live.
+##
+## An unknown key renders as "?" rather than vanishing, which is what
+## test_every_tier_renders_a_summary detects: adding an effect without teaching
+## this function about it fails the suite instead of blanking a row.
+static func effect_summary(effects: Dictionary) -> String:
+	var parts: Array[String] = []
+	for key in _SUMMARY_ORDER:
+		if effects.has(key):
+			parts.append(_render_effect(key, effects))
+	for key in effects:
+		# slow_duration_ms is rendered by slow_factor rather than on its own,
+		# so it is known without being listed.
+		if not _SUMMARY_ORDER.has(key) and key != &"slow_duration_ms":
+			parts.append("?")
+	return " · ".join(parts)
+
+static func _render_effect(key: StringName, effects: Dictionary) -> String:
+	match key:
+		&"damage_bonus":
+			return "+%d damage" % int(effects[key])
+		&"fire_rate_bonus_ms":
+			return "fires %ss faster" % _trim(float(effects[key]) / 1000.0)
+		&"range_multiplier":
+			return "+%d%% range" % int(round((float(effects[key]) - 1.0) * 100.0))
+		&"splash_radius":
+			return "%dpx blast" % int(effects[key])
+		&"slow_factor":
+			return "slows to %d%% for %ss" % [
+				int(round(float(effects[key]) * 100.0)),
+				_trim(float(effects.get(&"slow_duration_ms", 0)) / 1000.0)]
+		&"pierce_bonus":
+			return "ignores %d armour" % int(effects[key])
+		&"gold_multiplier":
+			return "+%d%% gold" % int(round((float(effects[key]) - 1.0) * 100.0))
+		&"bonus_gold_per_kill":
+			return "+%d gold a kill" % int(effects[key])
+		&"detection":
+			return "reveals phased"
+	return "?"
+
+## Seconds without trailing zeroes: 0.40 -> "0.4", 1.00 -> "1".
+static func _trim(seconds: float) -> String:
+	var text := "%.3f" % seconds
+	while text.ends_with("0"):
+		text = text.substr(0, text.length() - 1)
+	return text.trim_suffix(".")
+
 static func get_branch(kind: StringName, branch: StringName) -> Dictionary:
 	return DEFS[kind][branch]
