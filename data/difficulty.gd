@@ -28,21 +28,34 @@ const KEYS: Array[StringName] = [
 	&"gold_multiplier",
 ]
 
-## Which lever attacks what, and why these and not others:
+## Which lever attacks what. RE-MEASURED 2026-08-30, and the first reading was
+## wrong in a way worth recording rather than quietly overwriting.
 ##
-##   interval_multiplier  spawn spacing, so CONCURRENCY. The sharpest lever
-##                        available. Measurement established that board
-##                        COVERAGE binds, not hit points; halving the interval
-##                        doubles the crowd one tower must cover without
-##                        touching a single enemy stat.
-##   count_multiplier     enemies per wave. Same constraint, blunter, and it
-##                        compounds with the accumulating composition.
-##   health_multiplier    hit points. Proven WEAK ALONE - wave-20 health x11.5
-##                        leaked zero against a maxed board - but real in
-##                        combination, because it lengthens the window during
-##                        which concurrency matters.
-##   speed_multiplier     time under fire. The other side of coverage: less
-##                        time in range is the same as less range.
+## The original table called interval_multiplier "the sharpest lever available"
+## and health "proven weak alone", reasoning from an earlier finding that board
+## COVERAGE binds rather than hit points. Against a full twelve-tower board that
+## is backwards. Count and interval both raise enemy DENSITY, and the sustained
+## upgrade branch grants splash - 45px, then 75px - whose value scales with
+## density. So the two levers picked to attack coverage are exactly the ones a
+## splash build answers best, and eleven of the sixteen legal maxed boards shut
+## the old Nightmare row out completely.
+##
+##   health_multiplier    hit points, and the lever that actually bites. Splash
+##                        kills a cluster in one hit however many are in it;
+##                        what it cannot do is kill something twice.
+##   speed_multiplier     time under fire, and a THRESHOLD rather than a dial.
+##                        Below 1.40 the strongest legal board leaks nothing at
+##                        all, at any health up to 4.0. At 1.40 it starts to
+##                        bleed. Less time in range is the same as less range,
+##                        and no upgrade branch answers it.
+##   count_multiplier     enemies per wave. Held at 1.0 deliberately: raising it
+##                        WIDENS the gap between a splash build and one without,
+##                        punishing the weaker build and feeding the stronger.
+##   interval_multiplier  spawn spacing, so concurrency. Held at 1.0 for the
+##                        same reason. Both are left in the table because they
+##                        are the right levers for a mid-run board and the wrong
+##                        ones for a completed board, and a later tier may want
+##                        them back.
 ##   gold_multiplier      the board a player can afford. Indirect, strong.
 ##   starting_lives       forgiveness. The only lever a player feels at once.
 ##
@@ -58,60 +71,46 @@ const DEFS := {
 		"gold_multiplier": 1.0,
 		"starting_lives": Economy.STARTING_LIVES,
 	},
-	## Measured 2026-08-30 with probe_tiers.gd, against the full legal roster -
-	## three of each kind, twelve towers, every tier the cross-path rule allows -
-	## on The Pass, all twenty waves. Task 1 established that board is
-	## affordable (16,199 gold of income against an 11,415 cost), so it is the
-	## board these are set against rather than something smaller.
+	## Measured 2026-08-30 against the STRONGEST legal fully-upgraded board, not
+	## against one arbitrary build. The cross-path rule allows exactly two maxed
+	## splits per tower, a board picks one per kind, so there are sixteen legal
+	## maxed boards; test_balance_tuning.gd now walks all of them.
 	##
-	## What the sweep found, and it is the reason these two rows sit so close
-	## together: the full board is a WALL, and it fails as one. Every lever
-	## combination either holds a wave completely or collapses on it - there is
-	## almost no middle. Full-board lives lost across a run, by row:
+	## Lives lost across a whole run, strongest board against weakest:
 	##
-	##   count/interval/health/speed/gold   lives lost   first leak
-	##   1.00 1.00 1.00 1.00 1.00 (Normal)           0   never
-	##   1.15 0.85 1.15 1.05 0.95                    1   wave 20
-	##   1.30 0.70 1.30 1.10 0.90 (Hard)            11   wave 20
-	##   1.40 0.60 1.40 1.15 0.85 (Nightmare)       46   wave 17
-	##   1.50 0.55 1.50 1.15 0.82                   87   wave 16
-	##   2.00 0.40 2.00 1.30 0.70                  720   wave 13
+	##   count/interval/health/speed   strongest        weakest
+	##   1.40 0.60 1.40 1.15           0 - SHUT OUT          46
+	##   1.00 1.00 3.50 1.30           0 - SHUT OUT         146
+	##   1.00 1.00 4.00 1.35           0 - SHUT OUT         246
+	##   1.00 1.00 4.00 1.40 (Hard)             3           258
+	##   1.00 1.00 4.50 1.40 (Nightmare)        9           336
+	##   1.00 1.00 5.00 1.40                   27           441
 	##
-	## Ten points of multiplier between Hard and Nightmare is the difference
-	## between losing eleven lives and losing forty-six. That cliff is the
-	## coverage finding restated: a board either covers the crowd or it does
-	## not, and hit points only decide which side of the line a wave lands on.
+	## The spread between best and worst build is two orders of magnitude at
+	## every row, and no tier value closes it. That is a TOWER balance problem -
+	## the sustained branch dominates the burst branch against late waves - which
+	## the selector revealed rather than caused. It is invisible on Normal
+	## because every build shuts Normal out.
 	&"hard": {
+		## The full board loses 3 of its 15 lives, on wave 20, and finishes with
+		## 12: real lives late without ending the run.
 		"label": "Hard",
-		## Hard's brief is "real lives late, without ending the run". The full
-		## board loses 11 of its 15 lives, all on wave 20, and finishes with 4.
-		## The teeth are aimed at the board a player actually has: the six-tower
-		## mid-run board loses 110 lives across a Normal run and 639 across this
-		## one.
-		"count_multiplier": 1.30,
-		"interval_multiplier": 0.70,
-		"health_multiplier": 1.30,
-		"speed_multiplier": 1.10,
+		"count_multiplier": 1.0,
+		"interval_multiplier": 1.0,
+		"health_multiplier": 4.0,
+		"speed_multiplier": 1.40,
 		"gold_multiplier": 0.90,
 		"starting_lives": 15,
 	},
 	&"nightmare": {
-		## Nightmare's brief is that a full maxed board must NOT shut it out.
-		## It does not: leaks start at wave 17 and wave 20 alone costs 36 lives.
-		## Cumulative loss through wave 19 is exactly 10, so a twelve-life board
-		## reaches the final wave and dies on it.
-		##
-		## Stated plainly rather than hidden: the benchmark board LOSES this
-		## tier. Whether a human finds a better one is a playtest question, not
-		## a measured one - the harness resolves hits instantly, with no
-		## projectile travel time, so it is kinder to the player than the live
-		## board is. These are a starting point to be played, per the spec's own
-		## risk section, not a finished tuning.
+		## The strongest legal board loses 9 of its 12 lives and survives with 3.
+		## Beatable, but only by the best build there is - and every board that
+		## leaves a tower on the burst branch loses badly.
 		"label": "Nightmare",
-		"count_multiplier": 1.40,
-		"interval_multiplier": 0.60,
-		"health_multiplier": 1.40,
-		"speed_multiplier": 1.15,
+		"count_multiplier": 1.0,
+		"interval_multiplier": 1.0,
+		"health_multiplier": 4.5,
+		"speed_multiplier": 1.40,
 		"gold_multiplier": 0.85,
 		"starting_lives": 12,
 	},
