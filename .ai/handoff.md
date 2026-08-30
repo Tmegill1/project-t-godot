@@ -6,9 +6,12 @@ and end of every task so Codex can take over at any point.**
 ## Where the work is
 
 - Repository: `/home/tylermegill/Projects/project-t-godot`
-- Branch: **`feat/difficulty-selector`**, branched from `master` at `b714159`.
-- Nothing pushed. `master` is unchanged; pushing `master` redeploys the live site,
-  so do not push without the owner asking.
+- **Merged and deployed.** `feat/difficulty-selector` was merged to `master` as
+  `b0263a9` on the owner's instruction and both branches are pushed. The Pages
+  workflow republishes <https://tmegill1.github.io/project-t-godot/> on every
+  push to `master`, so the selector is live.
+- The branch is kept rather than deleted, matching how `feat/leak-model` and the
+  other feature branches are kept.
 - Plan: `docs/superpowers/plans/2026-08-29-difficulty-selector.md` (11 tasks)
 - Spec: `docs/superpowers/specs/2026-08-29-difficulty-selector-design.md`
 
@@ -70,23 +73,24 @@ slice.
 
 ## In flight right now
 
-**Nothing. All eleven tasks are complete.** The branch is
-`feat/difficulty-selector`, eight commits ahead of `master`, suite green at
-**13,554 checks across 45 files, exit 0**. Nothing is pushed and nothing is
-merged — pushing `master` redeploys the live site, and that is the owner's call.
+**Nothing. All eleven tasks are complete, merged and deployed.** Suite green on
+the merged result at **13,554 checks across 45 files, exit 0**.
 
 ### What a Codex takeover would pick up
 
-1. **Merge or not.** `feat/difficulty-selector` is ready. `update.md` records it
-   as built and unmerged, beside the leak model which is in the same state.
-2. **Play it.** Every tier number came from the harness, which has no projectile
-   travel time and is therefore kinder than the live board. The spec says
-   plainly these are a starting point to be played. The selector is on the main
-   menu; the active tier shows in the HUD beside the wave counter.
-3. **Two findings that need an owner's decision**, both written up in
-   `update.md`: the opening cannot be fixed with enemy health (the lever is the
-   Basic tower or wave 1's composition), and the benchmark board loses
+1. **Play it, and check the build stamp first.** Every tier number came from the
+   harness, which has no projectile travel time and is therefore *kinder* than
+   the live board; the spec says plainly these are a starting point to be
+   played. The selector is on the main menu and the active tier shows in the HUD
+   beside the wave counter. If the owner reports something odd, read the
+   lower-left build stamp before changing code — a stale browser cache has
+   already caused one false report.
+2. **Two findings need an owner's decision**, both written up in `update.md`:
+   the opening cannot be fixed with enemy health (the lever is the Basic tower's
+   damage or fire rate, or wave 1's composition), and the benchmark board loses
    Nightmare.
+3. **The gold curve debt grew.** `update.md` already owed a re-measurement to
+   Slice 2; the tiers now move the gold modifier as well.
 
 ## Standing rules that govern this work
 
