@@ -279,3 +279,50 @@ func test_shamans_keep_accumulating_in_the_endless_bundle() -> bool:
 	assert_true(_count_of(15, &"shaman") > _count_of(10, &"shaman"),
 		"later waves field more of them")
 	return true
+
+## The identity guarantee, stated directly rather than left implicit in the
+## rest of the suite. Every measured number in this project describes Normal.
+func test_normal_is_identical_to_the_untiered_call() -> bool:
+	for wave in [1, 5, 10, 18, 20]:
+		assert_eq(Waves.get_composition(wave), Waves.get_composition(wave, Difficulty.NORMAL),
+			"wave %d composition is unchanged at Normal" % wave)
+		assert_eq(Waves.get_modifiers(wave), Waves.get_modifiers(wave, Difficulty.NORMAL),
+			"wave %d modifiers are unchanged at Normal" % wave)
+		assert_eq(Waves.build_schedule(wave), Waves.build_schedule(wave, Difficulty.NORMAL),
+			"wave %d schedule is unchanged at Normal" % wave)
+	return true
+
+## A count multiplier must never round a kind out of a wave: a wave that
+## silently loses its ogres is a different wave, not a harder one.
+func test_a_count_multiplier_never_empties_a_kind() -> bool:
+	var scaled := Waves._scale_counts(Waves.get_composition(1), 0.01)
+	for entry in scaled:
+		assert_true(int(entry["count"]) >= 1, "%s survives a brutal count multiplier" % entry["kind"])
+	return true
+
+func test_a_larger_count_multiplier_spawns_more() -> bool:
+	var base := Waves._scale_counts(Waves.get_composition(8), 1.0)
+	var more := Waves._scale_counts(Waves.get_composition(8), 2.0)
+	var base_total := 0
+	var more_total := 0
+	for entry in base:
+		base_total += int(entry["count"])
+	for entry in more:
+		more_total += int(entry["count"])
+	assert_true(more_total > base_total, "doubling the multiplier spawns more")
+	return true
+
+## The interval is what attacks concurrency, so it must actually reach the
+## schedule rather than only the composition.
+func test_a_tighter_interval_packs_the_schedule() -> bool:
+	var wide := Waves.build_schedule(8)
+	var tight := Waves._build_schedule_at(8, Difficulty.NORMAL, 0.5)
+	assert_eq(wide.size(), tight.size(), "the same enemies are scheduled")
+	var wide_last := 0.0
+	var tight_last := 0.0
+	for e in wide:
+		wide_last = maxf(wide_last, float(e["at_ms"]))
+	for e in tight:
+		tight_last = maxf(tight_last, float(e["at_ms"]))
+	assert_true(tight_last < wide_last, "a halved interval finishes spawning sooner")
+	return true

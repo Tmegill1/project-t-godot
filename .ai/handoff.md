@@ -18,8 +18,8 @@ and end of every task so Codex can take over at any point.**
 |---|---|---|
 | 1 | Measure what a run can afford | ✅ done — `Measure what a run can actually fund` |
 | 2 | The difficulty table | ✅ done — `Add the difficulty tier table` |
-| 3 | `Waves` takes a tier | 🔄 **next** |
-| 4 | The harness accepts a tier | ⬜ |
+| 3 | `Waves` takes a tier | ✅ done — `Let a wave be built at a difficulty tier` |
+| 4 | The harness accepts a tier | 🔄 **next** |
 | 5 | Teach the harness where enemies died | ⬜ |
 | 6 | The live board runs at a tier | ⬜ |
 | 7 | The menu selector and the HUD readout | ⬜ |
@@ -40,9 +40,21 @@ a plausible number written down once becomes the shipped number by inertia,
 which is exactly how the six-tower benchmark happened. The selector will be
 live but inert until then; do not "fill in something reasonable".
 
-Task 3 is next: `Waves.get_composition`, `Waves.get_modifiers` and
-`Waves.build_schedule` each gain an optional tier defaulting to
-`Difficulty.NORMAL`.
+Task 3 is complete and committed. `data/waves.gd` now reads:
+
+    Waves.get_composition(wave_number, tier := Difficulty.NORMAL)
+    Waves.get_modifiers(wave_number, tier := Difficulty.NORMAL)
+    Waves.build_schedule(wave, tier := Difficulty.NORMAL)
+    Waves.ogre_spawn_delay(goblin_count, interval_ms := INTERVAL_MS)
+    Waves._scale_counts(composition, multiplier)        # floors each kind at 1
+    Waves._build_schedule_at(wave, tier, interval_multiplier)
+
+The whole suite still passes at 13,518 checks with nothing pre-existing moved,
+which is the identity guarantee doing its job: if a Normal number ever moves,
+an old assertion fails.
+
+Task 4 is next: `Harness.run_wave` reads `difficulty` out of its config dict
+and passes it to `build_schedule` and `get_modifiers`.
 
 ## Adding a new `class_name` script? Run the importer
 
