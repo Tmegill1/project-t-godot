@@ -6,9 +6,10 @@ proceeds so Codex can take over at any point.**
 ## Where the work is
 
 - Repository: `/home/tylermegill/Projects/project-t-godot`
-- Branch: **`feat/opening-gold`**, off `master` at `3bb91ff`. Complete, suite
-  green at **13,767 checks, exit 0**. Nothing pushed, nothing merged.
-- The preceding build-out pacing work is merged and deployed (`fa01fdd`).
+- Branch: **`feat/opening-gold`**, merged to `master` as `6b2b571` on the
+  owner's instruction. Both branches pushed; the Pages deploy succeeded. Suite
+  green on the merged result at **13,767 checks, exit 0**.
+- **Everything in this session is now merged and live.** Nothing is in flight.
 
 ## This branch
 
