@@ -458,6 +458,14 @@ func _shortest_map_height() -> int:
 		shortest = mini(shortest, Maps.pixel_size(name).y)
 	return shortest
 
+# Rows carries two wrapping summary Labels as well as the buttons since
+# 2026-08-30, and they are the reason this test matters more than it used to.
+# Measured both ways at the time: summing minimums gives 476px against the
+# 465px it was before the labels, and computing the labels' REAL wrapped height
+# at the sidebar's 124px of usable width gives 474px. The minimum-size sum is
+# the larger of the two - a Label with autowrap reports a minimum for a width
+# it has not been given yet - so this stays an over-estimate, which is the safe
+# direction. Both are well inside the 672px the shortest map allows.
 func test_the_selected_tower_inspector_fits_inside_the_shortest_map() -> bool:
 	var board := _ready_board()
 	var panel := _ready_panel()

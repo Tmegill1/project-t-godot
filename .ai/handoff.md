@@ -7,11 +7,23 @@ and end of every task so Codex can take over at any point.**
 
 - Repository: `/home/tylermegill/Projects/project-t-godot`
 - Branch: **`feat/upgrade-branch-balance`**, off `master` at `6582655`.
-- Executing the plan inline. Tasks 1-7 done, **suite green at 13,760 checks,
-  exit 0**. Task 8 next.
+- Executing the plan inline. Tasks 1-8 done, **suite green at 13,763 checks,
+  exit 0**. Task 9 (docs) is all that is left.
 - All 32 generated lines were printed and read. The longest is
-  `fires 0.056s faster · slows to 45% for 2.5s` at 42 characters — that is the
-  wrap budget Task 8 has to fit in 140px.
+  `fires 0.056s faster · slows to 45% for 2.5s` at 42 characters.
+- **The panel fits, measured two ways.** Summing minimum sizes gives 476px
+  against the 465px it was before the labels; computing the labels' real wrapped
+  height at the sidebar's 124px of usable width gives 474px. The minimum-size
+  sum is the larger, so the existing fit check stays an over-estimate, which is
+  the safe direction. Both are well inside the shortest map's 672px.
+- **The in-game check was inconclusive, for a tooling reason.** The Godot MCP
+  bridge cannot marshal a Dictionary into a `Vector2`
+  (`Cannot convert argument 1 from Dictionary to Vector2`), so `_try_place`
+  never ran and no tower was ever selected. The behaviour is covered by
+  `test_tower_inspector.gd` on the real `show_tower` -> `_refresh_gating` path,
+  and the heights above were measured off the same path. **If you want the live
+  look, drive it with `game_click` on real screen coordinates rather than
+  `game_call_method` with a Vector2 argument.**
 
 ### Two corrections made during Task 6, both worth knowing
 

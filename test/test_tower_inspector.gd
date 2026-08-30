@@ -618,3 +618,39 @@ func test_the_priority_row_clips_rather_than_widening_the_panel() -> bool:
 	assert_true(i.priority_row().clip_text, "the row clips its text like the branch rows do")
 	i.free(); b.free()
 	return true
+
+# --------------------------------------------------------------------------
+# The generated stat line
+# --------------------------------------------------------------------------
+
+# The tier's effect used to be a tooltip and nothing else, because the sidebar
+# is 140px and a Button does not wrap its text. A Label does, which is what
+# makes this fit at all - and this game is touch-first, where hover does not
+# exist.
+func test_the_panel_shows_what_the_next_tier_does() -> bool:
+	var i := _ready_inspector()
+	var b := _ready_board()
+	i.bind(b)
+	var t := _place_tower(b, &"basic")
+	i.show_tower(t)
+	var expected := Upgrades.effect_summary(
+		Upgrades.DEFS[&"basic"][&"sustained"]["tiers"][0]["effects"])
+	assert_true(expected.length() > 0, "the first tier has something to say")
+	assert_eq(i.summary_text(&"sustained"), expected,
+		"the sustained row names the next tier's effect")
+	i.free()
+	b.free()
+	return true
+
+# A maxed or locked branch has no next tier, so there is nothing to describe.
+func test_a_branch_with_no_next_tier_shows_no_summary() -> bool:
+	var i := _ready_inspector()
+	var b := _ready_board()
+	i.bind(b)
+	var t := _place_tower(b, &"basic")
+	t.tiers = {&"sustained": UpgradesSim.MAX_TIER, &"burst": UpgradesSim.CROSS_PATH_CAP}
+	i.show_tower(t)
+	assert_eq(i.summary_text(&"sustained"), "", "a maxed branch describes nothing")
+	i.free()
+	b.free()
+	return true
