@@ -16,6 +16,8 @@ Last updated: 2026-08-29.
 | **Slice 0** — wave economy, measured gold curve, visible limits, maps 2 and 3 | ✅ merged and **deployed** |
 | **Slice 1** — roster, resistance, bosses | ✅ merged |
 | **Leak model** — cost by kind and by how alive it arrived | ✅ done, on `feat/leak-model`, **not merged** |
+| **Tower cap** — three of each kind, twelve per map | ✅ merged and **deployed** (`121bc7f`) |
+| **Difficulty selector** — tiers, and the benchmark that missed | 🟨 **designed, not built** |
 | Slice 2 — tactical powers | ⬜ decided, not designed |
 | Slice 3 — versioned save + meta-progression | ⬜ decided, not designed |
 | Slice 4 — hero | ⬜ decided, not designed |
@@ -149,6 +151,77 @@ path when the real art lands.
 
 ---
 
+## Difficulty selector, and the benchmark that missed *(designed 2026-08-29)*
+
+**Spec:** [`docs/superpowers/specs/2026-08-29-difficulty-selector-design.md`](docs/superpowers/specs/2026-08-29-difficulty-selector-design.md)
+**Plan:** [`docs/superpowers/plans/2026-08-29-difficulty-selector.md`](docs/superpowers/plans/2026-08-29-difficulty-selector.md) — eleven tasks, affordability measured first
+
+**The finding.** Measured against `b00b695`, *after* the tower cap landed:
+
+| Maxed towers, cross-path legal | Wave 18 | Wave 20 |
+|---|---|---|
+| 6 — *what `test_balance_tuning.gd` benchmarks* | 19 leaks | 55 leaks, 74 lives |
+| 8 | 0 | 10 |
+| 9 | 0 | 3 |
+| **10** | **0** | **0** |
+| **12 — the full map budget** | **0** | **0** |
+
+**The zero-leak threshold is ten; the budget is twelve.** Filling the budget
+shuts the game out entirely. Two more measurements pin the shape:
+
+- **Waves 1–15 leak zero even at six towers.** Three-quarters of a run has no
+  pressure at any board a player actually reaches.
+- **The back half of the map is decorative.** Twelve maxed towers crammed onto
+  the first straight and the same twelve spread over the whole route give an
+  identical result — all 177 wave-20 enemies dead, zero leaks, both ways. The
+  route is 2,448px and the first bend is at 768px, **31% in**.
+
+**Why the suite missed it.** `test_balance_tuning.gd` benchmarks a *six*-tower
+board — one the player passes through on the way to the one they finish with.
+Its `leaks > 0` assertion stays true however easy the game gets for a full
+board. And more fundamentally, **the harness cannot see where an enemy died**:
+`run_wave` returns kills, leaks, lives, gold and ticks, so "they don't reach the
+first bend" was not expressible against it. That is why a regression this
+obvious to a player was invisible to 13,436 assertions.
+
+**Owner's decision (2026-08-29):** Normal stays *comfortable* — a full maxed
+board should win wave 20 — and the teeth go in a **selector**. Hard and
+Nightmare are where enemies get more numerous and tougher.
+
+**The design.** Difficulty is a **parameter**, not a global: `data/difficulty.gd`
+holds a tier table, and `Waves.get_modifiers`, `Waves.build_schedule` and
+`Harness.run_wave` all take a tier defaulting to Normal. Normal is the identity
+transform, so the whole existing suite stays green and becomes the regression
+net. An autoload was rejected because it would break `sim/` purity and the
+harness's determinism guarantee; a wave-offset scheme was rejected because it
+only fast-forwards a flat curve and never touches spawn spacing.
+
+Levers, chosen against the coverage finding rather than guessed:
+`interval_multiplier` (concurrency — the sharpest), `count_multiplier`,
+`health_multiplier` (weak alone, real in combination), `speed_multiplier`,
+`gold_multiplier`, `starting_lives`.
+
+**Hard and Nightmare values are deliberately unset in the spec.** They come from
+a sweep in the plan. Numbers invented in a design document become shipped
+numbers by inertia, which is how the six-tower benchmark happened.
+
+**Carried with it, and arguably worth more than the tuning:**
+
+1. The harness learns `deepest_progress` and `progress_at_death`, so *"they
+   don't make it to the first bend"* becomes an assertion against
+   `FIRST_BEND_FRACTION := 0.31` rather than an observation.
+2. `test_balance_tuning.gd` gains the **full twelve-tower maxed board** at every
+   tier, with a directional assertion — *a full maxed board must not shut out
+   the highest tier* — that survives future retuning.
+
+**Open risk the plan must measure first:** ten maxed towers may not be
+*affordable*. The budget dropped 16 → 12 in `121bc7f` while `GOLD_PER_WAVE`
+stayed put, so the spend ceiling fell and income did not. If ten maxed towers
+are unreachable, the real threshold is below ten and every tier value must be
+measured against what is affordable rather than what is placeable.
+
+---
+
 ## Known problems, not yet scheduled
 
 ### 1. ~~Every leak costs the same, past wave 5~~ ✅ FIXED
@@ -201,12 +274,21 @@ clamped both the incoming health to `max_health` *and* the result to
 the health alone is what bounds the rule, and the second clamp was unreachable
 dead code.
 
-### 2. The web build has never actually been played
+### 2. ~~The web build has never actually been played~~ ✅ PLAYED — and it reported a real defect
 
-It boots, the menu draws, the field renders — but no click has ever gone
-through it in a browser. The prep timer and call-early button are the first
-mechanics that change state without a placement, and the browser is the one
-environment where that path is unexercised.
+The owner played it on 2026-08-29 and the first report back was a balance
+finding, not a crash: *"Enemies don't stand a chance, they don't make it to the
+first bend"* — holding **every wave, all the way through**. It boots, it plays,
+and clicks go through it.
+
+Two lessons worth keeping:
+
+**Diagnose against the build stamp first.** The same session produced a false
+alarm about white-square projectiles that was purely a stale browser cache; the
+lower-left build label is what settles it. See `.ai/handoff.md`.
+
+**The report was correct and the suite could not see it.** That became the
+difficulty selector work below.
 
 ### 3. Audio settings do not persist
 
@@ -304,3 +386,9 @@ camp counts or widths grow.
   ice and desert. Tripling the endpoint art is its own decision.
 - **A map-select screen.** Maps chain by `next`; choosing one belongs with the
   save.
+- **The decorative back half of every map.** Measured 2026-08-29: twelve maxed
+  towers on The Pass's first straight kill exactly as much as twelve spread
+  over the whole route, so everything past the first bend (31% in) is scenery.
+  Making late route matter needs spawn points, flying paths or enemies that
+  must be handled twice — a slice of its own, not a rider on the difficulty
+  selector.
