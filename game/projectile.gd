@@ -9,6 +9,7 @@ signal hit(target_node: Node2D, source: Dictionary, splash: float)
 
 const ARC_HEIGHT := 28.0
 const HIT_RADIUS := 6.0
+const TEXTURE_ROOT := "res://assets/art/projectiles"
 
 var _target: Node2D
 var _source := {}
@@ -27,19 +28,20 @@ var _total_distance := 1.0
 var _launched := false
 var _dot_base := Vector2.ZERO
 
-@onready var _dot: ColorRect = $Dot
+@onready var _dot: Sprite2D = $Dot
+
+static func texture_path_for(kind: StringName) -> String:
+	return "%s/%s.png" % [TEXTURE_ROOT, kind]
 
 func _ready() -> void:
-	# Captured once, before launch() can run: the Dot's centred position
-	# (Vector2(-3, -3), a ColorRect's position is its top-left corner) is the
-	# zero point the arc offsets from. Assigning straight into
-	# _dot.position.y (as the brief's code does) overwrites that centring
-	# instead of offsetting it, so every arcing shot's dot jumps down by 3px
-	# the moment it starts moving. Offsetting from a captured base fixes it.
+	# Captured once, before launch() can run: this is the zero point the mortar
+	# arc offsets from. Rotation belongs to the sprite rather than this parent,
+	# so the arc remains screen-upward while every sprite points along its own
+	# flight direction.
 	_dot_base = _dot.position
 
 func launch(target: Node2D, source: Dictionary, speed: float,
-		arcs: bool, splash: float) -> void:
+		arcs: bool, splash: float, tower_kind: StringName = &"basic") -> void:
 	_target = target
 	_source = source
 	_speed = speed
@@ -47,6 +49,8 @@ func launch(target: Node2D, source: Dictionary, speed: float,
 	_splash = splash
 	_origin = global_position
 	_total_distance = maxf(1.0, _origin.distance_to(target.global_position))
+	_dot.texture = load(texture_path_for(tower_kind))
+	_dot.rotation = (_target.global_position - global_position).angle()
 	_launched = true
 
 func _physics_process(delta: float) -> void:
@@ -57,6 +61,7 @@ func _physics_process(delta: float) -> void:
 		return
 
 	var to_target := _target.global_position - global_position
+	_dot.rotation = to_target.angle()
 	var step := _speed * delta
 	var dist := to_target.length()
 	if dist <= step or dist <= HIT_RADIUS:

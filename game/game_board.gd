@@ -597,7 +597,7 @@ func _on_tower_fired(target_node: Node2D, source: Dictionary,
 	projectile.hit.connect(_on_projectile_hit)
 	projectile.launch(target_node, source,
 		float(tower.get_def()["projectile_speed"]),
-		bool(tower.get_def()["projectile_arcs"]), splash)
+		bool(tower.get_def()["projectile_arcs"]), splash, tower.kind)
 
 func _on_projectile_hit(target_node: Node2D, source: Dictionary, splash: float) -> void:
 	if not is_instance_valid(target_node):

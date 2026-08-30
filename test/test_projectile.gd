@@ -264,3 +264,21 @@ func test_arc_height_and_hit_radius_constants_match_the_brief() -> bool:
 	assert_eq(Projectile.ARC_HEIGHT, 28.0, "ARC_HEIGHT")
 	assert_eq(Projectile.HIT_RADIUS, 6.0, "HIT_RADIUS")
 	return true
+
+func test_each_tower_kind_maps_to_its_own_projectile_sprite() -> bool:
+	for kind in Towers.KINDS:
+		var expected := "res://assets/art/projectiles/%s.png" % kind
+		assert_eq(Projectile.texture_path_for(kind), expected,
+			"%s uses its themed projectile" % kind)
+		assert_true(ResourceLoader.exists(expected), "%s projectile asset exists" % kind)
+	return true
+
+func test_launch_applies_the_firing_towers_projectile_sprite() -> bool:
+	var p := _ready_projectile()
+	var target := _target_at(Vector2(100, 0))
+	p.launch(target, {}, 100.0, false, 0.0, &"mortar")
+	assert_eq(p._dot.texture.resource_path, "res://assets/art/projectiles/mortar.png",
+		"launch selects the mortar shell rather than a generic dot")
+	p.free()
+	target.free()
+	return true
