@@ -20,8 +20,8 @@ and end of every task so Codex can take over at any point.**
 | 2 | The difficulty table | ✅ done — `Add the difficulty tier table` |
 | 3 | `Waves` takes a tier | ✅ done — `Let a wave be built at a difficulty tier` |
 | 4 | The harness accepts a tier | ✅ done — `Run a harness wave at a difficulty tier` |
-| 5 | Teach the harness where enemies died | 🔄 **next** |
-| 6 | The live board runs at a tier | ⬜ |
+| 5 | Teach the harness where enemies died | ✅ done — `Teach the harness where enemies died` |
+| 6 | The live board runs at a tier | 🔄 **next** |
 | 7 | The menu selector and the HUD readout | ⬜ |
 | 8 | Sweep the tiers and set their numbers | ⬜ |
 | 9 | Give the opening a pulse | ⬜ |
@@ -65,7 +65,24 @@ passed after, and both were then reverted. **If you touch this plumbing again,
 prove it the same way** — a green suite alone is not evidence here until Task 8
 lands real tier values.
 
-Task 5 is next: `run_wave` gains `deepest_progress` and `progress_at_death`.
+Task 5 is complete and committed. `Harness.run_wave`'s result now carries two
+more keys, both fractions of the route from 0.0 to 1.0:
+
+- `deepest_progress` — the furthest any enemy got. A leak forces it to 1.0.
+- `progress_at_death` — the mean over enemies that died; 0.0 when nothing died,
+  which is the honest answer rather than a division by zero.
+
+Both come from `path_index` and cumulative route length, which the harness
+already tracks for movement, so there is no second implementation to drift.
+`test_harness.gd` now pins the owner's own report as an assertion: five maxed
+Long Range towers decide wave 1 before `FIRST_BEND_FRACTION := 0.31`.
+
+Existing keys and their order were left alone on purpose — several tests compare
+whole result dictionaries for equality.
+
+Task 6 is next: the live board runs at a tier (`GameBoard.pending_difficulty`,
+tier-sourced starting lives, tier passed to `build_schedule` and
+`get_modifiers`).
 
 ## Adding a new `class_name` script? Run the importer
 
