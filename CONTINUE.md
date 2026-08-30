@@ -95,11 +95,11 @@ and 20.
 | `data/` — 9 modules | ✅ complete, reviewed |
 | `assets/` — 169 PNGs (`assets/art/` and `assets/towers.png` baked from the illustrated reference sheet, plus `assets/audio/`) | ✅ imported, baked, verified visually |
 | `game/` — board, enemy, tower, projectile, map renderer | ✅ complete |
-| `ui/` — menu (with a difficulty selector), HUD (1.5x speed toggle, active-tier readout), build panel, tower inspector, game-over, victory | ✅ complete |
+| `ui/` — menu (with a difficulty selector), HUD (1.5x speed toggle, active-tier readout), build panel, tower inspector, pause menu, game-over, victory | ✅ complete |
 | `audio/` — pooled playback, 17 core-slice events | ✅ complete |
 | Web export | ✅ preset + build; **boots and renders in a browser; not yet played in one** |
 | Deploy | ✅ live at **https://tmegill1.github.io/project-t-godot/** — every push to `master` republishes, at the address GitHub assigns (no custom domain) |
-| Tests | ✅ 13,767 checks across 45 files, exit 0 |
+| Tests | ✅ 13,781 checks across 46 files, exit 0 |
 | Map authoring | ✅ text format (`data/maps/*.txt`) + a `@tool` painting scene — see §12 |
 | Decoration | ✅ camps (wall + fires) in forest; scattered landmarks in ice/desert — see §13 |
 | Enemies | ✅ five — goblin, bat, shaman, ogre (rank and file) and troll (**boss only**) |
@@ -972,3 +972,46 @@ tower and nothing else, so the board leaks on wave 1. **If you change tower
 costs again, re-measure this purse in the same pass** — the two numbers only
 mean anything together. The Fork (250) and The Coils (200) already open with
 three towers and two, so they were left alone.
+
+---
+
+## 17. Escape, and what it means now
+
+Escape does **two** things, in order:
+
+1. **Cancel** a selected tower or a half-made placement, exactly as it always
+   has (`Let Escape clear whatever the player is in the middle of`).
+2. **Pause**, but only when there is nothing left to cancel — `GameBoard`
+   raises `pause_requested` and `Game` puts up `ui/pause_menu.tscn`.
+
+So Escape backs out one level at a time and never yanks the player into a menu
+mid-placement. `GameBoard.request_escape()` is that rule, split out of
+`_unhandled_input` so a test can press it without an InputEvent and a live
+viewport. It is silent once `_run_finished` — the end screens own the input from
+that point and have their own buttons.
+
+**Pausing is `get_tree().paused`**, not a flag of the board's own, because that
+is the one that stops `_physics_process` — which is what drives the wave clock,
+the prep timer and every enemy. Two consequences that are easy to get wrong:
+
+- The pause menu's scene sets **`process_mode = PROCESS_MODE_WHEN_PAUSED`**. It
+  is the node that pauses the tree, so without it its own buttons go dead the
+  instant it appears.
+- **Every exit lifts the pause before leaving.** `paused` is global tree state
+  and outlives a scene change, exactly as `Engine.time_scale` does — the hazard
+  `Hud.bind()` documents. A Quit that left it set would hand the main menu a
+  frozen tree.
+
+### Restart and Retry both have to put the run back
+
+`GameBoard._ready` **consumes** `pending_map` and `pending_difficulty` and
+clears both, and `_map_name` falls back to `Maps.FIRST`. So
+`reload_current_scene()` on its own restarts on The Pass at Normal wherever the
+player actually was.
+
+The game-over screen's **Retry did exactly that** until 2026-08-30 — dying on
+The Fork on Nightmare retried on The Pass on Normal. Both it and the pause
+menu's Restart now set the two statics from the board before reloading
+(`stage_retry()` and `stage_restart()`, split from their buttons so they can be
+tested without a live tree). **If you add another path that reloads the scene,
+it needs the same three lines.**

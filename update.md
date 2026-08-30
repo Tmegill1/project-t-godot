@@ -4,7 +4,7 @@
 not yet built, and what is still open. `CONTINUE.md` records what *is*; this
 records what *should be*.
 
-Last updated: 2026-08-30 (revised again after the opening purse).
+Last updated: 2026-08-30 (revised again after the pause menu).
 
 ---
 
@@ -20,7 +20,8 @@ Last updated: 2026-08-30 (revised again after the opening purse).
 | **Difficulty selector** — tiers, and the benchmark that missed | ✅ merged and **deployed** |
 | **Upgrade branch balance** — splash to the Mortar, flat numbers, a legible panel | ✅ merged and **deployed** |
 | **Build-out pacing** — a board that takes a run to finish | ✅ merged and **deployed** |
-| **Opening purse** — The Pass starts with two towers, not one | ✅ **built**, on `feat/opening-gold`, **not merged** |
+| **Opening purse** — The Pass starts with two towers, not one | ✅ merged and **deployed** |
+| **Pause menu** — Escape pauses; Continue, Restart, Quit | ✅ **built**, on `feat/pause-menu`, **not merged** |
 | Slice 2 — tactical powers | ⬜ decided, not designed |
 | Slice 3 — versioned save + meta-progression | ⬜ decided, not designed |
 | Slice 4 — hero | ⬜ decided, not designed |
@@ -457,6 +458,36 @@ So nothing moved, per the spec's own instruction to bring such a finding back
 rather than quietly retune Normal. **The lever for the opening is the Basic
 tower's damage or fire rate, or wave 1's composition — not enemy health.** The
 shape it failed to move is pinned in `test_balance_tuning.gd`.
+
+---
+
+## Pause menu *(2026-08-30)*
+
+Escape opens a menu with **Continue / Restart / Quit**; Quit returns to the main
+menu, where difficulty is chosen.
+
+**Escape shares the key rather than taking it.** It has cancelled a selected
+tower or a half-made placement since before the menu existed, and it still does
+— the menu opens only when there is nothing left to back out of. Escape backs
+out one level at a time and never yanks the player into a menu mid-placement.
+
+**Pausing is `get_tree().paused`**, which is what stops `_physics_process` and
+therefore the wave clock, the prep timer and every enemy. The menu's own scene
+sets `PROCESS_MODE_WHEN_PAUSED` — it is the node doing the pausing, so without
+that its buttons die on arrival — and every exit lifts the pause before leaving,
+because `paused` is global tree state that outlives a scene change.
+
+**A pre-existing bug went with it.** `GameBoard._ready` consumes `pending_map`
+and `pending_difficulty` and clears both, and `_map_name` falls back to
+`Maps.FIRST`, so a plain `reload_current_scene()` restarts on The Pass at
+Normal. **The game-over screen's Retry had done this all along** — dying on The
+Fork on Nightmare retried on The Pass on Normal. Both Restart and Retry now put
+the run back first.
+
+Verified in the running game rather than only in tests: Escape raised the menu,
+Continue freed it and play resumed, Escape and Quit reached the main menu, and
+picking Hard and pressing Play started a run reading **Hard** and **Lives 15** —
+which is also the proof the tree was not left paused.
 
 ---
 

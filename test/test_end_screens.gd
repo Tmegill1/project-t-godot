@@ -207,3 +207,27 @@ func test_the_menu_offers_every_tier_and_starts_on_normal() -> bool:
 		"and a fresh menu starts on Normal")
 	m.free()
 	return true
+
+# Retry has to replay the run that was lost, not the first map at Normal.
+#
+# GameBoard._ready consumes pending_map and pending_difficulty and clears both,
+# and _map_name falls back to Maps.FIRST - so before this, dying on The Fork on
+# Nightmare retried on The Pass on Normal. The bug predates the pause menu; it
+# was found while building Restart, which needs the same three lines.
+func test_retry_replays_the_run_that_was_lost() -> bool:
+	GameBoard.pending_map = &""
+	GameBoard.pending_difficulty = &""
+	var screen = _instantiate("res://ui/game_over.tscn")
+	screen.wave_reached = 12
+	screen.retry_map = &"map2"
+	screen.retry_difficulty = Difficulty.NIGHTMARE
+	screen.notification(Node.NOTIFICATION_READY)
+
+	screen.stage_retry()
+
+	assert_eq(GameBoard.pending_map, &"map2", "the same map is retried")
+	assert_eq(GameBoard.pending_difficulty, Difficulty.NIGHTMARE, "at the same tier")
+	GameBoard.pending_map = &""
+	GameBoard.pending_difficulty = &""
+	screen.free()
+	return true

@@ -22,6 +22,10 @@ signal placement_rejected(reason: String)
 signal wave_reward(base: int, speed: int, interest: int)
 signal prep_changed(remaining_ms: float, bonus: int)
 signal tower_sold(kind: StringName)
+## Escape was pressed with nothing left to back out of. The board raises it and
+## nothing more - Game owns the pause menu, the same way it owns the end
+## screens. The board knows the run's rules, not its furniture.
+signal pause_requested()
 
 const ENEMY_SCENE := preload("res://game/enemy.tscn")
 const TOWER_SCENE := preload("res://game/tower.tscn")
@@ -438,7 +442,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	# keycode: ui_cancel is Escape by default, survives remapping, and is what
 	# the rest of Godot's UI already listens for.
 	if event.is_action_pressed(&"ui_cancel"):
-		clear_selection()
+		request_escape()
 		get_viewport().set_input_as_handled()
 		return
 	if event is InputEventMouseMotion:
@@ -498,6 +502,25 @@ func _update_ghost(world: Vector2) -> void:
 ## being placed. One call, because to a player they are one thing - "stop what
 ## I am doing" - and leaving the ghost following the cursor after an Escape
 ## would read as the key not having worked.
+## What Escape means, split out of _unhandled_input so a test can press it
+## without an InputEvent and a live viewport.
+##
+## Cancel FIRST, pause second. Escape has cleared a selected tower or a
+## half-made placement since before the pause menu existed, and it still does;
+## the menu opens only when there is nothing left to back out of. So Escape
+## backs out one level at a time and never yanks the player into a menu
+## mid-placement.
+##
+## Silent once the run has ended, matching _unhandled_input's own guard: the
+## end screens own the input from that point, and they have their own buttons.
+func request_escape() -> void:
+	if _run_finished:
+		return
+	if _selected_kind != &"" or (_selected_tower != null and is_instance_valid(_selected_tower)):
+		clear_selection()
+		return
+	pause_requested.emit()
+
 func clear_selection() -> void:
 	_deselect_tower()
 	_selected_kind = &""
