@@ -4,7 +4,7 @@
 not yet built, and what is still open. `CONTINUE.md` records what *is*; this
 records what *should be*.
 
-Last updated: 2026-08-30 (revised after the split finding).
+Last updated: 2026-08-30 (revised again after the branch rebalance).
 
 ---
 
@@ -17,7 +17,8 @@ Last updated: 2026-08-30 (revised after the split finding).
 | **Slice 1** — roster, resistance, bosses | ✅ merged |
 | **Leak model** — cost by kind and by how alive it arrived | ✅ done, on `feat/leak-model`, **not merged** |
 | **Tower cap** — three of each kind, twelve per map | ✅ merged and **deployed** (`121bc7f`) |
-| **Difficulty selector** — tiers, and the benchmark that missed | ✅ **built**, on `feat/difficulty-selector`, **not merged** |
+| **Difficulty selector** — tiers, and the benchmark that missed | ✅ merged and **deployed** |
+| **Upgrade branch balance** — splash to the Mortar, flat numbers, a legible panel | ✅ **built**, on `feat/upgrade-branch-balance`, **not merged** |
 | Slice 2 — tactical powers | ⬜ decided, not designed |
 | Slice 3 — versioned save + meta-progression | ⬜ decided, not designed |
 | Slice 4 — hero | ⬜ decided, not designed |
@@ -211,8 +212,12 @@ waves:
 | Tier | count | interval | health | speed | gold | lives |
 |---|---|---|---|---|---|---|
 | Normal | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 | 20 |
-| Hard | 1.00 | 1.00 | 4.00 | 1.40 | 0.90 | 15 |
-| Nightmare | 1.00 | 1.00 | 4.50 | 1.40 | 0.85 | 12 |
+| Hard | 1.00 | 1.00 | 2.35 | 1.30 | 0.90 | 15 |
+| Nightmare | 1.00 | 1.00 | 2.50 | 1.30 | 0.85 | 12 |
+
+*(Re-swept a third time after the branch rebalance below — removing splash from
+two towers weakened every board that took it, so the 4.00/4.50 rows measured
+before it cost the best board over two hundred lives.)*
 
 **The open risk did not bite.** A twenty-wave run earns **16,199 gold** against
 an **11,415** full-board cost, so twelve maxed towers are affordable with 4,784
@@ -281,19 +286,56 @@ nothing at all, at any health up to 4.0. `test_balance_tuning.gd` now walks all
 sixteen boards on Nightmare *and* on Normal, so no single build can hide a
 shut-out again.
 
-### The two upgrade branches are not close, and that is a tower problem
+### The two upgrade branches were not close — fixed *(2026-08-30)*
 
-The spread between best and worst build is **two orders of magnitude at every
-tier row**, and no tier value closes it — `sustained` (fire rate → splash)
-dominates `burst` (damage → pierce) against late waves, because splash kills a
-cluster in one hit however many are in it.
+**Spec:** [`docs/superpowers/specs/2026-08-30-upgrade-branch-balance-design.md`](docs/superpowers/specs/2026-08-30-upgrade-branch-balance-design.md)
+**Plan:** [`docs/superpowers/plans/2026-08-30-upgrade-branch-balance.md`](docs/superpowers/plans/2026-08-30-upgrade-branch-balance.md) — nine tasks
 
-The selector **revealed** this rather than causing it. It is invisible on Normal
-because every build shuts Normal out, and the old six-tower benchmark could not
-see it either. Nothing here fixes it: rebalancing the branches against each other
-is its own piece of work, and it should probably happen before any further tier
-tuning, because every tier number is measured against a build asymmetry this
-large.
+The spread between the best and worst legal fully-upgraded board was **37×** —
+`sustained` (fire rate → splash) beat `burst` (damage → pierce) so far that the
+branch choice was not a choice. The selector revealed it rather than causing it;
+it is invisible on Normal because every build shuts Normal out.
+
+**Two causes, both measured.** Three of the four towers could buy splash, and a
+splash hit applies its *whole payload* — the Magic tower's slow included — to
+everything it catches, so one Magic tower plus any splasher slowed the entire
+wave. Long Range was worst: 90px of blast at 239px of reach, wider effective
+area than the Mortar, whose entire identity is area. Separately, every damage and
+fire-rate tier was a multiplier, and multipliers compound.
+
+**What shipped:**
+
+1. **Area damage belongs to the Mortar.** Basic's *Fragmentation*/*Saturation*
+   became *Open Bolt*/*Sustained Fire*; Long Range's *Shellburst*/*Carpet Fire*
+   became *Autoloader*/*Overwatch*. All four buy reach and cadence, which is what
+   their branch summaries always claimed. **This alone took the spread from 37×
+   to 2.01× — the flat values were never touched to get there.** The gap was
+   never about the numbers; it was about three towers buying the same answer.
+2. **Damage and fire rate are flat.** All 32 tiers converted, and the multiplier
+   keys deleted from the resolver so they cannot return. The conversion came out
+   *behaviour-identical* — every curve unchanged at every tier — because each
+   flat value equals the delta its multiplier produced. What changed is that a
+   future tier or retuned value no longer compounds. Range still multiplies;
+   splash, slow and gold already took the strongest value rather than stacking.
+3. **The panel says what a tier does.** A wrapping `Label` under each branch
+   button carries a line **generated from the effects dictionary** —
+   `+2 damage · fires 0.15s faster` — so the number on screen cannot drift from
+   the number applied. The description stays as the tooltip for flavour. It fits
+   the 140px sidebar: 476px of the shortest map's 672px, up from 465px.
+
+**The bound that keeps it fixed, and the mistake in the first version of it.**
+The parity assertion was first written at wave 20 and read 2.01× — then
+re-sweeping the difficulty rows moved it to 6.90×, and a quarter-point of health
+swung it from 12.40× to undefined. At the wave a tier is *decided*, the best
+board loses almost nothing, so the ratio measures where the threshold sits rather
+than how far apart the branches are. It measures at **wave 30** now, past
+anything a board can hold, where the comparison is graded: **1.68×** for this
+roster, stable across rows. Verified by putting splash back on Basic and Long
+Range and re-running — **3.18×**, over the 3.0 bound. So it catches the defect it
+was written for rather than merely describing the fix.
+
+**Also corrected:** `_strongest_board()` hardcoded all-sustained, true only while
+splash sat on three towers. Claims about "the best board" now *find* it.
 
 ### The opening still has no pulse, and health cannot give it one
 
