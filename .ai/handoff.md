@@ -17,8 +17,8 @@ and end of every task so Codex can take over at any point.**
 | # | Task | State |
 |---|---|---|
 | 1 | Measure what a run can afford | ✅ done — `Measure what a run can actually fund` |
-| 2 | The difficulty table | 🔄 **next** |
-| 3 | `Waves` takes a tier | ⬜ |
+| 2 | The difficulty table | ✅ done — `Add the difficulty tier table` |
+| 3 | `Waves` takes a tier | 🔄 **next** |
 | 4 | The harness accepts a tier | ⬜ |
 | 5 | Teach the harness where enemies died | ⬜ |
 | 6 | The live board runs at a tier | ⬜ |
@@ -30,8 +30,32 @@ and end of every task so Codex can take over at any point.**
 
 ## In flight right now
 
-Task 1 is complete and committed. Task 2 (the difficulty table) is next: create
-`data/difficulty.gd` and `test/test_difficulty.gd`, test-first.
+Task 2 is complete and committed. `data/difficulty.gd` now exists with
+`NORMAL`/`HARD`/`NIGHTMARE`, `ORDER`, `KEYS`, `DEFS`, and the accessors
+`get_def`, `multiplier`, `starting_lives`, `label`, `is_valid`.
+
+**Hard and Nightmare are identity copies of Normal right now.** That is
+deliberate and must stay that way until Task 8's sweep measures real values —
+a plausible number written down once becomes the shipped number by inertia,
+which is exactly how the six-tower benchmark happened. The selector will be
+live but inert until then; do not "fill in something reasonable".
+
+Task 3 is next: `Waves.get_composition`, `Waves.get_modifiers` and
+`Waves.build_schedule` each gain an optional tier defaulting to
+`Difficulty.NORMAL`.
+
+## Adding a new `class_name` script? Run the importer
+
+Godot only registers a new global class name after an import pass. A fresh
+`data/*.gd` with a `class_name` will fail the suite with
+`Parse Error: Identifier "X" not declared in the current scope` until you run:
+
+    godot --headless --import
+
+That also generates the script's `.uid` file. Every other `.gd.uid` in this repo
+is tracked, so commit a new one alongside its script.
+`test/test_balance_tuning.gd.uid` is the one exception — it stays untracked, per
+the owner's instruction.
 
 ## Task 1's finding — it unblocks Task 8
 
