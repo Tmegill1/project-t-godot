@@ -319,25 +319,25 @@ func test_resolve_returns_base_stats_for_an_unupgraded_tower() -> bool:
 	assert_eq(s["bonus_gold_per_kill"], 0, "no flat gold by default")
 	return true
 
-# basic/sustained tiers 1 and 2 are 0.8 fire-rate multipliers each: they must
-# compose to 0.64, not overwrite to 0.8 or add to 1.6.
-func test_resolve_composes_multipliers_across_tiers() -> bool:
+# basic/sustained tiers 1 and 2 take 200ms and 160ms off the interval. They
+# must ADD to 360, not compose and not overwrite. This is the test that would
+# fail if multiplicative fire rate crept back in.
+func test_resolve_adds_fire_rate_bonuses_across_tiers() -> bool:
 	var base := float(Towers.DEFS[&"basic"]["fire_rate"])
 	var s := UpgradesSim.resolve_tower_stats(&"basic", _tiers(2, 0))
-	assert_almost_eq(s["fire_rate"], round(base * 0.8 * 0.8), 0.5,
-		"two 20% cuts compose to 0.64 of the base gap")
+	assert_almost_eq(s["fire_rate"], base - 360.0, 0.5,
+		"two flat cuts add to 360ms off the interval")
 	return true
 
-# mortar/burst tiers 1 and 2 (Packed Charge, Heavy Shell) are 1.6 damage
-# multipliers each with no other effects: they must compose to 2.56x, not
-# overwrite to 1.6x. Distinct from the fire-rate composition test above -
-# damage_multiplier is accumulated with its own `*=` in resolve_tower_stats,
-# so a mutation there would not be caught by the fire-rate test alone.
-func test_resolve_composes_damage_multipliers_across_tiers() -> bool:
+# mortar/burst tiers 1 and 2 (Packed Charge, Heavy Shell) add 3 and 5 damage
+# with no other effects: 8 more, not a multiple. Distinct from the fire-rate
+# test above - damage_bonus has its own `+=` in _apply_effects, so a mutation
+# there would not be caught by the fire-rate test alone.
+func test_resolve_adds_damage_bonuses_across_tiers() -> bool:
 	var base := float(Towers.DEFS[&"mortar"]["damage"])
 	var s := UpgradesSim.resolve_tower_stats(&"mortar", _tiers(0, 2))
-	assert_almost_eq(s["damage"], round(base * 1.6 * 1.6), 0.5,
-		"two 60% damage boosts compose to 2.56x base, not overwrite to 1.6x")
+	assert_almost_eq(s["damage"], base + 8.0, 0.5,
+		"two flat bonuses add to +8, not a product")
 	return true
 
 # long/sustained tiers 1 and 4 (Long Barrel, Carpet Fire) are the only tiers

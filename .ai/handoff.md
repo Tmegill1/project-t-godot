@@ -7,7 +7,12 @@ and end of every task so Codex can take over at any point.**
 
 - Repository: `/home/tylermegill/Projects/project-t-godot`
 - Branch: **`feat/upgrade-branch-balance`**, off `master` at `6582655`.
-- Executing the plan inline. Task 1 done; Task 2 next.
+- Executing the plan inline. Tasks 1-2 done; Task 3 next.
+- **Task 2 came out behaviour-identical**, which is better than the plan
+  predicted. Every tower's damage and fire-rate curve is unchanged at *every*
+  tier, not merely at the maxed endpoint, because each flat value equals the
+  delta its multiplier produced at that step. Nothing about current balance
+  moved; what changed is that future edits no longer compound.
 - **One deviation from the plan, deliberate:** it specified a
   `_apply_effect_for_test` wrapper around `_apply_effects`. The wrapper was
   dropped — GDScript's leading underscore is convention, not access control, so
@@ -59,8 +64,8 @@ everything."*
 | — | Spec | ✅ committed — `Design the upgrade branch rebalance` |
 | — | Plan | ✅ committed — this handoff's commit |
 | 1 | Flat damage and fire rate, and a floor under it | ✅ done |
-| 2 | Convert every tier to flat damage and fire rate | 🔄 **next** |
-| 3 | Return area damage to the Mortar | ⬜ |
+| 2 | Convert every tier to flat damage and fire rate | ✅ done |
+| 3 | Return area damage to the Mortar | 🔄 **next** |
 | 4 | Delete the multiplier keys | ⬜ |
 | 5 | Close the branch spread, and pin a bound | ⬜ |
 | 6 | Re-sweep Hard and Nightmare | ⬜ |

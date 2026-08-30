@@ -38,58 +38,58 @@ const EXPECTED_TIER_LABELS := {
 const EXPECTED_EFFECTS := {
 	&"basic": {
 		&"sustained": [
-			{&"fire_rate_multiplier": 0.8},
-			{&"fire_rate_multiplier": 0.8},
-			{&"splash_radius": 45.0, &"fire_rate_multiplier": 0.9},
-			{&"damage_multiplier": 1.5, &"splash_radius": 75.0},
+			{&"fire_rate_bonus_ms": 200.0},
+			{&"fire_rate_bonus_ms": 160.0},
+			{&"splash_radius": 45.0, &"fire_rate_bonus_ms": 64.0},
+			{&"splash_radius": 75.0, &"damage_bonus": 2.0},
 		],
 		&"burst": [
-			{&"damage_multiplier": 1.4},
-			{&"damage_multiplier": 1.4},
-			{&"detection": true, &"damage_multiplier": 1.5},
-			{&"range_multiplier": 1.25, &"damage_multiplier": 2.0},
+			{&"damage_bonus": 2.0},
+			{&"damage_bonus": 2.0},
+			{&"detection": true, &"damage_bonus": 4.0},
+			{&"damage_bonus": 12.0, &"range_multiplier": 1.25},
 		],
 	},
 	&"fast": {
 		&"sustained": [
-			{&"fire_rate_multiplier": 0.75},
-			{&"fire_rate_multiplier": 0.75},
+			{&"fire_rate_bonus_ms": 125.0},
+			{&"fire_rate_bonus_ms": 94.0},
 			{&"slow_duration_ms": 1500, &"slow_factor": 0.7},
-			{&"slow_duration_ms": 2500, &"slow_factor": 0.45, &"fire_rate_multiplier": 0.8},
+			{&"slow_duration_ms": 2500, &"slow_factor": 0.45, &"fire_rate_bonus_ms": 56.0},
 		],
 		&"burst": [
-			{&"damage_multiplier": 1.5},
+			{&"damage_bonus": 1.0},
 			{&"bonus_gold_per_kill": 1},
-			{&"gold_multiplier": 1.6, &"damage_multiplier": 1.4},
+			{&"gold_multiplier": 1.6, &"damage_bonus": 1.0},
 			{&"gold_multiplier": 2.0, &"bonus_gold_per_kill": 2},
 		],
 	},
 	&"mortar": {
 		&"sustained": [
 			{&"splash_radius": 70.0},
-			{&"fire_rate_multiplier": 0.75},
-			{&"splash_radius": 95.0, &"fire_rate_multiplier": 0.85},
-			{&"damage_multiplier": 1.5, &"splash_radius": 130.0},
+			{&"fire_rate_bonus_ms": 500.0},
+			{&"splash_radius": 95.0, &"fire_rate_bonus_ms": 225.0},
+			{&"splash_radius": 130.0, &"damage_bonus": 3.0},
 		],
 		&"burst": [
-			{&"damage_multiplier": 1.6},
-			{&"damage_multiplier": 1.6},
-			{&"range_multiplier": 1.2, &"damage_multiplier": 2.0},
-			{&"damage_multiplier": 2.0},
+			{&"damage_bonus": 3.0},
+			{&"damage_bonus": 5.0},
+			{&"damage_bonus": 13.0, &"range_multiplier": 1.2},
+			{&"damage_bonus": 25.0},
 		],
 	},
 	&"long": {
 		&"sustained": [
 			{&"range_multiplier": 1.2},
-			{&"fire_rate_multiplier": 0.7},
+			{&"fire_rate_bonus_ms": 450.0},
 			{&"splash_radius": 55.0},
 			{&"range_multiplier": 1.33, &"splash_radius": 90.0},
 		],
 		&"burst": [
-			{&"damage_multiplier": 1.4},
-			{&"damage_multiplier": 1.4},
-			{&"pierce_bonus": 5, &"damage_multiplier": 1.3},
-			{&"pierce_bonus": 10, &"damage_multiplier": 2.0},
+			{&"damage_bonus": 6.0},
+			{&"damage_bonus": 8.0},
+			{&"pierce_bonus": 5, &"damage_bonus": 9.0},
+			{&"pierce_bonus": 10, &"damage_bonus": 38.0},
 		],
 	},
 }
@@ -147,6 +147,7 @@ func test_every_tier_has_a_nonempty_description() -> bool:
 # resolve_tower_stats would silently ignore it.
 func test_every_effect_key_is_recognised() -> bool:
 	var known := [
+		&"damage_bonus", &"fire_rate_bonus_ms",
 		&"damage_multiplier", &"fire_rate_multiplier", &"range_multiplier",
 		&"pierce_bonus", &"splash_radius", &"detection",
 		&"slow_factor", &"slow_duration_ms",
@@ -167,7 +168,7 @@ func test_tungsten_core_carries_an_interim_live_effect() -> bool:
 	var tier: Dictionary = Upgrades.DEFS[&"long"][&"burst"]["tiers"][2]
 	assert_eq(tier["label"], "Tungsten Core", "tier 3 of long/burst")
 	assert_eq(int(tier["effects"][&"pierce_bonus"]), 5, "keeps the reference's pierce")
-	assert_almost_eq(float(tier["effects"][&"damage_multiplier"]), 1.3, 0.0001,
+	assert_almost_eq(float(tier["effects"][&"damage_bonus"]), 9.0, 0.0001,
 		"carries interim damage so the purchase is not inert while pierce is dormant")
 	return true
 
