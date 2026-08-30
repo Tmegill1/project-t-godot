@@ -4,7 +4,7 @@
 not yet built, and what is still open. `CONTINUE.md` records what *is*; this
 records what *should be*.
 
-Last updated: 2026-08-30 (revised again after the branch rebalance).
+Last updated: 2026-08-30 (revised again after the build-out pacing change).
 
 ---
 
@@ -18,7 +18,8 @@ Last updated: 2026-08-30 (revised again after the branch rebalance).
 | **Leak model** — cost by kind and by how alive it arrived | ✅ done, on `feat/leak-model`, **not merged** |
 | **Tower cap** — three of each kind, twelve per map | ✅ merged and **deployed** (`121bc7f`) |
 | **Difficulty selector** — tiers, and the benchmark that missed | ✅ merged and **deployed** |
-| **Upgrade branch balance** — splash to the Mortar, flat numbers, a legible panel | ✅ **built**, on `feat/upgrade-branch-balance`, **not merged** |
+| **Upgrade branch balance** — splash to the Mortar, flat numbers, a legible panel | ✅ merged and **deployed** |
+| **Build-out pacing** — a board that takes a run to finish | ✅ **built**, on `feat/build-out-pacing`, **not merged** |
 | Slice 2 — tactical powers | ⬜ decided, not designed |
 | Slice 3 — versioned save + meta-progression | ⬜ decided, not designed |
 | Slice 4 — hero | ⬜ decided, not designed |
@@ -337,7 +338,69 @@ was written for rather than merely describing the fix.
 **Also corrected:** `_strongest_board()` hardcoded all-sustained, true only while
 splash sat on three towers. Claims about "the best board" now *find* it.
 
-### The opening still has no pulse, and health cannot give it one
+### There was never an opening cliff — the whole run was flat *(2026-08-30)*
+
+The "wave 5 costs 21 lives" figure that produced the phrase *opening cliff*
+describes a player who **never builds anything** after their starting three
+towers. That is not a difficulty curve; it is a penalty for not playing.
+
+Measured against a player who simply spends — buy the cheapest legal thing
+whenever affordable, no thought at all:
+
+| Wave | Towers | Tiers | Lives | Gold | Deepest reached |
+|---|---|---|---|---|---|
+| 1 | 3 | 0/72 | 20 | 100 | 0.16 |
+| 2 | 4 | 1/72 | **19** | 147 | 1.00 |
+| 7 | **12** | 12/72 | 19 | 538 | 0.14 |
+| 12 | 12 | 53/72 | 19 | 1,085 | 0.14 |
+| 18 | 12 | **72/72** | 19 | 2,516 | 0.13 |
+| 20 | 12 | 72/72 | **19** | **5,488** | 0.17 |
+
+**One life lost across twenty waves.** The board was full by wave 7 of 20, fully
+maxed by 18, and the run ended with 5,488 gold that had nothing left to buy.
+Nothing ever reached 17% of a route whose first bend is at 31%. Two-thirds of a
+run had no placement decision left in it, and money stopped meaning anything
+around wave 12.
+
+**The purse was never the constraint — the price of a board was.** Placing all
+twelve towers cost 1,050 gold against a run's ~16,200 of income, and income is
+already back-loaded (only ~1,600 of it has arrived by wave 7).
+
+**What shipped: escalation, not income.** Tower costs went
+
+| | base | escalation |
+|---|---|---|
+| Basic | 20 → **35** | 10 → **100** |
+| Magic | 50 → **80** | 15 → **150** |
+| Mortar | 70 → **115** | 35 → **270** |
+| Long Range | 100 → **165** | 50 → **400** |
+
+Escalation carries most of the rise so the *first* of each kind stays reachable
+and the opening can still build; it is the second and third that have to be
+earned. **Income was deliberately not cut** — the shape was wrong, not the size,
+and cutting it would put the fully-maxed board out of reach, which every
+difficulty tier is measured against. The full board now costs 14,310 against
+16,199 of income, where it used to cost 11,415.
+
+The same greedy player now fills the board at **wave 13**, maxes at **20**,
+finishes with **10 of 20 lives** and **2,532 gold**. `test_affordability.gd`
+holds the bound — no full board before wave 10, leftover gold under 4,000, and
+a player who merely spends still survives — verified by putting the old costs
+back and watching it fail on both counts.
+
+**One consequence worth stating, because it contradicts how this was scoped.**
+It was proposed as *slower to build, not harder*. It turns out the two are not
+separable: a thinner board leaks, so waves 2 and 3 now cost a naive player about
+seven lives where they used to cost none. That is early-game texture arriving as
+a side effect of the pacing fix rather than as a separate change — and it is the
+thing the original "fix the opening" request was reaching for.
+
+**Also true, and unchanged:** on The Pass's 100 starting gold you can now open
+with exactly one Basic (35) or one Magic (80). A Mortar (115) or a Long Range
+(165) is no longer a first purchase. That is a real opening decision where
+before there was none.
+
+### The opening still has no pulse from enemy health, and cannot get one
 
 The one part of the design that did not land. It asked for a base-health bump
 so wave 1 lasts longer than a few seconds, bounded by two constraints: the

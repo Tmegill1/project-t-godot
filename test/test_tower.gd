@@ -537,7 +537,7 @@ func test_apply_upgrade_charges_nothing_for_a_buy_the_cross_path_rule_forbids() 
 	t.apply_upgrade(&"burst")
 	t.apply_upgrade(&"burst")
 	var committed := t.price_paid
-	assert_eq(committed, 20 + 30 + 60 + 130 + 30 + 65, "precondition: placement plus five legal tiers")
+	assert_eq(committed, 35 + 30 + 60 + 130 + 30 + 65, "precondition: placement plus five legal tiers")
 
 	t.apply_upgrade(&"burst")  # tier 3 while sustained sits at 3 - forbidden
 

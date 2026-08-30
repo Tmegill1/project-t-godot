@@ -494,6 +494,9 @@ func test_get_tower_count_starts_zero_rises_on_placement_falls_on_sell_and_is_ze
 	assert_eq(b.get_tower_count(&"not_a_real_kind"), 0, "an unknown kind returns 0 rather than erroring")
 
 	var pos := _find_placeable_positions(b, 1)[0]
+	# A Mortar costs more than the map's starting gold since the 2026-08-30
+	# pacing change; this test is about counting, not about affording.
+	b.set_gold_for_test(2000)
 	b.select_tower_kind(&"mortar")
 	b._try_place(pos)
 	assert_eq(b.get_tower_count(&"mortar"), 1, "count rises on placement")
@@ -952,6 +955,7 @@ func test_splash_over_an_already_dying_enemy_pays_no_second_reward() -> bool:
 func test_physics_process_excludes_dead_or_dying_enemies_but_offers_alive_ones() -> bool:
 	var b := _ready_board()
 	var world_pos := _find_placeable_positions(b, 1)[0]
+	b.set_gold_for_test(2000)  # Long Range costs more than a map's starting gold
 	b.select_tower_kind(&"long")  # generous range so distance is never the limiting factor
 	b._try_place(world_pos)
 	var tower: Tower = b._towers_root.get_child(0)
@@ -979,6 +983,7 @@ func test_physics_process_excludes_dead_or_dying_enemies_but_offers_alive_ones()
 func test_tower_fired_spawns_a_projectile_with_the_towers_speed_and_arc_flag() -> bool:
 	var b := _ready_board()
 	var pos := _find_placeable_positions(b, 1)[0]
+	b.set_gold_for_test(2000)  # a Mortar costs more than a map's starting gold
 	b.select_tower_kind(&"mortar")  # arcs=true, a non-default flag a "hardcode false" mutant would miss
 	b._try_place(pos)
 	var tower: Tower = b._towers_root.get_child(0)

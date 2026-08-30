@@ -99,7 +99,7 @@ and 20.
 | `audio/` — pooled playback, 17 core-slice events | ✅ complete |
 | Web export | ✅ preset + build; **boots and renders in a browser; not yet played in one** |
 | Deploy | ✅ live at **https://tmegill1.github.io/project-t-godot/** — every push to `master` republishes, at the address GitHub assigns (no custom domain) |
-| Tests | ✅ 13,763 checks across 45 files, exit 0 |
+| Tests | ✅ 13,767 checks across 45 files, exit 0 |
 | Map authoring | ✅ text format (`data/maps/*.txt`) + a `@tool` painting scene — see §12 |
 | Decoration | ✅ camps (wall + fires) in forest; scattered landmarks in ice/desert — see §13 |
 | Enemies | ✅ five — goblin, bat, shaman, ogre (rank and file) and troll (**boss only**) |
@@ -110,6 +110,7 @@ and 20.
 | Difficulty | ✅ three tiers chosen per run — Normal, Hard, Nightmare — measured, not guessed. See §15 |
 | Maps | ✅ three — The Pass (forest), The Fork (ice, **two entrances**), The Coils (desert), chained by `next` on victory |
 | Wave economy | ✅ clear bonus, speed bonus, interest, 20s prep timer, call-early |
+| Build-out pacing | ✅ measured — the twelve-tower budget takes until wave 13, not wave 7. See §16 |
 | Gold curve | ✅ measured, not guessed — see §9.2 |
 | Tower upgrades | ✅ **all 11 tasks done** — rules, tower, board, harness, inspector, verified in the running game. See §4 |
 
@@ -922,3 +923,44 @@ Nightmare is beatable, but only by the best build there is: it loses 10 of its 1
 lives across a run and survives with two. The harness has no projectile travel time, so it is
 kinder than the live board; these values are a starting point to be played, not
 a finished tuning.
+
+---
+
+## 16. The build-out has to last the run
+
+**The number that mattered:** a player who simply buys the cheapest legal thing
+whenever they can afford it used to fill the entire twelve-tower budget by
+**wave 7 of 20**, max every tier by 18, lose **one life** across the whole run,
+and finish with **5,488 gold** that had nothing left to buy.
+
+That is what "the opening cliff" actually was. The 21-lives-at-wave-5 figure
+that produced the phrase describes a player who never builds at all.
+
+**The purse was never the constraint — the price of a board was.** Placing all
+twelve towers cost 1,050 gold against a run's ~16,200 of income, and income is
+already back-loaded: only ~1,600 has arrived by wave 7. So the fix is cost, not
+income.
+
+**Escalation carries the rise, not base cost.** Base 20/50/70/100 →
+**35/80/115/165**; escalation 10/15/35/50 → **100/150/270/400**. The first of
+each kind stays reachable so the opening can still build; the second and third
+have to be earned. The same greedy player now fills the board at wave 13, maxes
+at 20, finishes with 10 of 20 lives and 2,532 gold.
+
+**Income was deliberately not cut**, and should not be without re-measuring
+everything downstream: the full maxed board is what every difficulty tier is
+measured against, and it now costs 14,310 against 16,199 of income. There is
+1,889 of headroom, where there used to be 4,784.
+
+**The bound that keeps this fixed** is in `test_affordability.gd`: no full board
+before wave 10, leftover gold under 4,000, and a player who merely spends still
+survives. It was verified by restoring the old costs and watching it fail on
+both counts — the same discipline as `MAX_BRANCH_SPREAD`, and for the same
+reason. Pin a bound, not an example.
+
+**Two consequences to know before touching tower costs again.** Slowing the
+build-out also made the early game *harder*, which was not the intent but is not
+separable: a thinner board leaks, so waves 2 and 3 now cost a naive player about
+seven lives where they used to cost none. And on The Pass's 100 starting gold
+you can open with exactly one Basic or one Magic — a Mortar or a Long Range is
+no longer a first purchase, which several tests had silently assumed.

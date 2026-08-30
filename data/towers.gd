@@ -14,9 +14,34 @@ class_name Towers
 ## crystals on the artillery piece. No stat, cost, range or rate moved with
 ## them; test_data_tables.gd pins that separately.
 
+## COSTS AND ESCALATION were re-measured on 2026-08-30, and they are pacing
+## numbers rather than power numbers - no stat moved with them.
+##
+## The finding that produced them: a player who simply buys the cheapest legal
+## thing whenever they can afford it used to fill the entire twelve-tower budget
+## by WAVE 7 of 20, max every tier by 18, lose one life all run, and finish with
+## 5,488 gold that had nothing left to buy. Two-thirds of a run had no placement
+## decision left in it and money had stopped meaning anything.
+##
+## Placing the whole board cost 1,050 gold against a run's ~16,200 of income, so
+## the purse was never the constraint - the price of a board was. Escalation
+## carries most of the increase rather than base cost, so the FIRST of each kind
+## stays reachable and the opening can still build; it is the second and third
+## that now have to be earned.
+##
+## Measured against that same greedy player, on The Pass:
+##
+##   basic/fast/mortar/long        board full   maxed   lives   gold left
+##   20+10  50+15  70+35  100+50        wave 7      18      19       5,488
+##   20+40  50+60  70+120 100+180      wave 10      18      18       4,757
+##   25+60  60+90  85+170 120+250      wave 11      19      16       3,978
+##   35+100 80+150 115+270 165+400     wave 13      20      10       2,532
+##   40+150 90+220 130+350 180+500     DEAD on wave 15
+##
+## test_affordability.gd holds the bound this has to keep meeting.
 const DEFS := {
 	&"basic": {
-		"label": "Basic", "damage_type": &"physical", "cost": 20, "cost_escalation": 10, "range": 100.0,
+		"label": "Basic", "damage_type": &"physical", "cost": 35, "cost_escalation": 100, "range": 100.0,
 		"fire_rate": 1000.0, "damage": 4, "pierce": 0, "detection": false,
 		"base_splash_radius": 0.0, "projectile_speed": 500.0,
 		"projectile_arcs": false, "color": Color8(0x00, 0x66, 0xff),
@@ -24,7 +49,7 @@ const DEFS := {
 		"base_limit": 3, "limit_bonus_map2": 0,
 	},
 	&"fast": {
-		"label": "Magic", "damage_type": &"magic", "cost": 50, "cost_escalation": 15, "range": 80.0,
+		"label": "Magic", "damage_type": &"magic", "cost": 80, "cost_escalation": 150, "range": 80.0,
 		"fire_rate": 500.0, "damage": 2, "pierce": 0, "detection": false,
 		"base_splash_radius": 0.0, "projectile_speed": 500.0,
 		"projectile_arcs": false, "color": Color8(0x00, 0xff, 0x00),
@@ -32,7 +57,7 @@ const DEFS := {
 		"base_limit": 3, "limit_bonus_map2": 0,
 	},
 	&"mortar": {
-		"label": "Mortar", "damage_type": &"physical", "cost": 70, "cost_escalation": 35, "range": 120.0,
+		"label": "Mortar", "damage_type": &"physical", "cost": 115, "cost_escalation": 270, "range": 120.0,
 		"fire_rate": 2000.0, "damage": 5, "pierce": 0, "detection": false,
 		"base_splash_radius": 55.0, "projectile_speed": 350.0,
 		"projectile_arcs": true, "color": Color8(0xb0, 0x7a, 0x3a),
@@ -40,7 +65,7 @@ const DEFS := {
 		"base_limit": 3, "limit_bonus_map2": 0,
 	},
 	&"long": {
-		"label": "Long Range", "damage_type": &"physical", "cost": 100, "cost_escalation": 50, "range": 150.0,
+		"label": "Long Range", "damage_type": &"physical", "cost": 165, "cost_escalation": 400, "range": 150.0,
 		"fire_rate": 1500.0, "damage": 15, "pierce": 0, "detection": false,
 		"base_splash_radius": 0.0, "projectile_speed": 500.0,
 		"projectile_arcs": false, "color": Color8(0xff, 0x66, 0x00),
