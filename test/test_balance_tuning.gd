@@ -96,10 +96,23 @@ func _every_legal_maxed_board() -> Array:
 		boards.append({"name": name, "towers": _board_with(splits)})
 	return boards
 
-## The strongest of the sixteen, measured: every kind on sustained. Splash is
-## what answers a late wave, and both towers that can buy it do.
-func _strongest_board() -> Array:
-	return _board_with([SUSTAINED, SUSTAINED, SUSTAINED, SUSTAINED])
+## The best any legal fully-upgraded board manages on a wave, by lives lost.
+##
+## Measured rather than named. An earlier version of this file hardcoded "every
+## kind on sustained" as the strongest board, which was true when splash was on
+## three towers and false the moment it went back to one. Claims about "the best
+## board" have to find it, or they quietly become claims about whichever board
+## used to be best.
+func _best_board_result(tier: StringName, wave: int) -> Dictionary:
+	var path := _full_path()
+	var best := {}
+	for board in _every_legal_maxed_board():
+		var r := Harness.run_wave({"wave": wave, "towers": board["towers"],
+			"path": path, "difficulty": tier})
+		if best.is_empty() or int(r["lives_lost"]) < int(best["lives_lost"]):
+			best = r
+			best["_name"] = board["name"]
+	return best
 
 func _full_board() -> Array:
 	return _board_with([MAXED, MAXED, MAXED, MAXED])
@@ -156,11 +169,13 @@ func test_enemies_reach_past_the_first_bend_on_the_hardest_tier() -> bool:
 		"wave 10 gets past the bend against a mid-run board, reached %f"
 			% mid["deepest_progress"])
 
-	var full := Harness.run_wave({"wave": Waves.MAX_WAVES, "towers": _strongest_board(),
-		"path": _full_path(), "difficulty": Difficulty.NIGHTMARE})
-	assert_true(full["deepest_progress"] > FIRST_BEND_FRACTION,
-		"and the last wave does against the strongest full board, reached %f"
-			% full["deepest_progress"])
+	var path := _full_path()
+	for board in _every_legal_maxed_board():
+		var full := Harness.run_wave({"wave": Waves.MAX_WAVES, "towers": board["towers"],
+			"path": path, "difficulty": Difficulty.NIGHTMARE})
+		assert_true(full["deepest_progress"] > FIRST_BEND_FRACTION,
+			"and the last wave does against full board %s, reached %f"
+				% [board["name"], full["deepest_progress"]])
 	return true
 
 ## Normal keeps its shape, by owner decision (2026-08-29): a full maxed board
@@ -176,11 +191,10 @@ func test_every_maxed_board_still_wins_on_normal() -> bool:
 	return true
 
 ## Hard's brief, pinned: real lives late, without ending the run. Asked of the
-## STRONGEST board, because a brief that only holds for a weak build is the
-## defect this file was rewritten to catch.
+## BEST board there is, found by measurement, because a brief that only holds
+## for a weak build is the defect this file was rewritten to catch.
 func test_hard_costs_the_strongest_board_real_lives_without_ending_the_run() -> bool:
-	var r := Harness.run_wave({"wave": Waves.MAX_WAVES, "towers": _strongest_board(),
-		"path": _full_path(), "difficulty": Difficulty.HARD})
+	var r := _best_board_result(Difficulty.HARD, Waves.MAX_WAVES)
 	assert_true(r["lives_lost"] > 0, "Hard's last wave costs a full board lives")
 	assert_true(r["lives_lost"] < Difficulty.starting_lives(Difficulty.HARD),
 		"but not the whole budget, lost %s of %s"
@@ -190,13 +204,23 @@ func test_hard_costs_the_strongest_board_real_lives_without_ending_the_run() -> 
 
 ## The two upgrade branches must stay close to each other.
 ##
+## Measured at wave 30, well past anything a board can hold, and NOT at wave 20.
+## That reference is load-bearing and was got wrong once already: at the wave a
+## tier is actually decided, the best board loses almost nothing and the worst
+## loses a lot, so the ratio measures where the threshold sits rather than how
+## far apart the branches are. The same roster read 6.90x at wave 20 and 1.68x
+## at wave 30, and moving Nightmare's health by a quarter swung the wave-20
+## figure from 12.40x to undefined. A ratio needs both sides to be graded.
+##
+## Verified against the roster this replaced, by putting splash back on Basic
+## and Long Range and re-running: 3.18x, over the bound. With splash confined to
+## the Mortar it reads 1.68x. So the bound catches the defect it was written for
+## rather than merely describing the fix.
+##
 ## Pinned as a RATIO, not a pair of figures, so re-tuning the difficulty rows
-## moves both sides together and leaves the claim intact. Measured 2026-08-30 at
-## 37x before this work: the all-sustained board lost 9 lives across a Nightmare
-## run where the all-burst board lost 336, which made the branch choice not a
-## choice. Returning splash to the Mortar brought it to 2.01x on its own, with
-## no tuning of the flat values at all - so the gap was never about the numbers,
-## it was about three towers being able to buy the same answer.
+## moves both sides together and leaves the claim intact. Before this work the
+## all-sustained board lost 9 lives across a Nightmare run where the all-burst
+## board lost 336, which made the branch choice not a choice.
 ##
 ## This is the third attempt at an assertion that catches a runaway build, and
 ## the first that pins a BOUND rather than a board. The six-tower benchmark
@@ -204,20 +228,25 @@ func test_hard_costs_the_strongest_board_real_lives_without_ending_the_run() -> 
 ## cannot be satisfied by picking a convenient example.
 const MAX_BRANCH_SPREAD := 3.0
 
+## Deep enough that every legal board is overwhelmed, so the comparison is
+## graded rather than binary. Composition accumulates from wave 1, so this is a
+## real wave the rules already describe, not a synthetic one.
+const BRANCH_SPREAD_WAVE := 30
+
 func test_no_upgrade_branch_runs_away_from_the_other() -> bool:
 	var path := _full_path()
 	var best := 1 << 30
 	var worst := 0
 	var worst_name := ""
 	for board in _every_legal_maxed_board():
-		var r := Harness.run_wave({"wave": Waves.MAX_WAVES, "towers": board["towers"],
+		var r := Harness.run_wave({"wave": BRANCH_SPREAD_WAVE, "towers": board["towers"],
 			"path": path, "difficulty": Difficulty.NIGHTMARE})
 		var lost := int(r["lives_lost"])
 		if lost > worst:
 			worst = lost
 			worst_name = board["name"]
 		best = mini(best, lost)
-	assert_true(best > 0, "every legal board loses something on Nightmare's last wave")
+	assert_true(best > 0, "every legal board is overwhelmed at the reference wave")
 	assert_true(float(worst) <= float(best) * MAX_BRANCH_SPREAD,
 		"worst board %s lost %d against the best board's %d, over the %.1fx bound"
 			% [worst_name, worst, best, MAX_BRANCH_SPREAD])

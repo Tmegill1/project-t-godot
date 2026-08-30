@@ -7,85 +7,44 @@ and end of every task so Codex can take over at any point.**
 
 - Repository: `/home/tylermegill/Projects/project-t-godot`
 - Branch: **`feat/upgrade-branch-balance`**, off `master` at `6582655`.
-- Executing the plan inline. Tasks 1-5 done; Task 6 next.
-- **Task 5 needed no tuning.** Returning splash to the Mortar took the spread
-  from 37× to **2.01×** by itself — the flat values were never touched. The gap
-  was never about the numbers; it was about three towers being able to buy the
-  same answer. Best board is now BBBB (all burst) at 120 lives, worst SBSS at
-  241. `MAX_BRANCH_SPREAD := 3.0` is pinned in `test_balance_tuning.gd`.
-- Nightmare is now far too harsh — every legal board loses 120-241 lives on wave
-  20 against 12. **That is Task 6's whole job.**
-- **The suite is RED on exactly one assertion, deliberately.**
-  `test_hard_costs_the_strongest_board_real_lives_without_ending_the_run`: the
-  strongest board now loses 203 of its 15 lives on Hard's wave 20, because
-  removing splash from Basic and Long Range weakened every board that took them.
-  **Task 6 owns this** — it re-sweeps the difficulty rows against the roster
-  that now exists. Do not weaken the assertion to make it green.
-  Everything else passes, including both shut-out assertions.
-- **Task 2 came out behaviour-identical**, which is better than the plan
-  predicted. Every tower's damage and fire-rate curve is unchanged at *every*
-  tier, not merely at the maxed endpoint, because each flat value equals the
-  delta its multiplier produced at that step. Nothing about current balance
-  moved; what changed is that future edits no longer compound.
-- **One deviation from the plan, deliberate:** it specified a
-  `_apply_effect_for_test` wrapper around `_apply_effects`. The wrapper was
-  dropped — GDScript's leading underscore is convention, not access control, so
-  the tests call `UpgradesSim._apply_effects` directly. A production function
-  existing only to be called by a test is worse than the thing it was avoiding.
-- Spec: `docs/superpowers/specs/2026-08-30-upgrade-branch-balance-design.md`
-- Plan: `docs/superpowers/plans/2026-08-30-upgrade-branch-balance.md` (9 tasks)
+- Executing the plan inline. Tasks 1-6 done, **suite green at 13,692 checks,
+  exit 0**. Task 7 next.
 
-`master` is green, merged and deployed at
-<https://tmegill1.github.io/project-t-godot/>, carrying the difficulty selector
-and the sixteen-board benchmark fix. Suite there: **13,599 checks across 45
-files, exit 0**.
+### Two corrections made during Task 6, both worth knowing
 
-## Why this work exists
+**The parity bound was measuring the wrong thing.** Task 5 pinned the
+best-to-worst ratio at wave 20 and got 2.01×. Re-sweeping the difficulty rows
+moved it to 6.90×, and a quarter-point of health swung it from 12.40× to
+undefined — because at the wave where a tier is actually decided, the best board
+loses almost nothing and the ratio measures where the threshold sits rather than
+how far apart the branches are. It now measures at **wave 30**, past anything a
+board can hold, where the comparison is graded: 1.68× for this roster, stable
+across rows.
 
-The owner asked whether a fully upgraded board survives Nightmare's wave 20.
-It does — or does not — depending almost entirely on **which upgrade branch was
-taken**, by a margin that makes the choice not a choice. Lives lost across a
-twenty-wave Nightmare run, twelve maxed towers:
+**And it was verified, not assumed.** Splash was temporarily put back on Basic
+and Long Range and the metric re-run: **3.18×**, over the 3.0 bound. So the
+assertion catches the defect it was written for rather than merely describing
+the fix.
 
-| Board | Run lives lost |
-|---|---|
-| All sustained | **9** |
-| …but Mortar on burst | **6** |
-| …but Basic on burst | 40 |
-| …but Magic on burst | 100 |
-| …but Long Range on burst | **200** |
-| All burst | **336** |
+**"The strongest board" is now found, not named.** `_strongest_board()`
+hardcoded all-sustained, which was true when splash sat on three towers and
+false the moment it went back to one. It is `_best_board_result(tier, wave)`
+now, which measures. The first-bend claim is asked of all sixteen boards rather
+than one.
 
-**A 37× spread.** No difficulty number closes it, because it is not a difficulty
-problem.
+### The shipped rows
 
-**Two mechanisms, both measured.** Three of four towers can buy splash, and a
-splash hit applies its *whole payload* — the Magic tower's slow included — to
-everything it catches, so one Magic tower plus any splasher slows the entire
-wave. Long Range is worst: 90px splash at 239px range, wider effective area than
-the Mortar, which is meant to be *the* area specialist. Separately, every damage
-and fire-rate tier is a multiplier, and multipliers compound: 1.4 × 1.4 is +96%,
-not +80%, and the shape worsens the deeper a branch goes.
+| Tier | health | speed | gold | lives |
+|---|---|---|---|---|
+| Normal | 1.00 | 1.00 | 1.00 | 20 |
+| Hard | 2.35 | 1.30 | 0.90 | 15 |
+| Nightmare | 2.50 | 1.30 | 0.85 | 12 |
 
-The Mortar's own comment in `data/upgrades.gd` already stated the rule this
-breaks: area belongs to it, and *"a tower that could take them would answer
-everything."*
-
-## Task progress
-
-| # | Task | State |
-|---|---|---|
-| — | Spec | ✅ committed — `Design the upgrade branch rebalance` |
-| — | Plan | ✅ committed — this handoff's commit |
-| 1 | Flat damage and fire rate, and a floor under it | ✅ done |
-| 2 | Convert every tier to flat damage and fire rate | ✅ done |
-| 3 | Return area damage to the Mortar | ✅ done — **suite red on one known assertion** |
-| 4 | Delete the multiplier keys | ✅ done |
-| 5 | Close the branch spread, and pin a bound | ✅ done — **2.01×, no tuning needed** |
-| 6 | Re-sweep Hard and Nightmare | 🔄 **next** |
-| 7 | A stat line generated from the effects | ⬜ |
-| 8 | The panel says what the tier does | ⬜ |
-| 9 | Update the docs | ⬜ |
+Count and interval stay at 1.0 — the Mortar still splashes, and density is what
+splash is for. Hard costs the best legal board 5 of its 15 lives on wave 20;
+Nightmare costs it 10 of 12 across a run, so it survives with two. The threshold
+where the last board stops shutting wave 20 out sits between 2.25 and 2.35
+health, and both tiers sit just past it.
 
 ## What the owner asked for, in their own terms
 

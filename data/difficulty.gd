@@ -71,46 +71,53 @@ const DEFS := {
 		"gold_multiplier": 1.0,
 		"starting_lives": Economy.STARTING_LIVES,
 	},
-	## Measured 2026-08-30 against the STRONGEST legal fully-upgraded board, not
-	## against one arbitrary build. The cross-path rule allows exactly two maxed
-	## splits per tower, a board picks one per kind, so there are sixteen legal
-	## maxed boards; test_balance_tuning.gd now walks all of them.
+	## RE-SWEPT 2026-08-30, after area damage went back to the Mortar. The rows
+	## before this one were measured against boards carrying splash on three
+	## towers; that board does not exist any more, and against the roster that
+	## replaced it those rows cost the best board over two hundred lives.
 	##
-	## Lives lost across a whole run, strongest board against weakest:
+	## Measured against every legal fully-upgraded board rather than a named
+	## one. The cross-path rule allows two maxed splits per tower and a board
+	## picks one per kind, so "the best board" is a thing you find, not a thing
+	## you name - it used to be all-sustained and is now whichever mix the sweep
+	## reports.
 	##
-	##   count/interval/health/speed   strongest        weakest
-	##   1.40 0.60 1.40 1.15           0 - SHUT OUT          46
-	##   1.00 1.00 3.50 1.30           0 - SHUT OUT         146
-	##   1.00 1.00 4.00 1.35           0 - SHUT OUT         246
-	##   1.00 1.00 4.00 1.40 (Hard)             3           258
-	##   1.00 1.00 4.50 1.40 (Nightmare)        9           336
-	##   1.00 1.00 5.00 1.40                   27           441
+	## Best board's lives lost on wave 20, and how many of the sixteen boards
+	## shut the wave out entirely:
 	##
-	## The spread between best and worst build is two orders of magnitude at
-	## every row, and no tier value closes it. That is a TOWER balance problem -
-	## the sustained branch dominates the burst branch against late waves - which
-	## the selector revealed rather than caused. It is invisible on Normal
-	## because every build shuts Normal out.
+	##   health/speed        best board   boards with ZERO leaks
+	##   1.30 1.10                    0                       15
+	##   1.60 1.20                    0                       13
+	##   2.00 1.25                    0                        5
+	##   2.25 1.30                    0                        2
+	##   2.35 1.30 (Hard)             5                        0
+	##   2.50 1.30 (Nightmare)       10                        0
+	##   2.75 1.35                   14                        0
+	##
+	## The threshold where the last board stops shutting the wave out sits
+	## between 2.25 and 2.35, and both tiers are set just past it. Count and
+	## interval stay at 1.0 for the reason above: the Mortar still splashes, and
+	## density is what splash is for.
 	&"hard": {
-		## The full board loses 3 of its 15 lives, on wave 20, and finishes with
-		## 12: real lives late without ending the run.
+		## The best legal board loses 5 of its 15 lives, on wave 20, and
+		## finishes with 10: real lives late without ending the run.
 		"label": "Hard",
 		"count_multiplier": 1.0,
 		"interval_multiplier": 1.0,
-		"health_multiplier": 4.0,
-		"speed_multiplier": 1.40,
+		"health_multiplier": 2.35,
+		"speed_multiplier": 1.30,
 		"gold_multiplier": 0.90,
 		"starting_lives": 15,
 	},
 	&"nightmare": {
-		## The strongest legal board loses 9 of its 12 lives and survives with 3.
-		## Beatable, but only by the best build there is - and every board that
-		## leaves a tower on the burst branch loses badly.
+		## Every one of the sixteen legal boards leaks on wave 20, and the best
+		## of them loses 10 of its 12 lives across a run - it survives with two.
+		## Beatable, and only by the best build there is.
 		"label": "Nightmare",
 		"count_multiplier": 1.0,
 		"interval_multiplier": 1.0,
-		"health_multiplier": 4.5,
-		"speed_multiplier": 1.40,
+		"health_multiplier": 2.50,
+		"speed_multiplier": 1.30,
 		"gold_multiplier": 0.85,
 		"starting_lives": 12,
 	},
