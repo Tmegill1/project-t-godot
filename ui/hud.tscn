@@ -34,6 +34,10 @@ text = "Lives 0"
 layout_mode = 2
 text = "Wave 0 / 0"
 
+[node name="DifficultyLabel" type="Label" parent="Top"]
+layout_mode = 2
+text = "Normal"
+
 [node name="BudgetLabel" type="Label" parent="Top"]
 layout_mode = 2
 text = "Towers 0/0"

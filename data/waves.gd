@@ -88,9 +88,10 @@ const OGRE_MAX_START_DELAY_MS := 10000.0
 ## paid for yet.
 const BOSS_DELAY_MS := 4000.0
 
-## Enemy counts for a wave, accumulated from wave 1. Returns fresh
-## dictionaries on every call so a caller cannot corrupt later waves.
-static func get_composition(wave_number: int) -> Array[Dictionary]:
+## Enemy counts for a wave, accumulated from wave 1, then scaled by the
+## tier's count multiplier. Returns fresh dictionaries on every call so a
+## caller cannot corrupt later waves.
+static func get_composition(wave_number: int, tier := Difficulty.NORMAL) -> Array[Dictionary]:
 	var composition: Array[Dictionary] = []
 
 	var authored_through: int = mini(wave_number, LAST_AUTHORED_WAVE)
@@ -104,6 +105,21 @@ static func get_composition(wave_number: int) -> Array[Dictionary]:
 		for entry in _ENDLESS_BUNDLE:
 			_add(composition, entry)
 
+	return _scale_counts(composition, Difficulty.multiplier(tier, &"count_multiplier"))
+
+## Applies a count multiplier in place and returns the same array.
+##
+## Floored at one per kind that the wave already contained: a multiplier that
+## rounded a kind to zero would silently change WHICH enemies a wave fields,
+## and a wave without its ogres is a different wave rather than an easier one.
+##
+## Exactly 1.0 short-circuits, so Normal's compositions are the same objects
+## the game has always produced - identical, not merely equal.
+static func _scale_counts(composition: Array[Dictionary], multiplier: float) -> Array[Dictionary]:
+	if is_equal_approx(multiplier, 1.0):
+		return composition
+	for entry in composition:
+		entry["count"] = maxi(1, int(round(float(entry["count"]) * multiplier)))
 	return composition
 
 static func _add(composition: Array[Dictionary], entry: Dictionary) -> void:
@@ -113,22 +129,34 @@ static func _add(composition: Array[Dictionary], entry: Dictionary) -> void:
 			return
 	composition.append({"kind": entry["kind"], "count": entry["count"]})
 
-## Health, speed and gold multipliers. All three are 1.0 through wave 5.
+## Health, speed and gold multipliers. All three are 1.0 through wave 5 at
+## Normal.
 ##
 ## Health and speed scale UP with the wave; gold scales DOWN. See
 ## GOLD_PER_WAVE for why the third one runs the other way.
-static func get_modifiers(wave_number: int) -> Dictionary:
+##
+## The tier's gold multiplier is applied AFTER MIN_GOLD_MODIFIER, not before.
+## The floor is a safety rail against a negative reward in endless play; a
+## harder tier paying less is the intent, so the floor must not undo it.
+static func get_modifiers(wave_number: int, tier := Difficulty.NORMAL) -> Dictionary:
 	var past: int = maxi(0, wave_number - LAST_AUTHORED_WAVE)
 	return {
-		"health_modifier": 1.0 + float(past) * HEALTH_PER_WAVE,
-		"speed_modifier": 1.0 + float(past) * SPEED_PER_WAVE,
-		"gold_modifier": maxf(MIN_GOLD_MODIFIER, 1.0 - float(past) * GOLD_PER_WAVE),
+		"health_modifier": (1.0 + float(past) * HEALTH_PER_WAVE)
+			* Difficulty.multiplier(tier, &"health_multiplier"),
+		"speed_modifier": (1.0 + float(past) * SPEED_PER_WAVE)
+			* Difficulty.multiplier(tier, &"speed_multiplier"),
+		"gold_modifier": maxf(MIN_GOLD_MODIFIER, 1.0 - float(past) * GOLD_PER_WAVE)
+			* Difficulty.multiplier(tier, &"gold_multiplier"),
 	}
 
 ## When the ogre column starts, given how many goblins precede it. Ogres trail
 ## the last goblin by three seconds but never wait more than ten.
-static func ogre_spawn_delay(goblin_count: int) -> float:
-	var last_goblin_at := float(goblin_count - 1) * INTERVAL_MS
+##
+## interval_ms is a parameter because a tier that tightens spawn spacing moves
+## the last goblin earlier; deriving this from the constant would leave the
+## ogres waiting on a schedule the goblins no longer keep.
+static func ogre_spawn_delay(goblin_count: int, interval_ms := INTERVAL_MS) -> float:
+	var last_goblin_at := float(goblin_count - 1) * interval_ms
 	return minf(last_goblin_at + OGRE_DELAY_AFTER_LAST_GOBLIN_MS, OGRE_MAX_START_DELAY_MS)
 
 ## Spawn instants for a wave, mirroring GameScene.startWave's offsets.
@@ -137,9 +165,17 @@ static func ogre_spawn_delay(goblin_count: int) -> float:
 ## needs the exact same schedule the headless harness uses — one
 ## implementation, two callers, so the board can never spawn on a schedule
 ## the harness didn't also simulate.
-static func build_schedule(wave: int) -> Array:
+static func build_schedule(wave: int, tier := Difficulty.NORMAL) -> Array:
+	return _build_schedule_at(wave, tier, Difficulty.multiplier(tier, &"interval_multiplier"))
+
+## The schedule for a wave at an explicit interval multiplier.
+##
+## Split out from build_schedule so a test can vary the spacing without
+## inventing a difficulty tier for it.
+static func _build_schedule_at(wave: int, tier: StringName, interval_multiplier: float) -> Array:
 	var schedule: Array = []
-	var composition := get_composition(wave)
+	var composition := get_composition(wave, tier)
+	var interval := INTERVAL_MS * interval_multiplier
 
 	var goblin_count := 0
 	for entry in composition:
@@ -158,14 +194,14 @@ static func build_schedule(wave: int) -> Array:
 		var start := 0.0
 		match kind:
 			&"bat":
-				start = BAT_START_DELAY_MS
+				start = BAT_START_DELAY_MS * interval_multiplier
 			&"ogre":
-				start = ogre_spawn_delay(goblin_count)
+				start = ogre_spawn_delay(goblin_count, interval)
 			_:
 				start = 0.0
 		for i in entry["count"]:
 			schedule.append({
-				"kind": kind, "at_ms": start + float(i) * INTERVAL_MS,
+				"kind": kind, "at_ms": start + float(i) * interval,
 				"_push_index": push_index,
 			})
 			push_index += 1

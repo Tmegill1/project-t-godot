@@ -1,74 +1,116 @@
-# Claude Handoff
+# Claude Handoff — Difficulty Selector
 
-Generated: 2026-08-29 (America/Chicago)
+Generated: 2026-08-29 (America/Chicago). **Live document — rewritten at the start
+and end of every task so Codex can take over at any point.**
 
-## Repository state
+## Where the work is
 
 - Repository: `/home/tylermegill/Projects/project-t-godot`
-- Branch: `master`
-- Local and remote HEAD: `2a1ac6a`
-- Live site: `https://tmegill1.github.io/project-t-godot/`
-- The Pages deployment for `2a1ac6a` completed successfully.
-- `.ai/` is intentionally untracked. Do not commit it unless the owner asks.
-- `test/test_balance_tuning.gd.uid` is an untracked Godot-generated UID left by an import pass. Do not add it incidentally.
+- Branch: **`feat/difficulty-selector`**, branched from `master` at `b714159`.
+- Nothing pushed. `master` is unchanged; pushing `master` redeploys the live site,
+  so do not push without the owner asking.
+- Plan: `docs/superpowers/plans/2026-08-29-difficulty-selector.md` (11 tasks)
+- Spec: `docs/superpowers/specs/2026-08-29-difficulty-selector-design.md`
 
-## Work completed
+## Task progress
 
-### Tower limits and balance
+| # | Task | State |
+|---|---|---|
+| 1 | Measure what a run can afford | ✅ done — `Measure what a run can actually fund` |
+| 2 | The difficulty table | ✅ done — `Add the difficulty tier table` |
+| 3 | `Waves` takes a tier | ✅ done — `Let a wave be built at a difficulty tier` |
+| 4 | The harness accepts a tier | ✅ done — `Run a harness wave at a difficulty tier` |
+| 5 | Teach the harness where enemies died | ✅ done — `Teach the harness where enemies died` |
+| 6 | The live board runs at a tier | ✅ done — `Run the live board at the chosen difficulty` |
+| 7 | The menu selector and the HUD readout | ✅ done — `Choose a difficulty before a run, and show it during one` |
+| 8 | Sweep the tiers and set their numbers | ✅ done — `Set the Hard and Nightmare rows from a measured sweep` |
+| 9 | Give the opening a pulse | ⚠️ **done as a finding, no value changed** |
+| 10 | Benchmark the board the game actually hands out | ✅ done — `Benchmark the full twelve-tower board, not half of it` |
+| 11 | Update the docs | ✅ done — `Bring the docs up to the difficulty selector` |
 
-Commit: `121bc7f Cap each tower kind at three`
+## Task 9 did not raise base health, and the owner should know why
 
-- Every tower kind is capped at 3 on every map: Basic, Magic (`fast` internally), Mortar, and Long Range.
-- Every map has a 12-tower total budget, matching the reachable total of three per kind.
-- Added `test/test_balance_tuning.gd` as a permanent late-game benchmark.
-- Six fully committed mixed towers were measured on The Pass:
-  - waves 1-15: zero leaks
-  - wave 18: 19 leaks and 21 lives lost
-  - wave 20: 31 leaks and 44 lives lost
-- Enemy health/count/spawn tuning was deliberately left unchanged because wave 18 already met the owner's requested leak threshold. The opening remains approachable while the late game requires more coverage and upgrades.
+**This is the one part of the plan that did not land as written, and it is a
+finding rather than a shortcut.** Task 9 asked for a base-health bump so wave 1
+lasts longer than a few seconds. Its spec bound that bump by two constraints:
+the roster ordering `ogre > shaman > goblin > bat` must survive, and wave 5
+against three ungraded Basics must not cost *more* lives than it already does.
 
-### Themed projectiles and firing sounds
+Swept on 2026-08-30 against exactly the board 100 starting gold buys — three
+ungraded Basics at 20 + 30 + 40:
 
-Commit: `2a1ac6a Give each tower a themed projectile`
+| ogre / shaman / goblin / bat | wave 1 | wave 5 |
+|---|---|---|
+| 10 / 7 / 5 / 3 *(shipped)* | 5.6s, 0 leaks | 21 lives |
+| 10 / 7 / 6 / 4 | 5.6s, 0 leaks | 21 lives |
+| 10 / 7 / 6 / 5 | 5.6s, 0 leaks | 23 lives |
+| 12 / 9 / 8 / 5 | 5.6s, 0 leaks | 25 lives |
+| 14 / 11 / 9 / 6 | 26.8s, **2 leaks** | 33 lives |
 
-- Replaced the generic 6x6 white `ColorRect` projectile with a `Sprite2D`.
-- Added four transparent 32x32 pixel-art sprites under `assets/art/projectiles/`:
-  - `basic.png`: blue-steel cannon bolt
-  - `fast.png`: cyan crystal / arcane shot
-  - `mortar.png`: dark iron shell with ember fuse
-  - `long.png`: orange-gold piercing round
-- `GameBoard` passes `tower.kind` into `Projectile.launch()`.
-- `Projectile` loads the matching texture, points the sprite along its flight direction, and preserves the mortar's screen-upward arc.
-- Replaced all four `assets/audio/fire-*.ogg` clips with distinct original synthesized effects: mechanical snap, crystalline zap, artillery thump, and piercing crack.
-- Added projectile mapping and runtime texture-selection coverage in `test/test_projectile.gd`.
+Two things fall out, and together they close the door:
 
-## Verification
+1. **Wave 1 does not move until goblin health crosses 8.** A Basic tower deals
+   exactly 4, so a goblin at anything from 5 to 8 dies to the same two shots.
+   At 9 it needs three — and wave 1 stops being a walkover by *leaking*, not by
+   lasting longer. There is no value in between. The opening is quantised by
+   the Basic tower's damage, not tuned by hit points.
+2. **Every value that changes anything makes wave 5 cost more**, which is
+   exactly the constraint saying the opening cliff must not steepen.
 
-- Full suite after the projectile/audio work: 13,436 checks across 42 files, with zero failing assertions, load errors, or aborted tests.
-- A release Web export completed successfully.
-- The deployed `index.pck` was downloaded and inspected; it contains all four projectile assets and the new projectile scene/code.
+The two constraints cannot both be met, so no number moved. The spec's own risk
+section says this is a finding to bring back rather than something to fix by
+quietly retuning Normal, so that is what happened: the sweep is recorded above
+`Enemies.DEFS`, and `test_balance_tuning.gd` now pins the shape it failed to
+move — wave 1 is a zero-leak walkover decided before the first bend, wave 5
+ends a run that never built past its starting three.
 
-## Browser cache diagnosis
+**If the owner wants the opening fixed, the lever is not health.** It is the
+Basic tower's damage or fire rate, or wave 1's composition — all outside this
+slice.
 
-The owner initially still saw white squares in the live game. The main-menu build label showed `121bc7f`, proving the browser was running the previous cached pack rather than the deployed `2a1ac6a` build.
+## In flight right now
 
-If this is reported again:
+**Nothing. All eleven tasks are complete.** The branch is
+`feat/difficulty-selector`, eight commits ahead of `master`, suite green at
+**13,554 checks across 45 files, exit 0**. Nothing is pushed and nothing is
+merged — pushing `master` redeploys the live site, and that is the owner's call.
 
-1. Check the lower-left build label first.
-2. The correct projectile build is `2a1ac6a`.
-3. If it shows `121bc7f`, close all game tabs and reopen the site in a private/incognito window, or clear site data/cache for `tmegill1.github.io`.
-4. Do not retune or rewrite projectile code based on a stale build.
+### What a Codex takeover would pick up
 
-## Asset coordination rule — owner instruction
+1. **Merge or not.** `feat/difficulty-selector` is ready. `update.md` records it
+   as built and unmerged, beside the leak model which is in the same state.
+2. **Play it.** Every tier number came from the harness, which has no projectile
+   travel time and is therefore kinder than the live board. The spec says
+   plainly these are a starting point to be played. The selector is on the main
+   menu; the active tier shows in the HUD beside the wave counter.
+3. **Two findings that need an owner's decision**, both written up in
+   `update.md`: the opening cannot be fixed with enemy health (the lever is the
+   Basic tower or wave 1's composition), and the benchmark board loses
+   Nightmare.
 
-**If any new visual, audio, animation, sprite, texture, icon, or other game asset appears necessary, stop and talk with Codex first. Do not generate, source, replace, or commission new assets independently. Ask the owner to return to Codex so the asset can be discussed and created there before continuing.**
+## Standing rules that govern this work
 
-Existing assets may be wired, debugged, and tested normally. The pause applies when the work would require a new asset or a replacement asset not already approved above.
+- Run the suite with `godot --headless --quit --script test/run_tests.gd`.
+  **Exit code 0 is the only pass signal**; a green run prints many `SCRIPT ERROR`
+  lines to stderr by design.
+- Every `test_*` method is declared `-> bool` and ends with `return true`,
+  including every early return. Enforced crash detection, not style.
+- `data/` and `sim/` are pure — `test/test_sim_purity.gd` bans scene types,
+  clocks, RNG and platform state. Difficulty is a **parameter**, never a global.
+- Normal must stay byte-identical. Any moved Normal-path number is a bug in this
+  work, not a rebalance; the existing 13,436 assertions are the detector.
+- **NO NEW ASSETS.** Owner's standing rule: if any visual, audio, animation,
+  sprite, texture or icon turns out to be needed, stop and return to Codex. The
+  selector is plain `Button` nodes and the existing theme.
+- Do not commit `test/test_balance_tuning.gd.uid` or anything under `.ai/`.
+  Another agent may share this tree: `git status` before every commit and stage
+  only the files the task names. Never `git add -A`.
 
-## Guidance for continuing
+## Prior work still standing (from the pre-branch handoff)
 
-- Read `update.md` and `CONTINUE.md` before selecting the next task.
-- Preserve the two commits above; both are pushed to `origin/master` and deployed.
-- Diagnose live reports against the build stamp before changing code.
-- Keep live rules and `sim/harness.gd` behavior aligned; balance claims should remain reproducible tests.
-- Run `godot --headless --script test/run_tests.gd` before claiming completion.
+- `121bc7f Cap each tower kind at three` — every kind capped at 3, every map at a
+  12-tower budget. Deployed.
+- `2a1ac6a Give each tower a themed projectile` — four 32x32 projectile sprites
+  under `assets/art/projectiles/`, four distinct fire sounds. Deployed.
+- If the owner reports a visual defect, check the lower-left build stamp before
+  changing code — a stale browser cache has already caused one false report.

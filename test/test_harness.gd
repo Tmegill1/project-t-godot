@@ -787,3 +787,53 @@ func test_the_harness_boss_carries_its_own_health_not_its_kinds() -> bool:
 		"the boss is killable and is counted among the kills")
 	assert_eq(r["leaks"], 0, "nothing got through")
 	return true
+
+func test_an_absent_difficulty_means_normal() -> bool:
+	var towers := [{"kind": &"basic", "position": Grid.tile_to_world_center(5, 3)}]
+	var bare := Harness.run_wave({"wave": 3, "towers": towers, "path": _path()})
+	var named := Harness.run_wave({"wave": 3, "towers": towers, "path": _path(),
+		"difficulty": Difficulty.NORMAL})
+	assert_eq(bare, named, "omitting difficulty is exactly Normal")
+	return true
+
+func test_results_stay_reproducible_per_tier() -> bool:
+	var towers := [{"kind": &"basic", "position": Grid.tile_to_world_center(5, 3)}]
+	for tier in Difficulty.ORDER:
+		var config := {"wave": 8, "towers": towers, "path": _path(), "difficulty": tier}
+		var first := Harness.run_wave(config)
+		assert_eq(Harness.run_wave(config), first, "%s is reproducible" % tier)
+	return true
+
+## The Pass is 2,448px end to end and its first bend is 768px in, so a wave
+## decided before the corner never exceeds this fraction.
+const FIRST_BEND_FRACTION := 0.31
+
+func test_an_undefended_wave_walks_the_whole_route() -> bool:
+	var r := Harness.run_wave({"wave": 1, "towers": [], "path": _path()})
+	assert_almost_eq(r["deepest_progress"], 1.0, 0.01,
+		"nothing shooting means something reaches the goal")
+	return true
+
+func test_progress_is_a_fraction() -> bool:
+	var towers: Array = []
+	for col in [3, 5, 7]:
+		towers.append({"kind": &"basic", "position": Grid.tile_to_world_center(col, 3)})
+	for wave in [1, 5, 12]:
+		var r := Harness.run_wave({"wave": wave, "towers": towers, "path": _path()})
+		assert_true(r["deepest_progress"] >= 0.0 and r["deepest_progress"] <= 1.0,
+			"wave %d deepest_progress is a fraction" % wave)
+		assert_true(r["progress_at_death"] >= 0.0 and r["progress_at_death"] <= 1.0,
+			"wave %d progress_at_death is a fraction" % wave)
+	return true
+
+## The owner's report, as an assertion: an overwhelming board decides wave 1
+## before the first corner.
+func test_an_overwhelming_board_kills_before_the_first_bend() -> bool:
+	var towers: Array = []
+	for col in [3, 5, 7, 9, 11]:
+		towers.append({"kind": &"long", "position": Grid.tile_to_world_center(col, 3)})
+	var r := Harness.run_wave({"wave": 1, "towers": towers, "path": _path()})
+	assert_eq(r["leaks"], 0, "nothing gets through")
+	assert_true(r["deepest_progress"] < FIRST_BEND_FRACTION,
+		"wave 1 is over before the first bend, at %f" % r["deepest_progress"])
+	return true

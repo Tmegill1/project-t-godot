@@ -17,6 +17,35 @@ class_name Harness
 const DEFAULT_TICK_MS := 1000.0 / 60.0
 const DEFAULT_MAX_TICKS := 60000
 
+## Cumulative distance to each waypoint, and the route's total length.
+##
+## Precomputed once per run rather than per tick: the route never changes
+## during a wave, and this is read for every living enemy on every tick.
+static func _route_metrics(path: PackedVector2Array) -> Dictionary:
+	var cumulative := PackedFloat32Array()
+	cumulative.resize(path.size())
+	if path.size() > 0:
+		cumulative[0] = 0.0
+	for i in range(1, path.size()):
+		cumulative[i] = cumulative[i - 1] + path[i - 1].distance_to(path[i])
+	var total := 0.0 if path.size() == 0 else float(cumulative[path.size() - 1])
+	return {"cumulative": cumulative, "total": total}
+
+## How far along the route a position is, as a fraction of the whole.
+##
+## path_index is the waypoint being walked TOWARD, so everything up to
+## path_index - 1 is already behind the enemy; the remainder is the straight
+## line from that waypoint to where it now stands.
+static func _progress_of(position: Vector2, path_index: int,
+		path: PackedVector2Array, route: Dictionary) -> float:
+	var total: float = route["total"]
+	if total <= 0.0 or path.size() == 0:
+		return 0.0
+	var cumulative: PackedFloat32Array = route["cumulative"]
+	var behind := clampi(path_index - 1, 0, path.size() - 1)
+	var travelled := float(cumulative[behind]) + path[behind].distance_to(position)
+	return clampf(travelled / total, 0.0, 1.0)
+
 static func run_wave(config: Dictionary) -> Dictionary:
 	var wave: int = config["wave"]
 	var path: PackedVector2Array = config["path"]
@@ -48,8 +77,12 @@ static func run_wave(config: Dictionary) -> Dictionary:
 			"cooldown": 0.0,
 		})
 
-	var schedule := Waves.build_schedule(wave)
-	var modifiers := Waves.get_modifiers(wave)
+	# Difficulty travels as a parameter, never a global, so this stays a pure
+	# function of its config - which is what makes every balance claim in this
+	# project reproducible.
+	var tier: StringName = config.get("difficulty", Difficulty.NORMAL)
+	var schedule := Waves.build_schedule(wave, tier)
+	var modifiers := Waves.get_modifiers(wave, tier)
 
 	var enemies: Array = []
 	var next_id := 0
@@ -60,6 +93,10 @@ static func run_wave(config: Dictionary) -> Dictionary:
 	var lives_lost := 0
 	var gold_earned := 0
 	var spawned := 0
+	var route := _route_metrics(path)
+	var deepest_progress := 0.0
+	var death_progress_total := 0.0
+	var deaths := 0
 
 	while ticks < max_ticks:
 		ticks += 1
@@ -115,7 +152,11 @@ static func run_wave(config: Dictionary) -> Dictionary:
 				Slow.effective_speed(float(e["speed"]), e["slow"]), tick_ms)
 			e["position"] = m["position"]
 			e["path_index"] = m["path_index"]
+			deepest_progress = maxf(deepest_progress,
+				_progress_of(e["position"], e["path_index"], path, route))
 			if m["reached_goal"]:
+				# A leak has by definition walked the whole route.
+				deepest_progress = 1.0
 				leaks += 1
 				lives_lost += Leak.resolve({
 					"life_loss": Enemies.DEFS[e["kind"]]["life_loss"],
@@ -184,6 +225,9 @@ static func run_wave(config: Dictionary) -> Dictionary:
 				if r["lethal"]:
 					e["alive"] = false
 					kills += 1
+					death_progress_total += _progress_of(
+						e["position"], e["path_index"], path, route)
+					deaths += 1
 					# A boss pays its own bounty, not its kind's.
 					var base_reward: int = int(e["reward_override"]) if e.get("boss", false) \
 						else int(Enemies.DEFS[e["kind"]]["reward"])
@@ -193,13 +237,28 @@ static func run_wave(config: Dictionary) -> Dictionary:
 		enemies = enemies.filter(func(e): return e["alive"])
 
 		if spawned >= schedule.size() and enemies.is_empty():
-			return _result(kills, leaks, lives_lost, gold_earned, ticks, false)
+			return _result(kills, leaks, lives_lost, gold_earned, ticks, false,
+				deepest_progress, death_progress_total, deaths)
 
-	return _result(kills, leaks, lives_lost, gold_earned, ticks, true)
+	return _result(kills, leaks, lives_lost, gold_earned, ticks, true,
+		deepest_progress, death_progress_total, deaths)
 
 static func _result(kills: int, leaks: int, lives_lost: int, gold: int,
-		ticks: int, timed_out: bool) -> Dictionary:
+		ticks: int, timed_out: bool, deepest_progress: float,
+		death_progress_total: float, deaths: int) -> Dictionary:
 	return {
-		"kills": kills, "leaks": leaks, "lives_lost": lives_lost,
-		"gold_earned": gold, "ticks": ticks, "timed_out": timed_out,
+		"kills": kills,
+		"leaks": leaks,
+		"lives_lost": lives_lost,
+		"gold_earned": gold,
+		"ticks": ticks,
+		"timed_out": timed_out,
+		# How far the furthest enemy got, as a fraction of the route. This is
+		# what makes "they never reach the first bend" an assertion instead of
+		# an observation - the gap that let a shut-out board read as balanced.
+		"deepest_progress": deepest_progress,
+		# Mean progress at the moment of death, over enemies that died. Zero
+		# when nothing died, which is the honest answer rather than a
+		# division by zero.
+		"progress_at_death": 0.0 if deaths == 0 else death_progress_total / float(deaths),
 	}
