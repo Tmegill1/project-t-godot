@@ -6,7 +6,7 @@ const DEFS := {
 	&"demoMap": {
 		"label": "The Pass",
 		"cols": 23, "rows": 14, "tile_size": 48,
-		"tower_budget": 16, "starting_gold": 100,
+		"tower_budget": 12, "starting_gold": 100,
 		"biome": &"forest",
 		"layout": "res://data/maps/the_pass.txt",
 		"next": &"map2",
@@ -15,9 +15,10 @@ const DEFS := {
 		"label": "The Fork",
 		"cols": 26, "rows": 17, "tile_size": 48,
 		# Two entrances means the full wave runs down both, so this map fields
-		# twice the enemies of the same wave number on The Pass. The opening
-		# gold and the budget are where that difficulty is paid for.
-		"tower_budget": 20, "starting_gold": 250,
+		# twice the enemies of the same wave number on The Pass. Its larger
+		# opening purse pays for that difficulty; tower variety still caps at
+		# three of each kind, as it does on every map.
+		"tower_budget": 12, "starting_gold": 250,
 		"biome": &"ice",
 		"layout": "res://data/maps/the_fork.txt",
 		"next": &"map3",
@@ -26,9 +27,9 @@ const DEFS := {
 		"label": "The Coils",
 		"cols": 28, "rows": 16, "tile_size": 48,
 		# Widest board, but the serpentine route folds back on itself - a
-		# tower on a bend covers two passes, so it needs fewer of them than
-		# its size suggests.
-		"tower_budget": 18, "starting_gold": 200,
+		# tower on a bend covers two passes. The shared twelve-tower cap still
+		# leaves meaningful coverage choices here.
+		"tower_budget": 12, "starting_gold": 200,
 		"biome": &"desert",
 		"layout": "res://data/maps/the_coils.txt",
 		# The last map. An empty StringName rather than null so every reader

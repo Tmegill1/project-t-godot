@@ -150,13 +150,13 @@ func test_every_enemy_kind_has_a_matching_death_sound() -> bool:
 # cutting off an earlier one still playing.
 #
 # The floor is the largest per-kind tower cap (data/towers.gd's
-# base_limit) - currently 8, for both "basic" and "fast" - which is the
+# base_limit) - currently 3 for every kind - which is the
 # scenario the plan's Task 22 gives as the reason for pooling at all
-# ("with eight towers firing, a single player would drop most shots",
+# ("with several towers firing, a single player would drop most shots",
 # docs/superpowers/plans/2026-08-09-godot-core-slice.md). Same-kind towers share one
 # fire_rate, so a full complement of one kind is the concrete, plausible
 # way to get that many "fire-<kind>" sounds clustered together. The map's
-# total tower_budget (16, data/maps.gd, enforced by game_board.gd's
+# total tower_budget (12, data/maps.gd, enforced by game_board.gd's
 # `total >= tower_budget` placement check) is a harder ceiling, but
 # reaching it as a simultaneous *fire* burst needs four different kinds'
 # independently-phased cooldowns (500/1000/1500/2000 ms, data/towers.gd's
@@ -173,8 +173,8 @@ func test_pool_size_is_pinned_and_covers_the_documented_worst_case() -> bool:
 	var floor_size := 0
 	for kind in Towers.KINDS:
 		floor_size = maxi(floor_size, int(Towers.get_def(kind)["base_limit"]))
-	assert_eq(floor_size, 8,
-		"sanity-check the data this floor is built on: the largest per-kind tower cap is 8 (basic, fast)")
+	assert_eq(floor_size, 3,
+		"sanity-check the data this floor is built on: every per-kind tower cap is 3")
 	assert_true(pool_size >= floor_size,
 		"POOL_SIZE (%d) must be at least the largest per-kind tower cap (%d) so a full complement of one kind's synchronized volley does not steal playback from itself" % [pool_size, floor_size])
 

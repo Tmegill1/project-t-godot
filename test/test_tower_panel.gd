@@ -381,7 +381,7 @@ func test_each_button_shows_the_count_against_the_limit() -> bool:
 	var panel := _ready_panel()
 	panel.bind(board)
 	var text: String = panel._buttons[&"basic"].text
-	assert_true(text.contains("0/8"), "no basics built, eight allowed")
+	assert_true(text.contains("0/3"), "no basics built, three allowed")
 	panel.free()
 	board.free()
 	return true
@@ -392,7 +392,7 @@ func test_the_count_rises_when_a_tower_is_placed() -> bool:
 	panel.bind(board)
 	board.select_tower_kind(&"basic")
 	board._try_place(_find_placeable_position(board))
-	assert_true(panel._buttons[&"basic"].text.contains("1/8"),
+	assert_true(panel._buttons[&"basic"].text.contains("1/3"),
 		"the panel followed the placement")
 	panel.free()
 	board.free()

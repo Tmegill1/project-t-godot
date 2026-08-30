@@ -196,14 +196,14 @@ func test_try_place_enforces_the_tower_budget_at_the_boundary() -> bool:
 	var b := _ready_board()
 	b._gold = 1000000
 	var budget := int(Maps.get_def(Maps.FIRST)["tower_budget"])
-	assert_eq(budget, 16, "precondition: demoMap's tower_budget is 16")
+	assert_eq(budget, 12, "precondition: demoMap's tower_budget is 12")
 	var positions := _find_placeable_positions(b, budget + 1)
 	assert_eq(positions.size(), budget + 1, "precondition: enough placeable positions exist for this test")
 
-	# basic's per-kind limit is 8 and fast's is 8 (8 + 8 = 16), so filling
-	# the budget exactly does not also trip the per-kind limit check first.
+	# Three of each of the four kinds fills the twelve-tower budget without
+	# tripping a per-kind limit first.
 	for i in budget:
-		b.select_tower_kind(&"basic" if i < 8 else &"fast")
+		b.select_tower_kind(Towers.KINDS[int(i / 3)])
 		b._try_place(positions[i])
 	assert_eq(b._towers_root.get_child_count(), budget, "precondition: exactly `budget` towers placed")
 
@@ -219,14 +219,14 @@ func test_try_place_enforces_the_tower_budget_at_the_boundary() -> bool:
 	return true
 
 # Isolates `>=` from `>` for the per-kind limit specifically (mortar's
-# limit of 5 sits well under the budget of 16, so the budget check cannot
+# limit of 3 sits well under the budget of 12, so the budget check cannot
 # be the one firing here).
 func test_try_place_enforces_the_per_kind_limit_at_the_boundary() -> bool:
 	var b := _ready_board()
 	b._gold = 1000000
 	var kind := &"mortar"
 	var limit := EconomySim.tower_limit(kind, Maps.FIRST)
-	assert_eq(limit, 5, "precondition: mortar's tower_limit on demoMap is 5")
+	assert_eq(limit, 3, "precondition: mortar's tower_limit on demoMap is 3")
 	var positions := _find_placeable_positions(b, limit + 1)
 	for i in limit:
 		# Re-arm each time: a successful placement now consumes the selection.

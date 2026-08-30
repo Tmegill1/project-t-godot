@@ -123,7 +123,7 @@ func _refresh(gold: int) -> void:
 		var price := EconomySim.tower_price(kind, owned)
 		var button: Button = _buttons[kind]
 		# Name on its own line, the two numbers grouped on the second. Putting
-		# the count beside the name instead pushed "Long Range 0/5" past the
+		# the count beside the name instead pushed the long-range label past the
 		# 140px button and squeezed its icon to zero width - visible only in a
 		# screenshot, since the icon was still set and the button still
 		# measured 140x56.

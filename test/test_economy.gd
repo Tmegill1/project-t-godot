@@ -37,8 +37,8 @@ func test_affordability() -> bool:
 	return true
 
 func test_tower_limits_on_the_first_map() -> bool:
-	assert_eq(EconomySim.tower_limit(&"basic", &"demoMap"), 8, "basic limit")
-	assert_eq(EconomySim.tower_limit(&"long", &"demoMap"), 5, "long range limit")
+	assert_eq(EconomySim.tower_limit(&"basic", &"demoMap"), 3, "basic limit")
+	assert_eq(EconomySim.tower_limit(&"long", &"demoMap"), 3, "long range limit")
 	return true
 
 # --------------------------------------------------------------------------
@@ -148,16 +148,16 @@ func test_affordability_at_zero_price_and_zero_gold() -> bool:
 # that only ever needs to satisfy `!= Maps.FIRST`, not an actual registered
 # map — this second branch is otherwise unreachable in the current slice.
 func test_tower_limits_on_a_second_map_add_the_bonus() -> bool:
-	assert_eq(EconomySim.tower_limit(&"basic", &"map2"), 10, "8 + 2")
-	assert_eq(EconomySim.tower_limit(&"fast", &"map2"), 10, "8 + 2")
-	assert_eq(EconomySim.tower_limit(&"mortar", &"map2"), 7, "5 + 2")
-	assert_eq(EconomySim.tower_limit(&"long", &"map2"), 7, "5 + 2")
+	assert_eq(EconomySim.tower_limit(&"basic", &"map2"), 3, "three on every map")
+	assert_eq(EconomySim.tower_limit(&"fast", &"map2"), 3, "three on every map")
+	assert_eq(EconomySim.tower_limit(&"mortar", &"map2"), 3, "three on every map")
+	assert_eq(EconomySim.tower_limit(&"long", &"map2"), 3, "three on every map")
 	return true
 
 # First-map limits for every kind (brief only covers basic and long).
 func test_tower_limits_on_the_first_map_for_every_kind() -> bool:
-	assert_eq(EconomySim.tower_limit(&"fast", &"demoMap"), 8, "fast limit, no bonus")
-	assert_eq(EconomySim.tower_limit(&"mortar", &"demoMap"), 5, "mortar limit, no bonus")
+	assert_eq(EconomySim.tower_limit(&"fast", &"demoMap"), 3, "fast limit")
+	assert_eq(EconomySim.tower_limit(&"mortar", &"demoMap"), 3, "mortar limit")
 	return true
 
 # --------------------------------------------------------------------------

@@ -43,10 +43,10 @@ func test_scaled_speed_is_unrounded_and_clamps_to_one() -> bool:
 
 func test_tower_stats_match_the_phaser_build() -> bool:
 	var expected := {
-		&"basic":  {"cost": 20,  "cost_escalation": 10, "range": 100.0, "fire_rate": 1000.0, "damage": 4,  "base_splash_radius": 0.0,  "base_limit": 8},
-		&"fast":   {"cost": 50,  "cost_escalation": 15, "range": 80.0,  "fire_rate": 500.0,  "damage": 2,  "base_splash_radius": 0.0,  "base_limit": 8},
-		&"mortar": {"cost": 70,  "cost_escalation": 35, "range": 120.0, "fire_rate": 2000.0, "damage": 5,  "base_splash_radius": 55.0, "base_limit": 5},
-		&"long":   {"cost": 100, "cost_escalation": 50, "range": 150.0, "fire_rate": 1500.0, "damage": 15, "base_splash_radius": 0.0,  "base_limit": 5},
+		&"basic":  {"cost": 20,  "cost_escalation": 10, "range": 100.0, "fire_rate": 1000.0, "damage": 4,  "base_splash_radius": 0.0,  "base_limit": 3},
+		&"fast":   {"cost": 50,  "cost_escalation": 15, "range": 80.0,  "fire_rate": 500.0,  "damage": 2,  "base_splash_radius": 0.0,  "base_limit": 3},
+		&"mortar": {"cost": 70,  "cost_escalation": 35, "range": 120.0, "fire_rate": 2000.0, "damage": 5,  "base_splash_radius": 55.0, "base_limit": 3},
+		&"long":   {"cost": 100, "cost_escalation": 50, "range": 150.0, "fire_rate": 1500.0, "damage": 15, "base_splash_radius": 0.0,  "base_limit": 3},
 	}
 	for kind in expected.keys():
 		var def: Dictionary = Towers.DEFS[kind]
@@ -66,7 +66,7 @@ func test_tower_cosmetic_and_progression_fields_match_the_phaser_build() -> bool
 		&"basic": {
 			"label": "Basic", "color": Color8(0x00, 0x66, 0xff), "size": 0.8,
 			"sprite_frame": 8, "upgrade_frames": [8, 9, 11, 17],
-			"limit_bonus_map2": 2, "projectile_speed": 500.0,
+			"limit_bonus_map2": 0, "projectile_speed": 500.0,
 		},
 		# label, sprite_frame and upgrade_frames DIVERGE from the reference for
 		# these two kinds, deliberately - see the swap tests at the bottom of
@@ -74,17 +74,17 @@ func test_tower_cosmetic_and_progression_fields_match_the_phaser_build() -> bool
 		&"fast": {
 			"label": "Magic", "color": Color8(0x00, 0xff, 0x00), "size": 0.75,
 			"sprite_frame": 5, "upgrade_frames": [5, 6, 12, 13],
-			"limit_bonus_map2": 2, "projectile_speed": 500.0,
+			"limit_bonus_map2": 0, "projectile_speed": 500.0,
 		},
 		&"mortar": {
 			"label": "Mortar", "color": Color8(0xb0, 0x7a, 0x3a), "size": 0.85,
 			"sprite_frame": 1, "upgrade_frames": [1, 0, 7, 16],
-			"limit_bonus_map2": 2, "projectile_speed": 350.0,
+			"limit_bonus_map2": 0, "projectile_speed": 350.0,
 		},
 		&"long": {
 			"label": "Long Range", "color": Color8(0xff, 0x66, 0x00), "size": 0.85,
 			"sprite_frame": 2, "upgrade_frames": [2, 10, 18, 19],
-			"limit_bonus_map2": 2, "projectile_speed": 500.0,
+			"limit_bonus_map2": 0, "projectile_speed": 500.0,
 		},
 	}
 	for kind in expected.keys():
@@ -148,7 +148,7 @@ func test_first_map_definition() -> bool:
 	assert_eq(m["label"], "The Pass", "map label")
 	assert_eq(m["cols"], 23, "columns")
 	assert_eq(m["rows"], 14, "rows")
-	assert_eq(m["tower_budget"], 16, "tower budget")
+	assert_eq(m["tower_budget"], 12, "tower budget")
 	assert_eq(m["starting_gold"], 100, "starting gold")
 	return true
 
@@ -218,10 +218,10 @@ func test_the_maps_chain_and_the_last_one_terminates() -> bool:
 	return true
 
 func test_budgets_and_starting_gold_are_ported() -> bool:
-	assert_eq(int(Maps.DEFS[&"map2"]["tower_budget"]), 20, "The Fork's budget")
+	assert_eq(int(Maps.DEFS[&"map2"]["tower_budget"]), 12, "The Fork's budget")
 	assert_eq(int(Maps.DEFS[&"map2"]["starting_gold"]), 250,
 		"and its opening gold, doubled waves needing a doubled opening")
-	assert_eq(int(Maps.DEFS[&"map3"]["tower_budget"]), 18,
+	assert_eq(int(Maps.DEFS[&"map3"]["tower_budget"]), 12,
 		"The Coils is wider but its folds double up, so it needs fewer towers")
 	assert_eq(int(Maps.DEFS[&"map3"]["starting_gold"]), 200, "and its opening gold")
 	return true
