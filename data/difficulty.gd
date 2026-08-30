@@ -58,27 +58,62 @@ const DEFS := {
 		"gold_multiplier": 1.0,
 		"starting_lives": Economy.STARTING_LIVES,
 	},
-	# PLACEHOLDER ROWS - identity copies of Normal, replaced by Task 8's
-	# measured sweep. They are identity rather than invented numbers on
-	# purpose: a plausible figure written down once becomes the shipped figure
-	# by inertia, which is exactly how the six-tower benchmark happened.
+	## Measured 2026-08-30 with probe_tiers.gd, against the full legal roster -
+	## three of each kind, twelve towers, every tier the cross-path rule allows -
+	## on The Pass, all twenty waves. Task 1 established that board is
+	## affordable (16,199 gold of income against an 11,415 cost), so it is the
+	## board these are set against rather than something smaller.
+	##
+	## What the sweep found, and it is the reason these two rows sit so close
+	## together: the full board is a WALL, and it fails as one. Every lever
+	## combination either holds a wave completely or collapses on it - there is
+	## almost no middle. Full-board lives lost across a run, by row:
+	##
+	##   count/interval/health/speed/gold   lives lost   first leak
+	##   1.00 1.00 1.00 1.00 1.00 (Normal)           0   never
+	##   1.15 0.85 1.15 1.05 0.95                    1   wave 20
+	##   1.30 0.70 1.30 1.10 0.90 (Hard)            11   wave 20
+	##   1.40 0.60 1.40 1.15 0.85 (Nightmare)       46   wave 17
+	##   1.50 0.55 1.50 1.15 0.82                   87   wave 16
+	##   2.00 0.40 2.00 1.30 0.70                  720   wave 13
+	##
+	## Ten points of multiplier between Hard and Nightmare is the difference
+	## between losing eleven lives and losing forty-six. That cliff is the
+	## coverage finding restated: a board either covers the crowd or it does
+	## not, and hit points only decide which side of the line a wave lands on.
 	&"hard": {
 		"label": "Hard",
-		"count_multiplier": 1.0,
-		"interval_multiplier": 1.0,
-		"health_multiplier": 1.0,
-		"speed_multiplier": 1.0,
-		"gold_multiplier": 1.0,
-		"starting_lives": Economy.STARTING_LIVES,
+		## Hard's brief is "real lives late, without ending the run". The full
+		## board loses 11 of its 15 lives, all on wave 20, and finishes with 4.
+		## The teeth are aimed at the board a player actually has: the six-tower
+		## mid-run board loses 110 lives across a Normal run and 639 across this
+		## one.
+		"count_multiplier": 1.30,
+		"interval_multiplier": 0.70,
+		"health_multiplier": 1.30,
+		"speed_multiplier": 1.10,
+		"gold_multiplier": 0.90,
+		"starting_lives": 15,
 	},
 	&"nightmare": {
+		## Nightmare's brief is that a full maxed board must NOT shut it out.
+		## It does not: leaks start at wave 17 and wave 20 alone costs 36 lives.
+		## Cumulative loss through wave 19 is exactly 10, so a twelve-life board
+		## reaches the final wave and dies on it.
+		##
+		## Stated plainly rather than hidden: the benchmark board LOSES this
+		## tier. Whether a human finds a better one is a playtest question, not
+		## a measured one - the harness resolves hits instantly, with no
+		## projectile travel time, so it is kinder to the player than the live
+		## board is. These are a starting point to be played, per the spec's own
+		## risk section, not a finished tuning.
 		"label": "Nightmare",
-		"count_multiplier": 1.0,
-		"interval_multiplier": 1.0,
-		"health_multiplier": 1.0,
-		"speed_multiplier": 1.0,
-		"gold_multiplier": 1.0,
-		"starting_lives": Economy.STARTING_LIVES,
+		"count_multiplier": 1.40,
+		"interval_multiplier": 0.60,
+		"health_multiplier": 1.40,
+		"speed_multiplier": 1.15,
+		"gold_multiplier": 0.85,
+		"starting_lives": 12,
 	},
 }
 

@@ -23,8 +23,8 @@ and end of every task so Codex can take over at any point.**
 | 5 | Teach the harness where enemies died | ✅ done — `Teach the harness where enemies died` |
 | 6 | The live board runs at a tier | ✅ done — `Run the live board at the chosen difficulty` |
 | 7 | The menu selector and the HUD readout | ✅ done — `Choose a difficulty before a run, and show it during one` |
-| 8 | Sweep the tiers and set their numbers | 🔄 **next** |
-| 9 | Give the opening a pulse | ⬜ |
+| 8 | Sweep the tiers and set their numbers | ✅ done — `Set the Hard and Nightmare rows from a measured sweep` |
+| 9 | Give the opening a pulse | 🔄 **next** |
 | 10 | Benchmark the board the game actually hands out | ⬜ |
 | 11 | Update the docs | ⬜ |
 
@@ -128,47 +128,57 @@ Towers 0/12` with 401px still free for the message line. (Screenshots come back
 blank on this machine — `glx: failed to create dri3 screen` — so `game_get_ui`
 is the reliable check here, not `game_screenshot`.)
 
-Task 8 is next, and it is the big one: sweep Hard and Nightmare and set their
-real numbers.
+Task 8 is complete and committed. Hard and Nightmare are no longer identity
+rows. `probe_tiers.gd` has been deleted as the plan requires.
 
-## Adding a new `class_name` script? Run the importer
+**Shipped rows** (count / interval / health / speed / gold, then lives):
 
-Godot only registers a new global class name after an import pass. A fresh
-`data/*.gd` with a `class_name` will fail the suite with
-`Parse Error: Identifier "X" not declared in the current scope` until you run:
+| Tier | count | interval | health | speed | gold | lives |
+|---|---|---|---|---|---|---|
+| Normal | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 | 20 |
+| Hard | 1.30 | 0.70 | 1.30 | 1.10 | 0.90 | 15 |
+| Nightmare | 1.40 | 0.60 | 1.40 | 1.15 | 0.85 | 12 |
 
-    godot --headless --import
+**Three findings worth carrying forward.**
 
-That also generates the script's `.uid` file. Every other `.gd.uid` in this repo
-is tracked, so commit a new one alongside its script.
-`test/test_balance_tuning.gd.uid` is the one exception — it stays untracked, per
-the owner's instruction.
+1. **The owner's report is now measured, and it is worse than "the first bend".**
+   At Normal, against the full twelve-tower maxed board, `deepest_progress`
+   never exceeds **0.18** on any of the twenty waves — wave 1 reaches 0.02,
+   wave 20 reaches 0.18. The first bend is at 0.31. Nothing has ever reached
+   it. That is the whole complaint, as a number.
 
-## Task 1's finding — it unblocks Task 8
+2. **The full board is a wall, and it fails as one.** Every lever combination
+   either holds a wave outright or collapses on it; there is almost no middle.
+   Full-board lives lost across a run: 0 at Normal, 1 at 1.15, **11 at 1.30**,
+   **46 at 1.40**, 87 at 1.50, 720 at 2.00. Ten points of multiplier is the
+   difference between losing eleven lives and losing forty-six. Hard and
+   Nightmare sit close together for that reason, not by timidity.
 
-`test/test_affordability.gd` measures a twenty-wave run's income floor (kill
-rewards and wave-clear bonuses only) against the cost of the full legal board.
+3. **The benchmark board loses Nightmare, and that is shipped knowingly.**
+   Leaks start at wave 17; cumulative loss through wave 19 is exactly 10, so a
+   twelve-life board reaches the final wave and dies on it. Whether a human
+   finds a better board is a playtest question — the harness resolves hits
+   instantly with no projectile travel time, so it is *kinder* than the live
+   board. Per the spec's own risk section these are a starting point to be
+   played, not a finished tuning.
 
-**The full twelve-tower maxed board IS affordable: 16,199 gold of income against
-an 11,415 cost, 4,784 to spare.** So the spec's open risk does not bite — the
-shut-out threshold of ten maxed towers is a board a player genuinely reaches,
-and Task 8 sets its tier targets against twelve rather than against something
-smaller.
+**One target reinterpreted, deliberately.** The plan asks that Nightmare push
+`deepest_progress` past 0.31 on wave 10. Against the *full twelve-tower maxed
+board* that is unreachable — even a 2.5/0.3/3.0 row only reaches 0.26 at wave 10
+while annihilating waves 13 onward. It is met against the board a player
+actually holds at wave 10: on the six-tower mid-run board, Nightmare wave 10
+already leaks (`deepest_progress` 1.00). Nobody owns twelve maxed towers at wave
+10 — Task 1 measured the full board at 11,415 gold against 16,199 of income
+across a whole run — so the mid-run board is the honest place to ask the
+question.
 
-Read it as generous rather than exact: the board is fully built and fully maxed
-from wave 1 in the measurement, so it collects every reward, where a real player
-funds it incrementally. It is still a floor in the other direction (no interest,
-no call-early bonus). The two errors run opposite ways and the margin is wide
-enough that the conclusion survives either.
+## In flight right now
 
-## One deviation from the plan, deliberate
-
-The plan's constraints say not to commit anything under `.ai/`. That was written
-from a stale belief — `.ai/handoff.md` was actually tracked by `b00b695 Record
-the Codex to Claude handoff`. Since the owner asked for this file to stay current
-for a Codex takeover, it is updated and committed alongside each task. Nothing
-else under `.ai/` is committed, and `test/test_balance_tuning.gd.uid` stays
-untracked as the plan requires.
+Task 9 is next: raise `goblin` and `bat` base health so wave 1 lasts longer than
+4.6 seconds. Expect pinned tick counts and gold totals in `test_harness.gd`,
+`test_balance_tuning.gd` and `test_affordability.gd` to move; each must be
+re-measured and re-pinned, and the commit must say they moved because base
+health moved.
 
 ## Standing rules that govern this work
 
