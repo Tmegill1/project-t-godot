@@ -161,6 +161,11 @@ func is_wave_active() -> bool: return _wave_active
 ## so a second map with different dimensions still lays out correctly.
 func get_map_name() -> StringName: return _map_name
 
+## The tier this run is being played at. Read by the HUD, which shows it, the
+## same way it reads gold and lives - the board owns the run, the HUD is a
+## view over it.
+func get_difficulty() -> StringName: return _difficulty
+
 func get_tower_count(kind: StringName) -> int:
 	return _counts.get(kind, 0)
 

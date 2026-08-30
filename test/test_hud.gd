@@ -541,3 +541,27 @@ func test_the_plate_matches_the_bars_height() -> bool:
 		"plate and bar end at the same line")
 	h.free()
 	return true
+
+# --------------------------------------------------------------------------
+# Difficulty readout
+# --------------------------------------------------------------------------
+
+## A run whose difficulty is invisible produces bug reports that cannot be
+## diagnosed - the same lesson BuildStamp exists for.
+func test_the_hud_names_the_active_difficulty() -> bool:
+	var h := _ready_hud()
+	h.set_difficulty(Difficulty.NIGHTMARE)
+	assert_eq(h.difficulty_text(), "Nightmare", "the HUD names the tier")
+	h.free()
+	return true
+
+func test_the_hud_takes_its_difficulty_from_the_board_it_binds() -> bool:
+	GameBoard.pending_difficulty = Difficulty.HARD
+	var b := _ready_board()
+	var h := _ready_hud()
+	h.bind(b)
+	assert_eq(h.difficulty_text(), "Hard", "binding shows the board's own tier")
+	h.free()
+	b.free()
+	GameBoard.pending_difficulty = &""
+	return true

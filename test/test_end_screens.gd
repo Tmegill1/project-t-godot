@@ -175,3 +175,35 @@ func _ready_board() -> GameBoard:
 	var b: GameBoard = load("res://game/game_board.tscn").instantiate()
 	b.notification(Node.NOTIFICATION_READY)
 	return b
+
+# The tier is chosen per run, so a new game must not inherit the last one's.
+func test_starting_a_new_game_clears_any_pending_difficulty() -> bool:
+	GameBoard.pending_difficulty = Difficulty.NIGHTMARE
+	MainMenu.begin_new_run()
+	assert_eq(GameBoard.pending_difficulty, &"", "a new run starts unset")
+	assert_eq(GameBoard.active_difficulty(), Difficulty.NORMAL,
+		"and an unset tier reads as Normal")
+	return true
+
+## The whole selector is wired in _ready, so a broken node path would ship an
+## unusable menu that nothing else in the suite could see.
+func test_the_menu_offers_every_tier_and_starts_on_normal() -> bool:
+	var m: MainMenu = load("res://ui/main_menu.tscn").instantiate()
+	m.notification(Node.NOTIFICATION_READY)
+	var row: Control = m.get_node("Panel/Difficulty")
+	assert_eq(row.get_child_count(), Difficulty.ORDER.size(), "one button per tier")
+
+	var labels: Array[String] = []
+	var pressed := 0
+	for child in row.get_children():
+		var button: Button = child
+		labels.append(button.text)
+		if button.button_pressed:
+			pressed += 1
+	for tier in Difficulty.ORDER:
+		assert_true(labels.has(Difficulty.label(tier)), "%s is offered" % tier)
+	assert_eq(pressed, 1, "exactly one tier is selected")
+	assert_true((row.get_child(0) as Button).button_pressed,
+		"and a fresh menu starts on Normal")
+	m.free()
+	return true

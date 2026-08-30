@@ -22,8 +22,8 @@ and end of every task so Codex can take over at any point.**
 | 4 | The harness accepts a tier | ✅ done — `Run a harness wave at a difficulty tier` |
 | 5 | Teach the harness where enemies died | ✅ done — `Teach the harness where enemies died` |
 | 6 | The live board runs at a tier | ✅ done — `Run the live board at the chosen difficulty` |
-| 7 | The menu selector and the HUD readout | 🔄 **next** |
-| 8 | Sweep the tiers and set their numbers | ⬜ |
+| 7 | The menu selector and the HUD readout | ✅ done — `Choose a difficulty before a run, and show it during one` |
+| 8 | Sweep the tiers and set their numbers | 🔄 **next** |
 | 9 | Give the opening a pulse | ⬜ |
 | 10 | Benchmark the board the game actually hands out | ⬜ |
 | 11 | Update the docs | ⬜ |
@@ -96,8 +96,40 @@ arguments, not a dictionary. It gained a trailing
 `difficulty: StringName = Difficulty.NORMAL` instead, which keeps every existing
 three-argument call site in `test/test_enemy.gd` working unchanged.
 
-Task 7 is next: three toggle `Button`s on the main menu and a tier readout on
-the HUD. **Plain buttons and the existing theme — no new assets.**
+Task 7 is complete and committed. The selector is live end to end, built from
+plain `Button` nodes and the existing theme — no new assets.
+
+- `ui/main_menu.tscn` gains an `HBoxContainer` named `Difficulty` under `Panel`
+  holding `Normal`, `Hard` and `Nightmare` toggle buttons; the panel grew to
+  320x240 to hold the row.
+- `ui/main_menu.gd` labels each button from the table, keeps exactly one
+  pressed, and sets `GameBoard.pending_difficulty` **after** `begin_new_run()`,
+  which now clears it.
+- `ui/hud.tscn` gains a `DifficultyLabel` in the `Top` bar; `Hud.bind()` reads
+  the tier from the board through the new `GameBoard.get_difficulty()`.
+
+Three deviations from the plan text, all deliberate:
+
+1. The plan writes the HUD label as `$DifficultyLabel` while also saying "beside
+   the existing wave readout". It is `$Top/DifficultyLabel` — the root path
+   would have put it outside the bar every other readout lives in.
+2. The plan puts the three buttons directly under `Panel` (a VBox, so they would
+   stack). The **spec** section 4 asks for a row, so they sit in an
+   `HBoxContainer`. Paths are `$Panel/Difficulty/<Tier>`.
+3. The plan says "have `GameBoard` call `hud.set_difficulty`", but the board has
+   never known about the HUD — `game.gd` binds them. The HUD reads
+   `board.get_difficulty()` inside `bind()`, beside how it already reads gold,
+   lives and wave.
+
+Verified live, not just in tests: ran both scenes under the Godot MCP server and
+read back the real layout. The tier row is three 101px buttons inside a 320px
+panel, and the HUD reads `Gold 100 / Lives 20 / Wave 0 / 20 / Normal /
+Towers 0/12` with 401px still free for the message line. (Screenshots come back
+blank on this machine — `glx: failed to create dri3 screen` — so `game_get_ui`
+is the reliable check here, not `game_screenshot`.)
+
+Task 8 is next, and it is the big one: sweep Hard and Nightmare and set their
+real numbers.
 
 ## Adding a new `class_name` script? Run the importer
 

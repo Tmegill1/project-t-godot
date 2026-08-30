@@ -51,6 +51,7 @@ const EDGE_INSET := 12.0
 @onready var _gold: Label = $Top/GoldLabel
 @onready var _lives: Label = $Top/LivesLabel
 @onready var _wave: Label = $Top/WaveLabel
+@onready var _difficulty: Label = $Top/DifficultyLabel
 @onready var _budget: Label = $Top/BudgetLabel
 @onready var _prep: Label = $Top/PrepLabel
 @onready var _start: Button = $Top/StartButton
@@ -96,6 +97,7 @@ func bind(board: GameBoard) -> void:
 	_on_gold_changed(board.get_gold())
 	_on_lives_changed(board.get_lives())
 	_on_wave_changed(board.get_wave(), Waves.MAX_WAVES)
+	set_difficulty(board.get_difficulty())
 	_message.text = ""
 	_refresh_budget()
 	_on_prep_changed(board.get_prep_remaining_ms(),
@@ -117,6 +119,14 @@ func _on_lives_changed(lives: int) -> void:
 
 func _on_wave_changed(wave: int, max_waves: int) -> void:
 	_wave.text = "Wave %d / %d" % [wave, max_waves]
+
+## Shown during a run because a run whose difficulty is invisible produces bug
+## reports that cannot be diagnosed - the same lesson BuildStamp exists for.
+func set_difficulty(tier: StringName) -> void:
+	_difficulty.text = Difficulty.label(tier)
+
+func difficulty_text() -> String:
+	return _difficulty.text
 
 func _on_wave_state_changed(active: bool) -> void:
 	_start.disabled = active
