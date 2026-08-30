@@ -6,10 +6,25 @@ and end of every task so Codex can take over at any point.**
 ## Where the work is
 
 - Repository: `/home/tylermegill/Projects/project-t-godot`
-- Branch: **`feat/upgrade-branch-balance`**, off `master` at `6582655`.
-- **All nine tasks are complete.** Suite green at **13,763 checks across 45
-  files, exit 0**. Nothing pushed, nothing merged — the branch is ready and that
-  decision is the owner's.
+- Branch: **`feat/upgrade-branch-balance`**, merged to `master` as `fe97546` on
+  the owner's instruction. Both branches pushed; the Pages deploy succeeded, so
+  the rebalance is live.
+- **All nine tasks are complete, merged and deployed.** Suite green on the
+  merged result at **13,763 checks across 45 files, exit 0**.
+
+### What a Codex takeover would pick up
+
+1. **Play it.** Three rounds of tuning have now happened without a human
+   touching the game. Every number came from the harness, which has no
+   projectile travel time and is therefore kinder than the live board.
+2. **The one thing not verified on screen:** the two new summary labels under
+   each branch button. They are covered by `test_tower_inspector.gd` and the
+   panel height was measured two ways, but nobody has looked at them. Drive it
+   with `game_click` on real coordinates — `game_call_method` cannot pass a
+   `Vector2` through the MCP bridge.
+3. **Still open, and recorded in `update.md`:** the opening cannot be given a
+   pulse with enemy health — the lever is the Basic tower's damage or fire rate,
+   or wave 1's composition.
 - All 32 generated lines were printed and read. The longest is
   `fires 0.056s faster · slows to 45% for 2.5s` at 42 characters.
 - **The panel fits, measured two ways.** Summing minimum sizes gives 476px
