@@ -149,7 +149,7 @@ func test_first_map_definition() -> bool:
 	assert_eq(m["cols"], 23, "columns")
 	assert_eq(m["rows"], 14, "rows")
 	assert_eq(m["tower_budget"], 12, "tower budget")
-	assert_eq(m["starting_gold"], 100, "starting gold")
+	assert_eq(m["starting_gold"], 200, "starting gold")
 	return true
 
 # pixel_size() went untested while nothing called it. TowerPanel now anchors

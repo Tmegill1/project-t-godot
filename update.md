@@ -4,7 +4,7 @@
 not yet built, and what is still open. `CONTINUE.md` records what *is*; this
 records what *should be*.
 
-Last updated: 2026-08-30 (revised again after the build-out pacing change).
+Last updated: 2026-08-30 (revised again after the opening purse).
 
 ---
 
@@ -19,7 +19,8 @@ Last updated: 2026-08-30 (revised again after the build-out pacing change).
 | **Tower cap** — three of each kind, twelve per map | ✅ merged and **deployed** (`121bc7f`) |
 | **Difficulty selector** — tiers, and the benchmark that missed | ✅ merged and **deployed** |
 | **Upgrade branch balance** — splash to the Mortar, flat numbers, a legible panel | ✅ merged and **deployed** |
-| **Build-out pacing** — a board that takes a run to finish | ✅ **built**, on `feat/build-out-pacing`, **not merged** |
+| **Build-out pacing** — a board that takes a run to finish | ✅ merged and **deployed** |
+| **Opening purse** — The Pass starts with two towers, not one | ✅ **built**, on `feat/opening-gold`, **not merged** |
 | Slice 2 — tactical powers | ⬜ decided, not designed |
 | Slice 3 — versioned save + meta-progression | ⬜ decided, not designed |
 | Slice 4 — hero | ⬜ decided, not designed |
@@ -395,10 +396,37 @@ seven lives where they used to cost none. That is early-game texture arriving as
 a side effect of the pacing fix rather than as a separate change — and it is the
 thing the original "fix the opening" request was reaching for.
 
-**Also true, and unchanged:** on The Pass's 100 starting gold you can now open
-with exactly one Basic (35) or one Magic (80). A Mortar (115) or a Long Range
-(165) is no longer a first purchase. That is a real opening decision where
-before there was none.
+**A Mortar (115) or a Long Range (165) is no longer a first purchase.** That is
+a real opening decision where before there was none.
+
+### The opening purse, raised to match the new costs *(2026-08-30)*
+
+The costs above left The Pass's 100 gold buying exactly **one** tower, because
+the second Basic escalates to 135. Measured against the same greedy player:
+
+| Starting gold | Opening | Wave 1 | Lives lost by wave 3 | Board full | Lives left |
+|---|---|---|---|---|---|
+| 100 | **1 tower** | 0 leaks | **7** | w13 | 10 |
+| 170 | 2 towers | **1 leak** | 6 | w12 | 12 |
+| **200** | **2 towers** | 0 leaks | **2** | **w13** | **18** |
+| 250 | 3 towers | 0 leaks | 0 | w13 | 9 |
+
+**The Pass goes 100 → 200.** Two towers, a clean wave 1, and the early bite
+drops from seven lives to two — which walks back most of the harshness the cost
+change added without buying it away entirely. **The build-out is untouched:** the
+budget still fills at wave 13 and still maxes at 20. 170 is worse than either
+neighbour — it affords the second tower and nothing else, so the board is thin
+enough to leak on wave 1.
+
+**The Fork (250) and The Coils (200) stay put.** At the new costs they already
+open with three towers and two; The Pass was the only map that had collapsed to
+one.
+
+**One relationship narrowed, and it is worth an eye.** The Fork's comment
+justifies its larger purse as payment for having two entrances. That gap was
+2.5× over The Pass and is now 1.25×. The Fork still opens one tower ahead, so
+the intent survives — but if the gap should be restored, it is The Fork's number
+that should move, and it wants measuring rather than guessing.
 
 ### The opening still has no pulse from enemy health, and cannot get one
 

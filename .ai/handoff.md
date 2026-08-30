@@ -1,4 +1,4 @@
-# Claude Handoff — Build-out Pacing
+# Claude Handoff — Opening Purse
 
 Generated: 2026-08-30 (America/Chicago). **Live document — rewritten as work
 proceeds so Codex can take over at any point.**
@@ -6,9 +6,32 @@ proceeds so Codex can take over at any point.**
 ## Where the work is
 
 - Repository: `/home/tylermegill/Projects/project-t-godot`
-- Branch: **`feat/build-out-pacing`**, merged to `master` as `fa01fdd` on the
-  owner's instruction. Both branches pushed; the Pages deploy succeeded, so the
-  pacing change is live.
+- Branch: **`feat/opening-gold`**, off `master` at `3bb91ff`. Complete, suite
+  green at **13,767 checks, exit 0**. Nothing pushed, nothing merged.
+- The preceding build-out pacing work is merged and deployed (`fa01fdd`).
+
+## This branch
+
+The pacing change left The Pass's 100 starting gold buying exactly **one** tower,
+because the second Basic escalates to 135. Measured against the same greedy
+player, `starting_gold` goes **100 → 200**: two towers, a clean wave 1, and the
+early cost drops from **seven lives to two** — while the build-out stays exactly
+where the costs put it, full at wave 13 and maxed at 20.
+
+170 was measured and rejected: it affords the second tower and nothing else, so
+the board is thin enough to leak on wave 1. 250 buys three towers and removes the
+early cost entirely, which overshoots — two towers with a mild wave-2 sting is a
+curve; three and no pressure is the flat opening this work just left.
+
+The Fork (250) and The Coils (200) already open with three towers and two, so
+they were left alone. **One relationship narrowed:** The Fork's purse is
+justified in its own comment as payment for two entrances, and that gap went from
+2.5x to 1.25x. It still opens one tower ahead. If the gap should be restored it is
+The Fork's number that moves, and it wants measuring.
+
+**Two pins moved, both predicted:** the affordability income figure by exactly
+the 100 gold added (16,199 -> 16,299), and `test_data_tables.gd`'s map
+definition.
 - `master` is green, merged and deployed, carrying the difficulty selector, the
   sixteen-board benchmark and the upgrade-branch rebalance. Suite there:
   **13,763 checks across 45 files, exit 0**.
