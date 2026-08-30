@@ -26,7 +26,7 @@ and end of every task so Codex can take over at any point.**
 | 8 | Sweep the tiers and set their numbers | ✅ done — `Set the Hard and Nightmare rows from a measured sweep` |
 | 9 | Give the opening a pulse | ⚠️ **done as a finding, no value changed** |
 | 10 | Benchmark the board the game actually hands out | ✅ done — `Benchmark the full twelve-tower board, not half of it` |
-| 11 | Update the docs | 🔄 **next** |
+| 11 | Update the docs | ✅ done — `Bring the docs up to the difficulty selector` |
 
 ## Task 9 did not raise base health, and the owner should know why
 
@@ -70,29 +70,23 @@ slice.
 
 ## In flight right now
 
-Task 10 is complete and committed. `test/test_balance_tuning.gd` now benchmarks
-the full twelve-tower maxed board alongside the six-tower one it used to
-benchmark exclusively, and pins five claims:
+**Nothing. All eleven tasks are complete.** The branch is
+`feat/difficulty-selector`, eight commits ahead of `master`, suite green at
+**13,554 checks across 45 files, exit 0**. Nothing is pushed and nothing is
+merged — pushing `master` redeploys the live site, and that is the owner's call.
 
-- Nightmare's last wave is **not** shut out by a full maxed board (directional,
-  so it survives retuning — this is the assertion the whole change exists for).
-- Enemies get past the first bend on Nightmare: wave 10 against the mid-run
-  board, and the last wave against the full one.
-- Normal stays comfortable — a full maxed board wins wave 20 with zero leaks.
-- Hard costs a full board real lives on the last wave without spending its whole
-  budget.
-- The opening is a walkover then a cliff (from Task 9's finding).
+### What a Codex takeover would pick up
 
-One change from the plan's text, measured rather than assumed: it proposed
-asserting `deepest_progress > 0.31` at **wave 10 against the full board**. That
-is unreachable at any tier that leaves the late game playable — even a
-2.5x count / 0.3x interval / 3.0x health row only reaches 0.26 there while
-annihilating waves 13 onward — and it is the wrong question, because nobody owns
-twelve maxed towers at wave 10. The claim is now made where it means something,
-against both boards. The reasoning is in the test's own doc comment.
-
-Task 11 is next and last: bring `update.md` and `CONTINUE.md` up to the
-selector.
+1. **Merge or not.** `feat/difficulty-selector` is ready. `update.md` records it
+   as built and unmerged, beside the leak model which is in the same state.
+2. **Play it.** Every tier number came from the harness, which has no projectile
+   travel time and is therefore kinder than the live board. The spec says
+   plainly these are a starting point to be played. The selector is on the main
+   menu; the active tier shows in the HUD beside the wave counter.
+3. **Two findings that need an owner's decision**, both written up in
+   `update.md`: the opening cannot be fixed with enemy health (the lever is the
+   Basic tower or wave 1's composition), and the benchmark board loses
+   Nightmare.
 
 ## Standing rules that govern this work
 

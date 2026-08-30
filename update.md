@@ -4,7 +4,7 @@
 not yet built, and what is still open. `CONTINUE.md` records what *is*; this
 records what *should be*.
 
-Last updated: 2026-08-29.
+Last updated: 2026-08-30.
 
 ---
 
@@ -17,7 +17,7 @@ Last updated: 2026-08-29.
 | **Slice 1** — roster, resistance, bosses | ✅ merged |
 | **Leak model** — cost by kind and by how alive it arrived | ✅ done, on `feat/leak-model`, **not merged** |
 | **Tower cap** — three of each kind, twelve per map | ✅ merged and **deployed** (`121bc7f`) |
-| **Difficulty selector** — tiers, and the benchmark that missed | 🟨 **designed, not built** |
+| **Difficulty selector** — tiers, and the benchmark that missed | ✅ **built**, on `feat/difficulty-selector`, **not merged** |
 | Slice 2 — tactical powers | ⬜ decided, not designed |
 | Slice 3 — versioned save + meta-progression | ⬜ decided, not designed |
 | Slice 4 — hero | ⬜ decided, not designed |
@@ -151,7 +151,7 @@ path when the real art lands.
 
 ---
 
-## Difficulty selector, and the benchmark that missed *(designed 2026-08-29)*
+## Difficulty selector, and the benchmark that missed *(built 2026-08-30)*
 
 **Spec:** [`docs/superpowers/specs/2026-08-29-difficulty-selector-design.md`](docs/superpowers/specs/2026-08-29-difficulty-selector-design.md)
 **Plan:** [`docs/superpowers/plans/2026-08-29-difficulty-selector.md`](docs/superpowers/plans/2026-08-29-difficulty-selector.md) — eleven tasks, affordability measured first
@@ -201,24 +201,82 @@ Levers, chosen against the coverage finding rather than guessed:
 `health_multiplier` (weak alone, real in combination), `speed_multiplier`,
 `gold_multiplier`, `starting_lives`.
 
-**Hard and Nightmare values are deliberately unset in the spec.** They come from
-a sweep in the plan. Numbers invented in a design document become shipped
-numbers by inertia, which is how the six-tower benchmark happened.
+### What shipped
 
-**Carried with it, and arguably worth more than the tuning:**
+**The tiers, measured rather than invented.** The spec deliberately left Hard
+and Nightmare blank so no plausible figure could become the shipped one by
+inertia. They came from a sweep of the full legal roster across all twenty
+waves:
 
-1. The harness learns `deepest_progress` and `progress_at_death`, so *"they
-   don't make it to the first bend"* becomes an assertion against
-   `FIRST_BEND_FRACTION := 0.31` rather than an observation.
-2. `test_balance_tuning.gd` gains the **full twelve-tower maxed board** at every
-   tier, with a directional assertion — *a full maxed board must not shut out
-   the highest tier* — that survives future retuning.
+| Tier | count | interval | health | speed | gold | lives |
+|---|---|---|---|---|---|---|
+| Normal | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 | 20 |
+| Hard | 1.30 | 0.70 | 1.30 | 1.10 | 0.90 | 15 |
+| Nightmare | 1.40 | 0.60 | 1.40 | 1.15 | 0.85 | 12 |
 
-**Open risk the plan must measure first:** ten maxed towers may not be
-*affordable*. The budget dropped 16 → 12 in `121bc7f` while `GOLD_PER_WAVE`
-stayed put, so the spend ceiling fell and income did not. If ten maxed towers
-are unreachable, the real threshold is below ten and every tier value must be
-measured against what is affordable rather than what is placeable.
+**The open risk did not bite.** A twenty-wave run earns **16,199 gold** against
+an **11,415** full-board cost, so twelve maxed towers are affordable with 4,784
+to spare and the tiers are set against the board the game actually hands out.
+`test/test_affordability.gd` pins both numbers, so a change to the gold curve or
+the tower caps has to move them deliberately.
+
+**The full board is a wall, and it fails as one.** Full-board lives lost across
+a run, by row: 0 at Normal, 1 at 1.15, **11 at Hard's 1.30**, **46 at
+Nightmare's 1.40**, 87 at 1.50, 720 at 2.00. Ten points of multiplier separate
+losing eleven lives from losing forty-six. That cliff is the coverage finding
+restated — a board either covers the crowd or it does not — and it is why the
+two tiers sit so close together.
+
+**Nightmare is not beaten by the benchmark board**, and that is shipped
+knowingly rather than hidden: leaks start at wave 17 and wave 20 alone costs 36
+lives. The harness resolves hits instantly, with no projectile travel time, so
+it is *kinder* than the live board. These are a starting point to be played.
+
+**Carried with it, and worth more than the tuning:**
+
+1. The harness learned `deepest_progress` and `progress_at_death`, so *"they
+   don't make it to the first bend"* is an assertion against
+   `FIRST_BEND_FRACTION := 0.31` rather than an observation. It immediately paid
+   for itself: at Normal, against the full twelve-tower maxed board,
+   `deepest_progress` **never exceeds 0.18 on any of the twenty waves**. The
+   bend is at 0.31. Nothing has ever reached it. That is the owner's complaint,
+   as a number.
+2. `test_balance_tuning.gd` now covers the **full twelve-tower maxed board** at
+   every tier, beside the six-tower one it used to benchmark exclusively. The
+   assertion that matters is directional — *a full maxed board must not shut out
+   the highest tier* — so it survives future retuning. Normal's comfort and
+   Hard's brief are pinned too, so a tier change cannot make the default harder
+   as a side effect.
+
+### The opening still has no pulse, and health cannot give it one
+
+The one part of the design that did not land. It asked for a base-health bump
+so wave 1 lasts longer than a few seconds, bounded by two constraints: the
+roster ordering `ogre > shaman > goblin > bat` survives, and wave 5 against
+three ungraded Basics does not cost *more* than the lives it already does.
+
+Measured against exactly the board 100 starting gold buys:
+
+| ogre / shaman / goblin / bat | wave 1 | wave 5 |
+|---|---|---|
+| 10 / 7 / 5 / 3 *(shipped)* | 5.6s, 0 leaks | 21 lives |
+| 10 / 7 / 6 / 4 | 5.6s, 0 leaks | 21 lives |
+| 10 / 7 / 6 / 5 | 5.6s, 0 leaks | 23 lives |
+| 12 / 9 / 8 / 5 | 5.6s, 0 leaks | 25 lives |
+| 14 / 11 / 9 / 6 | 26.8s, **2 leaks** | 33 lives |
+
+**Wave 1 does not move until goblin health crosses 8**, because a Basic tower
+deals exactly 4 and a goblin at anything from 5 to 8 dies to the same two shots.
+At 9 it needs three — and wave 1 stops being a walkover by *leaking* rather than
+by lasting longer. There is nothing in between: the opening is quantised by the
+Basic tower's damage, not tuned by hit points. And every value that changes
+anything makes wave 5 cost more, which is the constraint that says the cliff
+must not steepen.
+
+So nothing moved, per the spec's own instruction to bring such a finding back
+rather than quietly retune Normal. **The lever for the opening is the Basic
+tower's damage or fire rate, or wave 1's composition — not enemy health.** The
+shape it failed to move is pinned in `test_balance_tuning.gd`.
 
 ---
 

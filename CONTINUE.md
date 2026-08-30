@@ -95,11 +95,11 @@ and 20.
 | `data/` — 9 modules | ✅ complete, reviewed |
 | `assets/` — 169 PNGs (`assets/art/` and `assets/towers.png` baked from the illustrated reference sheet, plus `assets/audio/`) | ✅ imported, baked, verified visually |
 | `game/` — board, enemy, tower, projectile, map renderer | ✅ complete |
-| `ui/` — menu, HUD (with a 1.5x speed toggle), build panel, tower inspector, game-over, victory | ✅ complete |
+| `ui/` — menu (with a difficulty selector), HUD (1.5x speed toggle, active-tier readout), build panel, tower inspector, game-over, victory | ✅ complete |
 | `audio/` — pooled playback, 17 core-slice events | ✅ complete |
 | Web export | ✅ preset + build; **boots and renders in a browser; not yet played in one** |
 | Deploy | ✅ live at **https://tmegill1.github.io/project-t-godot/** — every push to `master` republishes, at the address GitHub assigns (no custom domain) |
-| Tests | ✅ 13,423 checks across 41 files, exit 0 |
+| Tests | ✅ 13,554 checks across 45 files, exit 0 |
 | Map authoring | ✅ text format (`data/maps/*.txt`) + a `@tool` painting scene — see §12 |
 | Decoration | ✅ camps (wall + fires) in forest; scattered landmarks in ice/desert — see §13 |
 | Enemies | ✅ five — goblin, bat, shaman, ogre (rank and file) and troll (**boss only**) |
@@ -107,6 +107,7 @@ and 20.
 | Damage types | ✅ physical and magic, with soft edges and a damage floor |
 | Bosses | ✅ waves 10 and 20, table-driven in `data/bosses.gd` |
 | Health curve | ✅ measured, not ported — see §9.2 |
+| Difficulty | ✅ three tiers chosen per run — Normal, Hard, Nightmare — measured, not guessed. See §15 |
 | Maps | ✅ three — The Pass (forest), The Fork (ice, **two entrances**), The Coils (desert), chained by `next` on victory |
 | Wave economy | ✅ clear bonus, speed bonus, interest, 20s prep timer, call-early |
 | Gold curve | ✅ measured, not guessed — see §9.2 |
@@ -228,10 +229,14 @@ are as unplaytested as everything else. See §9. `sim/harness.gd` now takes
 `tiers` per tower, so a build can be simulated headlessly:
 
 ```gdscript
-Harness.run_wave({"wave": 20, "path": path, "towers": [
+Harness.run_wave({"wave": 20, "path": path, "difficulty": Difficulty.HARD, "towers": [
     {"kind": &"fast", "position": pos, "tiers": {&"sustained": 4, &"burst": 0}},
 ]})
 ```
+
+`difficulty` is optional and defaults to `Difficulty.NORMAL`, which is the exact
+identity transform — every balance number this project has ever measured
+describes Normal. See §15.
 
 ### What the upgrade work added
 
@@ -805,3 +810,80 @@ mutants. This is the standing lesson of §6 arriving in a new place.
 **Retuning was measured and rejected.** See `update.md` §1 for the table: per
 leak the cost falls about 37%, but the wave a run ends on is unchanged in seven
 of eight boards, so `Economy.STARTING_LIVES` stays at 20.
+
+---
+
+## 15. Difficulty, and where enemies die
+
+**Difficulty is a parameter, never a global.** `data/difficulty.gd` holds a pure
+tier table; `Waves.get_composition`, `Waves.get_modifiers` and
+`Waves.build_schedule` each take a tier defaulting to `Difficulty.NORMAL`, and
+`Harness.run_wave` reads it from `config["difficulty"]`. Nothing reads a mutable
+singleton, which is what keeps `sim/` pure and keeps the harness's
+same-input-same-result guarantee — the property every balance claim here rests
+on. An autoload was considered and rejected for exactly that reason.
+
+**Normal is the exact identity transform.** Every measured number in this
+project describes Normal, so the whole pre-existing suite doubles as the
+regression net: if a Normal multiplier drifts, something else fails.
+
+| Tier | count | interval | health | speed | gold | lives |
+|---|---|---|---|---|---|---|
+| Normal | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 | 20 |
+| Hard | 1.30 | 0.70 | 1.30 | 1.10 | 0.90 | 15 |
+| Nightmare | 1.40 | 0.60 | 1.40 | 1.15 | 0.85 | 12 |
+
+Smaller is harsher for `interval_multiplier` and `gold_multiplier`; larger is
+harsher for the other three. `test_difficulty.gd` encodes both directions, so a
+transposed row fails a test no single-tier check could see.
+
+The levers attack **coverage**, which prior measurement established as the
+binding constraint rather than hit points. `interval_multiplier` is the sharpest
+of them: halving spawn spacing doubles the crowd one tower must cover without
+touching a single enemy stat.
+
+**How the choice travels.** `GameBoard.pending_difficulty` is a static, set by
+the main menu and consumed in `_ready` — the same shape and lifetime as
+`pending_map`, for the same reason. `GameBoard.active_difficulty()` validates it
+through `Difficulty.is_valid`, so an unset or misspelled tier falls back to
+Normal rather than crashing a run. It is chosen **per run and not persisted**:
+there is no settings file in this project and Slice 3 owns saving.
+
+### The harness knows where enemies died
+
+`Harness.run_wave`'s result carries two fields beyond kills/leaks/lives/gold/
+ticks, both fractions of the route from 0.0 to 1.0:
+
+- **`deepest_progress`** — the furthest any enemy got. A leak forces it to 1.0.
+- **`progress_at_death`** — the mean over enemies that died; 0.0 when nothing
+  died, which is the honest answer rather than a division by zero.
+
+Both derive from `path_index` and cumulative route length, which the harness
+already tracks for movement, so there is no second implementation to drift.
+
+**Why they exist.** The owner reported that enemies never reached the first
+bend, and nothing in a suite of thirteen thousand assertions could express that:
+the old result reported *how many* died, never *where*. With these, The Pass's
+first bend — 768px into a 2,448px route, `FIRST_BEND_FRACTION := 0.31` — is a
+number a test can check.
+
+It paid for itself immediately. **At Normal, against the full twelve-tower maxed
+board, `deepest_progress` never exceeds 0.18 on any of the twenty waves.** Wave
+1 reaches 0.02. Nothing has ever reached the bend.
+
+### The benchmark now covers the board the game hands out
+
+`test_balance_tuning.gd` used to benchmark six towers — a board the player
+passes *through* on the way to the one they finish with — and its `leaks > 0`
+assertion stayed true however easy the game became for a full board. That is the
+gap that let a shut-out board read as balanced. The full legal roster now sits
+beside it, with the assertion written directionally so it survives retuning: *a
+full maxed board must not shut out the hardest tier.*
+
+**Two things to know before touching the tiers.** The full board is a wall and
+fails as one — full-board lives lost across a run go 0 → 11 → 46 → 87 → 720 as
+the row hardens, so ten points of multiplier is the difference between a scratch
+and a wipe. And the benchmark board **loses** Nightmare: leaks from wave 17,
+36 lives on wave 20 alone. That is shipped knowingly. The harness has no
+projectile travel time, so it is kinder than the live board; these values are a
+starting point to be played, not a finished tuning.
