@@ -186,3 +186,39 @@ func test_hard_costs_the_strongest_board_real_lives_without_ending_the_run() -> 
 		"but not the whole budget, lost %s of %s"
 			% [r["lives_lost"], Difficulty.starting_lives(Difficulty.HARD)])
 	return true
+
+
+## The two upgrade branches must stay close to each other.
+##
+## Pinned as a RATIO, not a pair of figures, so re-tuning the difficulty rows
+## moves both sides together and leaves the claim intact. Measured 2026-08-30 at
+## 37x before this work: the all-sustained board lost 9 lives across a Nightmare
+## run where the all-burst board lost 336, which made the branch choice not a
+## choice. Returning splash to the Mortar brought it to 2.01x on its own, with
+## no tuning of the flat values at all - so the gap was never about the numbers,
+## it was about three towers being able to buy the same answer.
+##
+## This is the third attempt at an assertion that catches a runaway build, and
+## the first that pins a BOUND rather than a board. The six-tower benchmark
+## missed it, then the twelve-tower single-split benchmark missed it. A bound
+## cannot be satisfied by picking a convenient example.
+const MAX_BRANCH_SPREAD := 3.0
+
+func test_no_upgrade_branch_runs_away_from_the_other() -> bool:
+	var path := _full_path()
+	var best := 1 << 30
+	var worst := 0
+	var worst_name := ""
+	for board in _every_legal_maxed_board():
+		var r := Harness.run_wave({"wave": Waves.MAX_WAVES, "towers": board["towers"],
+			"path": path, "difficulty": Difficulty.NIGHTMARE})
+		var lost := int(r["lives_lost"])
+		if lost > worst:
+			worst = lost
+			worst_name = board["name"]
+		best = mini(best, lost)
+	assert_true(best > 0, "every legal board loses something on Nightmare's last wave")
+	assert_true(float(worst) <= float(best) * MAX_BRANCH_SPREAD,
+		"worst board %s lost %d against the best board's %d, over the %.1fx bound"
+			% [worst_name, worst, best, MAX_BRANCH_SPREAD])
+	return true

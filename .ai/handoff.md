@@ -7,7 +7,14 @@ and end of every task so Codex can take over at any point.**
 
 - Repository: `/home/tylermegill/Projects/project-t-godot`
 - Branch: **`feat/upgrade-branch-balance`**, off `master` at `6582655`.
-- Executing the plan inline. Tasks 1-4 done; Task 5 next.
+- Executing the plan inline. Tasks 1-5 done; Task 6 next.
+- **Task 5 needed no tuning.** Returning splash to the Mortar took the spread
+  from 37× to **2.01×** by itself — the flat values were never touched. The gap
+  was never about the numbers; it was about three towers being able to buy the
+  same answer. Best board is now BBBB (all burst) at 120 lives, worst SBSS at
+  241. `MAX_BRANCH_SPREAD := 3.0` is pinned in `test_balance_tuning.gd`.
+- Nightmare is now far too harsh — every legal board loses 120-241 lives on wave
+  20 against 12. **That is Task 6's whole job.**
 - **The suite is RED on exactly one assertion, deliberately.**
   `test_hard_costs_the_strongest_board_real_lives_without_ending_the_run`: the
   strongest board now loses 203 of its 15 lives on Hard's wave 20, because
@@ -74,8 +81,8 @@ everything."*
 | 2 | Convert every tier to flat damage and fire rate | ✅ done |
 | 3 | Return area damage to the Mortar | ✅ done — **suite red on one known assertion** |
 | 4 | Delete the multiplier keys | ✅ done |
-| 5 | Close the branch spread, and pin a bound | 🔄 **next** |
-| 6 | Re-sweep Hard and Nightmare | ⬜ |
+| 5 | Close the branch spread, and pin a bound | ✅ done — **2.01×, no tuning needed** |
+| 6 | Re-sweep Hard and Nightmare | 🔄 **next** |
 | 7 | A stat line generated from the effects | ⬜ |
 | 8 | The panel says what the tier does | ⬜ |
 | 9 | Update the docs | ⬜ |
