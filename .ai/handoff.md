@@ -15,82 +15,78 @@ and end of every task so Codex can take over at any point.**
 - Plan: `docs/superpowers/plans/2026-08-29-difficulty-selector.md` (11 tasks)
 - Spec: `docs/superpowers/specs/2026-08-29-difficulty-selector-design.md`
 
+## Follow-up in progress: the benchmark still missed
+
+The owner asked whether a fully upgraded board survives wave 20 on Nightmare.
+Measuring it exposed a defect in the work that was just merged and deployed.
+
+**Eleven of the sixteen legal fully-upgraded boards shut out Nightmare's wave 20
+with zero leaks.** The cross-path rule allows exactly two maxed splits per tower
+(`sustained 4 / burst 2` or `sustained 2 / burst 4`) and a board picks one per
+kind, so there are 2^4 = 16 legal maxed boards. `test_balance_tuning.gd` pinned
+**one** of them — the burst split — which happens to be the weakest. Extending
+the benchmark from six towers to twelve and never questioning the upgrade split
+is the same mistake one level down.
+
+**Why sustained wins.** The tiers raised `count_multiplier` and lowered
+`interval_multiplier`, both of which raise enemy *density*. The sustained branch
+grants fire rate and then **splash** (45px, then 75px). Splash scales with
+density, so the two levers chosen to attack coverage are precisely the ones a
+splash build answers best. The selector did not create this imbalance — it
+revealed a pre-existing one between the two upgrade branches, invisible on
+Normal because every build shuts Normal out.
+
+Branch: **`feat/difficulty-benchmark-splits`**, off `master` at `45a48ac`.
+Complete, suite green at **13,599 checks across 45 files, exit 0**.
+
+**Shipped rows, second set:**
+
+| Tier | count | interval | health | speed | gold | lives |
+|---|---|---|---|---|---|---|
+| Normal | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 | 20 |
+| Hard | 1.00 | 1.00 | 4.00 | 1.40 | 0.90 | 15 |
+| Nightmare | 1.00 | 1.00 | 4.50 | 1.40 | 0.85 | 12 |
+
+`test_balance_tuning.gd` now walks **all sixteen** legal maxed boards on
+Nightmare and on Normal. The old rows fail it, verified by putting them back and
+watching `board SSSS must not shut out Nightmare's last wave` fire. **Do not
+replace that loop with a single board.**
+
+**The open problem this uncovered, and did not fix:** the two upgrade branches
+are two orders of magnitude apart against late waves. `sustained` (fire rate →
+splash) dominates `burst` (damage → pierce), because splash kills a cluster in
+one hit however many are in it. No tier value closes that gap. It is invisible on
+Normal because every build shuts Normal out. Rebalancing the branches is its own
+piece of work and probably belongs before any further tier tuning.
+
 ## Task progress
 
 | # | Task | State |
 |---|---|---|
-| 1 | Measure what a run can afford | ✅ done — `Measure what a run can actually fund` |
-| 2 | The difficulty table | ✅ done — `Add the difficulty tier table` |
-| 3 | `Waves` takes a tier | ✅ done — `Let a wave be built at a difficulty tier` |
-| 4 | The harness accepts a tier | ✅ done — `Run a harness wave at a difficulty tier` |
-| 5 | Teach the harness where enemies died | ✅ done — `Teach the harness where enemies died` |
-| 6 | The live board runs at a tier | ✅ done — `Run the live board at the chosen difficulty` |
-| 7 | The menu selector and the HUD readout | ✅ done — `Choose a difficulty before a run, and show it during one` |
-| 8 | Sweep the tiers and set their numbers | ✅ done — `Set the Hard and Nightmare rows from a measured sweep` |
-| 9 | Give the opening a pulse | ⚠️ **done as a finding, no value changed** |
-| 10 | Benchmark the board the game actually hands out | ✅ done — `Benchmark the full twelve-tower board, not half of it` |
-| 11 | Update the docs | ✅ done — `Bring the docs up to the difficulty selector` |
+| A | Benchmark every legal maxed board, not one | ✅ done |
+| B | Re-sweep Hard and Nightmare against the strongest board | ✅ done |
+| C | Correct the lever documentation and the docs | ✅ done |
 
-## Task 9 did not raise base health, and the owner should know why
+### The re-sweep, measured 2026-08-30
 
-**This is the one part of the plan that did not land as written, and it is a
-finding rather than a shortcut.** Task 9 asked for a base-health bump so wave 1
-lasts longer than a few seconds. Its spec bound that bump by two constraints:
-the roster ordering `ogre > shaman > goblin > bat` must survive, and wave 5
-against three ungraded Basics must not cost *more* lives than it already does.
+Strongest board = every kind on sustained; weakest = every kind on burst.
+Run totals are lives lost across all twenty waves.
 
-Swept on 2026-08-30 against exactly the board 100 starting gold buys — three
-ungraded Basics at 20 + 30 + 40:
+| count | interval | health | speed | strongest | weakest |
+|---|---|---|---|---|---|
+| 1.40 | 0.60 | 1.40 | 1.15 | **0 — shut out** | 46 |
+| 1.20 | 0.80 | 2.50 | 1.30 | **0 — shut out** | 120 |
+| 1.00 | 1.00 | 3.50 | 1.30 | **0 — shut out** | 146 |
+| 1.00 | 1.00 | 4.00 | 1.35 | **0 — shut out** | 246 |
+| 1.00 | 1.00 | 4.00 | 1.40 | 3 | 258 |
+| 1.00 | 1.00 | 4.50 | 1.40 | 9 | 336 |
+| 1.00 | 1.00 | 4.75 | 1.40 | 12 | 380 |
+| 1.00 | 1.00 | 5.00 | 1.40 | 27 | 441 |
 
-| ogre / shaman / goblin / bat | wave 1 | wave 5 |
-|---|---|---|
-| 10 / 7 / 5 / 3 *(shipped)* | 5.6s, 0 leaks | 21 lives |
-| 10 / 7 / 6 / 4 | 5.6s, 0 leaks | 21 lives |
-| 10 / 7 / 6 / 5 | 5.6s, 0 leaks | 23 lives |
-| 12 / 9 / 8 / 5 | 5.6s, 0 leaks | 25 lives |
-| 14 / 11 / 9 / 6 | 26.8s, **2 leaks** | 33 lives |
-
-Two things fall out, and together they close the door:
-
-1. **Wave 1 does not move until goblin health crosses 8.** A Basic tower deals
-   exactly 4, so a goblin at anything from 5 to 8 dies to the same two shots.
-   At 9 it needs three — and wave 1 stops being a walkover by *leaking*, not by
-   lasting longer. There is no value in between. The opening is quantised by
-   the Basic tower's damage, not tuned by hit points.
-2. **Every value that changes anything makes wave 5 cost more**, which is
-   exactly the constraint saying the opening cliff must not steepen.
-
-The two constraints cannot both be met, so no number moved. The spec's own risk
-section says this is a finding to bring back rather than something to fix by
-quietly retuning Normal, so that is what happened: the sweep is recorded above
-`Enemies.DEFS`, and `test_balance_tuning.gd` now pins the shape it failed to
-move — wave 1 is a zero-leak walkover decided before the first bend, wave 5
-ends a run that never built past its starting three.
-
-**If the owner wants the opening fixed, the lever is not health.** It is the
-Basic tower's damage or fire rate, or wave 1's composition — all outside this
-slice.
-
-## In flight right now
-
-**Nothing. All eleven tasks are complete, merged and deployed.** Suite green on
-the merged result at **13,554 checks across 45 files, exit 0**.
-
-### What a Codex takeover would pick up
-
-1. **Play it, and check the build stamp first.** Every tier number came from the
-   harness, which has no projectile travel time and is therefore *kinder* than
-   the live board; the spec says plainly these are a starting point to be
-   played. The selector is on the main menu and the active tier shows in the HUD
-   beside the wave counter. If the owner reports something odd, read the
-   lower-left build stamp before changing code — a stale browser cache has
-   already caused one false report.
-2. **Two findings need an owner's decision**, both written up in `update.md`:
-   the opening cannot be fixed with enemy health (the lever is the Basic tower's
-   damage or fire rate, or wave 1's composition), and the benchmark board loses
-   Nightmare.
-3. **The gold curve debt grew.** `update.md` already owed a re-measurement to
-   Slice 2; the tiers now move the gold modifier as well.
+Two things fall out. **Speed 1.40 is a floor**: below it the strongest board
+leaks nothing at all, at any health up to 4.0. And **count and interval are
+counter-productive** — raising density widens the gap between a splash build and
+a non-splash one, so both go back to 1.0 and the teeth move to health and speed.
 
 ## Standing rules that govern this work
 
