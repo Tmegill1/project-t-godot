@@ -6,7 +6,9 @@ proceeds so Codex can take over at any point.**
 ## Where the work is
 
 - Repository: `/home/tylermegill/Projects/project-t-godot`
-- Branch: **`feat/build-out-pacing`**, off `master` at `efefdf4`.
+- Branch: **`feat/build-out-pacing`**, merged to `master` as `fa01fdd` on the
+  owner's instruction. Both branches pushed; the Pages deploy succeeded, so the
+  pacing change is live.
 - `master` is green, merged and deployed, carrying the difficulty selector, the
   sixteen-board benchmark and the upgrade-branch rebalance. Suite there:
   **13,763 checks across 45 files, exit 0**.
@@ -68,8 +70,8 @@ by convenient boards.
 
 ## Progress
 
-**Complete.** Suite green at **13,767 checks across 45 files, exit 0**. Nothing
-pushed, nothing merged.
+**Complete, merged and deployed.** Suite green on the merged result at
+**13,767 checks across 45 files, exit 0**.
 
 | Step | State |
 |---|---|
