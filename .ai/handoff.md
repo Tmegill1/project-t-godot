@@ -37,14 +37,35 @@ revealed a pre-existing one between the two upgrade branches, invisible on
 Normal because every build shuts Normal out.
 
 Branch: **`feat/difficulty-benchmark-splits`**, off `master` at `45a48ac`.
+Complete, suite green at **13,599 checks across 45 files, exit 0**.
+
+**Shipped rows, second set:**
+
+| Tier | count | interval | health | speed | gold | lives |
+|---|---|---|---|---|---|---|
+| Normal | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 | 20 |
+| Hard | 1.00 | 1.00 | 4.00 | 1.40 | 0.90 | 15 |
+| Nightmare | 1.00 | 1.00 | 4.50 | 1.40 | 0.85 | 12 |
+
+`test_balance_tuning.gd` now walks **all sixteen** legal maxed boards on
+Nightmare and on Normal. The old rows fail it, verified by putting them back and
+watching `board SSSS must not shut out Nightmare's last wave` fire. **Do not
+replace that loop with a single board.**
+
+**The open problem this uncovered, and did not fix:** the two upgrade branches
+are two orders of magnitude apart against late waves. `sustained` (fire rate →
+splash) dominates `burst` (damage → pierce), because splash kills a cluster in
+one hit however many are in it. No tier value closes that gap. It is invisible on
+Normal because every build shuts Normal out. Rebalancing the branches is its own
+piece of work and probably belongs before any further tier tuning.
 
 ## Task progress
 
 | # | Task | State |
 |---|---|---|
-| A | Benchmark every legal maxed board, not one | 🔄 **in progress** |
-| B | Re-sweep Hard and Nightmare against the strongest board | 🔄 **in progress** |
-| C | Correct the lever documentation and the docs | ⬜ |
+| A | Benchmark every legal maxed board, not one | ✅ done |
+| B | Re-sweep Hard and Nightmare against the strongest board | ✅ done |
+| C | Correct the lever documentation and the docs | ✅ done |
 
 ### The re-sweep, measured 2026-08-30
 

@@ -4,7 +4,7 @@
 not yet built, and what is still open. `CONTINUE.md` records what *is*; this
 records what *should be*.
 
-Last updated: 2026-08-30.
+Last updated: 2026-08-30 (revised after the split finding).
 
 ---
 
@@ -211,8 +211,8 @@ waves:
 | Tier | count | interval | health | speed | gold | lives |
 |---|---|---|---|---|---|---|
 | Normal | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 | 20 |
-| Hard | 1.30 | 0.70 | 1.30 | 1.10 | 0.90 | 15 |
-| Nightmare | 1.40 | 0.60 | 1.40 | 1.15 | 0.85 | 12 |
+| Hard | 1.00 | 1.00 | 4.00 | 1.40 | 0.90 | 15 |
+| Nightmare | 1.00 | 1.00 | 4.50 | 1.40 | 0.85 | 12 |
 
 **The open risk did not bite.** A twenty-wave run earns **16,199 gold** against
 an **11,415** full-board cost, so twelve maxed towers are affordable with 4,784
@@ -220,17 +220,18 @@ to spare and the tiers are set against the board the game actually hands out.
 `test/test_affordability.gd` pins both numbers, so a change to the gold curve or
 the tower caps has to move them deliberately.
 
-**The full board is a wall, and it fails as one.** Full-board lives lost across
-a run, by row: 0 at Normal, 1 at 1.15, **11 at Hard's 1.30**, **46 at
-Nightmare's 1.40**, 87 at 1.50, 720 at 2.00. Ten points of multiplier separate
-losing eleven lives from losing forty-six. That cliff is the coverage finding
-restated — a board either covers the crowd or it does not — and it is why the
-two tiers sit so close together.
+**These are the SECOND set of numbers, and the first set was wrong.** The owner
+asked whether a fully upgraded board survives wave 20 on Nightmare. Measuring it
+found that **eleven of the sixteen legal fully-upgraded boards shut that wave out
+with zero leaks** — the exact failure the benchmark existed to catch, still
+present after the benchmark had been rewritten to catch it. See *"A full maxed
+board is sixteen boards"* below.
 
-**Nightmare is not beaten by the benchmark board**, and that is shipped
-knowingly rather than hidden: leaks start at wave 17 and wave 20 alone costs 36
-lives. The harness resolves hits instantly, with no projectile travel time, so
-it is *kinder* than the live board. These are a starting point to be played.
+**Nightmare is beatable, but only by the best build there is.** The strongest
+legal board loses 9 of its 12 lives and survives with 3. Every board that leaves
+a tower on the burst branch loses badly. The harness resolves hits instantly,
+with no projectile travel time, so it is *kinder* than the live board — these
+remain a starting point to be played.
 
 **Carried with it, and worth more than the tuning:**
 
@@ -247,6 +248,52 @@ it is *kinder* than the live board. These are a starting point to be played.
    the highest tier* — so it survives future retuning. Normal's comfort and
    Hard's brief are pinned too, so a tier change cannot make the default harder
    as a side effect.
+
+### A full maxed board is sixteen boards, not one
+
+The cross-path rule lets exactly one branch pass tier 2, so a fully upgraded
+tower is either `sustained 4 / burst 2` or `sustained 2 / burst 4`, and a board
+picks one per kind — **2⁴ = 16 legal maxed boards.** The first benchmark pinned
+one of them, the burst split, which turns out to be the weaker by two orders of
+magnitude. Extending the benchmark from six towers to twelve while never
+questioning the upgrade split was the same mistake one level down.
+
+**Why sustained wins.** The first tier rows raised `count_multiplier` and
+lowered `interval_multiplier`, both of which raise enemy *density*. The sustained
+branch buys fire rate and then **splash** — 45px, then 75px — whose value scales
+with density. The two levers chosen to attack coverage were precisely the ones a
+splash build answers best.
+
+So both go back to 1.0 and the teeth moved to health and speed. Lives lost across
+a whole run, strongest board against weakest:
+
+| count | interval | health | speed | strongest | weakest |
+|---|---|---|---|---|---|
+| 1.40 | 0.60 | 1.40 | 1.15 *(first Nightmare)* | **0 — shut out** | 46 |
+| 1.00 | 1.00 | 3.50 | 1.30 | **0 — shut out** | 146 |
+| 1.00 | 1.00 | 4.00 | 1.35 | **0 — shut out** | 246 |
+| 1.00 | 1.00 | 4.00 | 1.40 *(Hard)* | 3 | 258 |
+| 1.00 | 1.00 | 4.50 | 1.40 *(Nightmare)* | 9 | 336 |
+| 1.00 | 1.00 | 5.00 | 1.40 | 27 | 441 |
+
+**Speed 1.40 is a threshold, not a dial.** Below it the strongest board leaks
+nothing at all, at any health up to 4.0. `test_balance_tuning.gd` now walks all
+sixteen boards on Nightmare *and* on Normal, so no single build can hide a
+shut-out again.
+
+### The two upgrade branches are not close, and that is a tower problem
+
+The spread between best and worst build is **two orders of magnitude at every
+tier row**, and no tier value closes it — `sustained` (fire rate → splash)
+dominates `burst` (damage → pierce) against late waves, because splash kills a
+cluster in one hit however many are in it.
+
+The selector **revealed** this rather than causing it. It is invisible on Normal
+because every build shuts Normal out, and the old six-tower benchmark could not
+see it either. Nothing here fixes it: rebalancing the branches against each other
+is its own piece of work, and it should probably happen before any further tier
+tuning, because every tier number is measured against a build asymmetry this
+large.
 
 ### The opening still has no pulse, and health cannot give it one
 

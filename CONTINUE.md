@@ -99,7 +99,7 @@ and 20.
 | `audio/` — pooled playback, 17 core-slice events | ✅ complete |
 | Web export | ✅ preset + build; **boots and renders in a browser; not yet played in one** |
 | Deploy | ✅ live at **https://tmegill1.github.io/project-t-godot/** — every push to `master` republishes, at the address GitHub assigns (no custom domain) |
-| Tests | ✅ 13,554 checks across 45 files, exit 0 |
+| Tests | ✅ 13,599 checks across 45 files, exit 0 |
 | Map authoring | ✅ text format (`data/maps/*.txt`) + a `@tool` painting scene — see §12 |
 | Decoration | ✅ camps (wall + fires) in forest; scattered landmarks in ice/desert — see §13 |
 | Enemies | ✅ five — goblin, bat, shaman, ogre (rank and file) and troll (**boss only**) |
@@ -830,17 +830,23 @@ regression net: if a Normal multiplier drifts, something else fails.
 | Tier | count | interval | health | speed | gold | lives |
 |---|---|---|---|---|---|---|
 | Normal | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 | 20 |
-| Hard | 1.30 | 0.70 | 1.30 | 1.10 | 0.90 | 15 |
-| Nightmare | 1.40 | 0.60 | 1.40 | 1.15 | 0.85 | 12 |
+| Hard | 1.00 | 1.00 | 4.00 | 1.40 | 0.90 | 15 |
+| Nightmare | 1.00 | 1.00 | 4.50 | 1.40 | 0.85 | 12 |
 
 Smaller is harsher for `interval_multiplier` and `gold_multiplier`; larger is
 harsher for the other three. `test_difficulty.gd` encodes both directions, so a
 transposed row fails a test no single-tier check could see.
 
-The levers attack **coverage**, which prior measurement established as the
-binding constraint rather than hit points. `interval_multiplier` is the sharpest
-of them: halving spawn spacing doubles the crowd one tower must cover without
-touching a single enemy stat.
+**The teeth are in health and speed, and the reason is measured.** The first
+version of this table raised `count_multiplier` and lowered
+`interval_multiplier`, reasoning that board *coverage* binds rather than hit
+points. Against a full board that is backwards: both levers raise enemy
+**density**, and the `sustained` upgrade branch buys **splash**, whose value
+scales with density. Eleven of the sixteen legal maxed boards shut the first
+Nightmare row out completely. Count and interval are held at 1.0 now — raising
+them widens the gap between a splash build and one without — and
+`speed_multiplier` turns out to be a **threshold rather than a dial**: below 1.40
+the strongest legal board leaks nothing at all, at any health up to 4.0.
 
 **How the choice travels.** `GameBoard.pending_difficulty` is a static, set by
 the main menu and consumed in `_ready` — the same shape and lifetime as
@@ -880,10 +886,24 @@ gap that let a shut-out board read as balanced. The full legal roster now sits
 beside it, with the assertion written directionally so it survives retuning: *a
 full maxed board must not shut out the hardest tier.*
 
-**Two things to know before touching the tiers.** The full board is a wall and
-fails as one — full-board lives lost across a run go 0 → 11 → 46 → 87 → 720 as
-the row hardens, so ten points of multiplier is the difference between a scratch
-and a wipe. And the benchmark board **loses** Nightmare: leaks from wave 17,
-36 lives on wave 20 alone. That is shipped knowingly. The harness has no
-projectile travel time, so it is kinder than the live board; these values are a
-starting point to be played, not a finished tuning.
+**"A full maxed board" is sixteen boards.** The cross-path rule lets exactly one
+branch pass tier 2, so a fully upgraded tower is either `sustained 4 / burst 2`
+or `sustained 2 / burst 4`, and a board picks one per kind. The first version of
+this benchmark pinned **one** of the sixteen — the burst split, which measurement
+then showed is the weaker by two orders of magnitude — and eleven of the other
+fifteen shut Nightmare's last wave out with zero leaks. It now walks all sixteen,
+on Nightmare and on Normal. **If you add a tier or move a row, do not replace
+that loop with a single board.**
+
+**Before touching the tiers, know that the branches are not balanced.** Best
+build against worst is a two-order-of-magnitude spread at every row and no tier
+value closes it: `sustained` (fire rate → splash) dominates `burst` (damage →
+pierce) against late waves. The selector revealed this rather than causing it —
+it is invisible on Normal, because every build shuts Normal out. Rebalancing the
+branches is its own piece of work and probably belongs before further tier
+tuning, since every tier number is measured against an asymmetry this large.
+
+Nightmare is beatable, but only by the strongest build: it loses 9 of its 12
+lives and survives with 3. The harness has no projectile travel time, so it is
+kinder than the live board; these values are a starting point to be played, not
+a finished tuning.
