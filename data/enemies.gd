@@ -53,6 +53,33 @@ class_name Enemies
 ## better than another. test_data_tables.gd pins the ORDERING as well as the
 ## values - and the ordering after wave scaling too, since the modifiers are
 ## applied per kind and a scaled roster could in principle cross over.
+##
+## NOT RAISED, and the reason is measured. Task 9 of the difficulty selector
+## set out to give the opening a pulse by raising goblin and bat health, under
+## two constraints from its spec: the ordering above must survive, and wave 5
+## against three ungraded Basics must not cost MORE than the lives it already
+## does. Swept on 2026-08-30 against exactly the board 100 starting gold buys -
+## three ungraded Basics at 20 + 30 + 40:
+##
+##   ogre/shaman/goblin/bat   wave 1        wave 5
+##   10 / 7 / 5 / 3 (shipped) 5.6s, 0 leaks 21 lives
+##   10 / 7 / 6 / 4           5.6s, 0 leaks 21 lives
+##   10 / 7 / 6 / 5           5.6s, 0 leaks 23 lives
+##   12 / 9 / 8 / 5           5.6s, 0 leaks 25 lives
+##   14 / 11 / 9 / 6          26.8s, 2 leaks 33 lives
+##
+## Wave 1 does not move at all until goblin health crosses 8, because a Basic
+## tower deals exactly 4 and a goblin at anything from 5 to 8 dies to the same
+## two shots. At 9 it needs three, and wave 1 stops being a walkover by
+## LEAKING rather than by lasting longer. There is no value in between: the
+## opening is quantised by the Basic tower's damage, not tuned by hit points.
+##
+## And every value that changes anything at all makes wave 5 cost more, which
+## is the constraint that says the opening cliff must not steepen. The two
+## constraints cannot both be met, so nothing here moved. Per the spec's own
+## risk section that is a finding to bring back rather than something to fix by
+## quietly retuning Normal. test_balance_tuning.gd pins the shape this failed
+## to move, so the next attempt starts from a number instead of an impression.
 const DEFS := {
 	&"goblin": {
 		"label": "Goblin", "base_speed": 100.0, "base_health": 5, "reward": 5,
