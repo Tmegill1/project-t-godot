@@ -19,8 +19,8 @@ and end of every task so Codex can take over at any point.**
 | 1 | Measure what a run can afford | ✅ done — `Measure what a run can actually fund` |
 | 2 | The difficulty table | ✅ done — `Add the difficulty tier table` |
 | 3 | `Waves` takes a tier | ✅ done — `Let a wave be built at a difficulty tier` |
-| 4 | The harness accepts a tier | 🔄 **next** |
-| 5 | Teach the harness where enemies died | ⬜ |
+| 4 | The harness accepts a tier | ✅ done — `Run a harness wave at a difficulty tier` |
+| 5 | Teach the harness where enemies died | 🔄 **next** |
 | 6 | The live board runs at a tier | ⬜ |
 | 7 | The menu selector and the HUD readout | ⬜ |
 | 8 | Sweep the tiers and set their numbers | ⬜ |
@@ -53,8 +53,19 @@ The whole suite still passes at 13,518 checks with nothing pre-existing moved,
 which is the identity guarantee doing its job: if a Normal number ever moves,
 an old assertion fails.
 
-Task 4 is next: `Harness.run_wave` reads `difficulty` out of its config dict
-and passes it to `build_schedule` and `get_modifiers`.
+Task 4 is complete and committed. `Harness.run_wave` reads
+`config["difficulty"]`, defaulting to `Difficulty.NORMAL`, and hands it to both
+`Waves.build_schedule` and `Waves.get_modifiers`.
+
+The plumbing was proved rather than assumed: while Hard and Nightmare are still
+identity rows, a per-tier test passes whether or not the tier reaches anything.
+Nightmare's `health_multiplier` was temporarily set to 2.0 with a temporary
+"Nightmare differs from Normal" assertion; it failed before the change and
+passed after, and both were then reverted. **If you touch this plumbing again,
+prove it the same way** — a green suite alone is not evidence here until Task 8
+lands real tier values.
+
+Task 5 is next: `run_wave` gains `deepest_progress` and `progress_at_death`.
 
 ## Adding a new `class_name` script? Run the importer
 

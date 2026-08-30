@@ -787,3 +787,19 @@ func test_the_harness_boss_carries_its_own_health_not_its_kinds() -> bool:
 		"the boss is killable and is counted among the kills")
 	assert_eq(r["leaks"], 0, "nothing got through")
 	return true
+
+func test_an_absent_difficulty_means_normal() -> bool:
+	var towers := [{"kind": &"basic", "position": Grid.tile_to_world_center(5, 3)}]
+	var bare := Harness.run_wave({"wave": 3, "towers": towers, "path": _path()})
+	var named := Harness.run_wave({"wave": 3, "towers": towers, "path": _path(),
+		"difficulty": Difficulty.NORMAL})
+	assert_eq(bare, named, "omitting difficulty is exactly Normal")
+	return true
+
+func test_results_stay_reproducible_per_tier() -> bool:
+	var towers := [{"kind": &"basic", "position": Grid.tile_to_world_center(5, 3)}]
+	for tier in Difficulty.ORDER:
+		var config := {"wave": 8, "towers": towers, "path": _path(), "difficulty": tier}
+		var first := Harness.run_wave(config)
+		assert_eq(Harness.run_wave(config), first, "%s is reproducible" % tier)
+	return true

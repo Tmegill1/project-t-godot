@@ -48,8 +48,12 @@ static func run_wave(config: Dictionary) -> Dictionary:
 			"cooldown": 0.0,
 		})
 
-	var schedule := Waves.build_schedule(wave)
-	var modifiers := Waves.get_modifiers(wave)
+	# Difficulty travels as a parameter, never a global, so this stays a pure
+	# function of its config - which is what makes every balance claim in this
+	# project reproducible.
+	var tier: StringName = config.get("difficulty", Difficulty.NORMAL)
+	var schedule := Waves.build_schedule(wave, tier)
+	var modifiers := Waves.get_modifiers(wave, tier)
 
 	var enemies: Array = []
 	var next_id := 0
