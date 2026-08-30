@@ -1,114 +1,121 @@
-# Claude Handoff — Upgrade Branch Balance
+# Claude Handoff — Build-out Pacing
 
-Generated: 2026-08-30 (America/Chicago). **Live document — rewritten at the start
-and end of every task so Codex can take over at any point.**
+Generated: 2026-08-30 (America/Chicago). **Live document — rewritten as work
+proceeds so Codex can take over at any point.**
 
 ## Where the work is
 
 - Repository: `/home/tylermegill/Projects/project-t-godot`
-- Branch: **`feat/upgrade-branch-balance`**, merged to `master` as `fe97546` on
-  the owner's instruction. Both branches pushed; the Pages deploy succeeded, so
-  the rebalance is live.
-- **All nine tasks are complete, merged and deployed.** Suite green on the
-  merged result at **13,763 checks across 45 files, exit 0**.
+- Branch: **`feat/build-out-pacing`**, off `master` at `efefdf4`.
+- `master` is green, merged and deployed, carrying the difficulty selector, the
+  sixteen-board benchmark and the upgrade-branch rebalance. Suite there:
+  **13,763 checks across 45 files, exit 0**.
 
-### What a Codex takeover would pick up
+## Why this work exists — and why the request's premise was wrong
 
-1. **Play it.** Three rounds of tuning have now happened without a human
-   touching the game. Every number came from the harness, which has no
-   projectile travel time and is therefore kinder than the live board.
-2. **The one thing not verified on screen:** the two new summary labels under
-   each branch button. They are covered by `test_tower_inspector.gd` and the
-   panel height was measured two ways, but nobody has looked at them. Drive it
-   with `game_click` on real coordinates — `game_call_method` cannot pass a
-   `Vector2` through the MCP bridge.
-3. **Still open, and recorded in `update.md`:** the opening cannot be given a
-   pulse with enemy health — the lever is the Basic tower's damage or fire rate,
-   or wave 1's composition.
-- All 32 generated lines were printed and read. The longest is
-  `fires 0.056s faster · slows to 45% for 2.5s` at 42 characters.
-- **The panel fits, measured two ways.** Summing minimum sizes gives 476px
-  against the 465px it was before the labels; computing the labels' real wrapped
-  height at the sidebar's 124px of usable width gives 474px. The minimum-size
-  sum is the larger, so the existing fit check stays an over-estimate, which is
-  the safe direction. Both are well inside the shortest map's 672px.
-- **The in-game check was inconclusive, for a tooling reason.** The Godot MCP
-  bridge cannot marshal a Dictionary into a `Vector2`
-  (`Cannot convert argument 1 from Dictionary to Vector2`), so `_try_place`
-  never ran and no tower was ever selected. The behaviour is covered by
-  `test_tower_inspector.gd` on the real `show_tower` -> `_refresh_gating` path,
-  and the heights above were measured off the same path. **If you want the live
-  look, drive it with `game_click` on real screen coordinates rather than
-  `game_call_method` with a Vector2 argument.**
+The owner asked to "fix the opening cliff". **There is no opening cliff.**
 
-### Two corrections made during Task 6, both worth knowing
+The 21-lives-at-wave-5 figure that produced that phrase describes a player who
+never builds anything after their starting three towers. Measured against a
+player who simply spends — buy the cheapest legal thing whenever affordable, no
+thought at all:
 
-**The parity bound was measuring the wrong thing.** Task 5 pinned the
-best-to-worst ratio at wave 20 and got 2.01×. Re-sweeping the difficulty rows
-moved it to 6.90×, and a quarter-point of health swung it from 12.40× to
-undefined — because at the wave where a tier is actually decided, the best board
-loses almost nothing and the ratio measures where the threshold sits rather than
-how far apart the branches are. It now measures at **wave 30**, past anything a
-board can hold, where the comparison is graded: 1.68× for this roster, stable
-across rows.
+| Wave | Towers | Tiers | Lives | Gold | Deepest reached |
+|---|---|---|---|---|---|
+| 1 | 3 | 0/72 | 20 | 100 | 0.16 |
+| 2 | 4 | 1/72 | **19** | 147 | 1.00 |
+| 7 | 12 | 12/72 | 19 | 538 | 0.14 |
+| 12 | 12 | 53/72 | 19 | 1,085 | 0.14 |
+| 18 | 12 | **72/72** | 19 | 2,516 | 0.13 |
+| 20 | 12 | 72/72 | **19** | **5,488** | 0.17 |
 
-**And it was verified, not assumed.** Splash was temporarily put back on Basic
-and Long Range and the metric re-run: **3.18×**, over the 3.0 bound. So the
-assertion catches the defect it was written for rather than merely describing
-the fix.
+**One life lost across twenty waves.** The board is full by wave 7 of 20, fully
+maxed by 18, and the run ends with 5,488 gold that has nothing left to buy.
+Nothing ever reaches 17% of a route whose first bend is at 31%.
 
-**"The strongest board" is now found, not named.** `_strongest_board()`
-hardcoded all-sustained, which was true when splash sat on three towers and
-false the moment it went back to one. It is `_best_board_result(tier, wave)`
-now, which measures. The first-bend claim is asked of all sixteen boards rather
-than one.
+So the opening is not steep — it is flat, and so is everything after it. The
+owner's decision (2026-08-30) was to attack **the build-out**: the board is
+finished by wave 7 and the money stops mattering by wave 12.
 
-### The shipped rows
+## The approach, approved
 
-| Tier | health | speed | gold | lives |
-|---|---|---|---|---|
-| Normal | 1.00 | 1.00 | 1.00 | 20 |
-| Hard | 2.35 | 1.30 | 0.90 | 15 |
-| Nightmare | 2.50 | 1.30 | 0.85 | 12 |
+**Raise `cost_escalation` sharply and base costs modestly in `data/towers.gd`.**
+Income is already back-loaded — the greedy player has earned only ~1,600 of the
+run's 16,199 by wave 7 — so the amount is not the problem; placing the entire
+board for 1,050 gold is. Escalation rather than base cost alone, so the *first*
+of each kind stays affordable and the opening can still build.
 
-Count and interval stay at 1.0 — the Mortar still splashes, and density is what
-splash is for. Hard costs the best legal board 5 of its 15 lives on wave 20;
-Nightmare costs it 10 of 12 across a run, so it survives with two. The threshold
-where the last board stops shutting wave 20 out sits between 2.25 and 2.35
-health, and both tiers sit just past it.
+**Income is deliberately not cut.** The shape is wrong, not the size, and
+cutting it would put the fully-maxed board out of reach — which every difficulty
+tier was measured against.
 
-## What the owner asked for, in their own terms
+### Targets the sweep must hit
 
-Three things, all in the plan:
+- The twelve-tower budget is not full before roughly **wave 13** (today: 7).
+- The full maxed board is **still affordable within a run** — Task 1's
+  affordability pin moves and is re-measured, not assumed.
+- Leftover gold at wave 20 is small; 5,488 is the sign money stopped mattering.
+- **Every difficulty assertion still passes unchanged.** They all assume a
+  fully-maxed board is reachable. If raising costs puts it out of reach, that is
+  a finding to bring back, not something to fix by loosening a bound.
 
-1. **Fix the branch imbalance.** Splash returns to the Mortar; Basic's and Long
-   Range's deep sustained tiers get reach and cadence instead.
-2. **Show descriptions next to the upgrades**, so you do not have to hover. They
-   are a tooltip today because the sidebar is 140px and a `Button` does not wrap.
-   A wrapping `Label` under each branch button does, and the line is **generated
-   from the effects dictionary** so the number on screen cannot drift from the
-   number applied.
-3. **Flat amounts instead of percentages** — "fires 0.4s faster", "+12 damage".
-   Adopted for damage and fire rate, with per-tower values, because base rates
-   run 500ms to 2000ms and a shared flat value would take Magic to zero. Range
-   keeps its multiplier; splash, slow and gold already take the strongest value
-   rather than stacking, so they never compounded.
+### The regression net
 
-## Three things that will bite an executor
+A new assertion in `test/test_affordability.gd`: **a greedy player cannot
+complete the board before wave N.** A bound, not an example — the same lesson
+that produced `MAX_BRANCH_SPREAD`, after two earlier assertions were satisfied
+by convenient boards.
 
-1. **Task 3 will break balance tests, and that is expected.** Removing splash
-   from two towers weakens every board that took them, and the difficulty rows
-   were swept against boards that had it. The plan says which failures to carry
-   forward into Tasks 5 and 6, and forbids weakening either shut-out assertion
-   to hide them.
-2. **The sidebar budget is real.** `CONTINUE.md` §14: the inspector already uses
-   465px of a 672px viewport, and the viewport height is the *shortest* map's
-   pixel height. If the generated lines do not fit, shorten the phrasing — never
-   widen the column.
-3. **Screenshots come back blank on this machine** (`glx: failed to create dri3
-   screen`). Read layout back with the Godot MCP server's `game_get_ui`, which
-   reports every control's real rect. That is how the difficulty selector's
-   layout was verified.
+## Progress
+
+**Complete.** Suite green at **13,767 checks across 45 files, exit 0**. Nothing
+pushed, nothing merged.
+
+| Step | State |
+|---|---|
+| Measure the greedy build-out | ✅ done |
+| Sweep costs and pick values | ✅ done |
+| Re-pin `test_data_tables.gd`, `test_economy.gd`, `test_affordability.gd` | ✅ done |
+| Add the greedy build-out bound | ✅ done — **verified against the old costs** |
+| Confirm every difficulty assertion still holds | ✅ done — costs do not touch combat |
+| Docs | ✅ done |
+
+### What shipped
+
+| | base | escalation |
+|---|---|---|
+| Basic | 20 → **35** | 10 → **100** |
+| Magic | 50 → **80** | 15 → **150** |
+| Mortar | 70 → **115** | 35 → **270** |
+| Long Range | 100 → **165** | 50 → **400** |
+
+The greedy player now fills the board at **wave 13** (was 7), maxes at **20**
+(was 18), finishes with **10 of 20 lives** (was 19) and **2,532 gold** (was
+5,488). Full board costs 14,310 against 16,199 of income — 1,889 of headroom
+where there used to be 4,784.
+
+The bound in `test_affordability.gd` — no full board before wave 10, leftover
+gold under 4,000, naive player survives — was **verified by restoring the old
+costs and watching it fail on both counts**, not merely observed to pass.
+
+### Two consequences the owner should hear
+
+1. **It made the early game harder, which was not the scope.** The change was
+   proposed as *slower to build, not harder*; the two turn out not to be
+   separable, because a thinner board leaks. Waves 2 and 3 now cost a naive
+   player about seven lives where they used to cost none. That is early-game
+   texture arriving as a side effect — and it is what the original "fix the
+   opening" request was reaching for.
+2. **A Mortar or Long Range is no longer a first purchase.** On The Pass's 100
+   starting gold you can open with one Basic (35) or one Magic (80). Three
+   existing tests silently assumed otherwise and now grant themselves gold.
+
+## Scope note the owner should hold onto
+
+This makes the early game **slower to build**, not **harder**. Waves 1-5 stay
+zero-leak walkovers; there will simply be fewer towers up while they happen. If
+early-game *pressure* is what is wanted, that is separate work — wave
+composition and spawn pacing in `data/waves.gd`.
 
 ## Standing rules that govern this work
 
@@ -118,33 +125,26 @@ Three things, all in the plan:
 - Every `test_*` method is declared `-> bool` and ends with `return true`,
   including every early return. Enforced crash detection, not style.
 - `data/` and `sim/` are pure — `test/test_sim_purity.gd` bans scene types,
-  clocks, RNG and platform state. `effect_summary` returns a `String` and touches
-  nothing else, which is why it may live in `data/`.
+  clocks, RNG and platform state.
 - **Adding a new `class_name` needs `godot --headless --import`** before the
-  suite will see it, or it fails with `Parse Error: Identifier "X" not
-  declared`. That pass also writes the `.uid`; every other `.gd.uid` here is
-  tracked, so commit it with its script.
+  suite will see it. That pass also writes the `.uid`; every other `.gd.uid`
+  here is tracked, so commit it with its script.
 - **NO NEW ASSETS.** Owner's standing rule: if any visual, audio, animation,
   sprite, texture or icon turns out to be needed, stop and return to Codex.
-- **No invented numbers.** Both of this week's misses — the six-tower benchmark
-  and the first difficulty rows — came from figures written down before they
-  were measured. The spec deliberately contains none; the plan derives Task 2's
-  from measured endpoints and sweeps for the rest.
-- Do not commit `test/test_balance_tuning.gd.uid`. Another agent may share this
-  tree: `git status` before every commit, stage only what the task names, never
-  `git add -A`.
+- **No invented numbers.** Three misses this week came from figures written down
+  before they were measured. Sweep, then pin.
+- Do not commit `test/test_balance_tuning.gd.uid`. `git status` before every
+  commit, stage only what the step names, never `git add -A`.
 - **Pushing `master` redeploys the live site.** Do not push without the owner
-  asking. They have asked twice so far, each time explicitly.
+  asking. They have asked three times so far, each time explicitly.
 
-## What landed on `master` before this branch
+## Two findings still open, recorded in `update.md`
 
-- `Merge feat/difficulty-selector` — three tiers chosen per run, difficulty
-  threaded as a parameter, `deepest_progress` and `progress_at_death` on the
-  harness result, the full twelve-tower benchmark.
-- `Merge feat/difficulty-benchmark-splits` — the benchmark walks all sixteen
-  legal maxed boards after eleven of them were found shutting Nightmare out;
-  tiers re-swept against the strongest board; count and interval returned to 1.0
-  because raising density feeds a splash build rather than threatening it.
-- Two findings recorded there and still open: the opening cannot be given a
-  pulse with enemy health (the lever is the Basic tower or wave 1's
-  composition), and this branch's imbalance, which it named and did not fix.
+- Enemy health cannot give the opening a pulse — a Basic tower deals exactly 4,
+  so a goblin at 5 through 8 dies to the same two shots, and at 9 wave 1 starts
+  leaking rather than lasting longer. The lever is the Basic tower or wave 1's
+  composition.
+- The two new upgrade summary labels in the inspector have never been seen on
+  screen. Tests cover them and the panel height was measured two ways, but the
+  in-game check failed because the Godot MCP bridge cannot marshal a Dictionary
+  into a `Vector2`. Drive it with `game_click` on real coordinates instead.

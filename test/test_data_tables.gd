@@ -43,10 +43,10 @@ func test_scaled_speed_is_unrounded_and_clamps_to_one() -> bool:
 
 func test_tower_stats_match_the_phaser_build() -> bool:
 	var expected := {
-		&"basic":  {"cost": 20,  "cost_escalation": 10, "range": 100.0, "fire_rate": 1000.0, "damage": 4,  "base_splash_radius": 0.0,  "base_limit": 3},
-		&"fast":   {"cost": 50,  "cost_escalation": 15, "range": 80.0,  "fire_rate": 500.0,  "damage": 2,  "base_splash_radius": 0.0,  "base_limit": 3},
-		&"mortar": {"cost": 70,  "cost_escalation": 35, "range": 120.0, "fire_rate": 2000.0, "damage": 5,  "base_splash_radius": 55.0, "base_limit": 3},
-		&"long":   {"cost": 100, "cost_escalation": 50, "range": 150.0, "fire_rate": 1500.0, "damage": 15, "base_splash_radius": 0.0,  "base_limit": 3},
+		&"basic":  {"cost": 35,  "cost_escalation": 100, "range": 100.0, "fire_rate": 1000.0, "damage": 4,  "base_splash_radius": 0.0,  "base_limit": 3},
+		&"fast":   {"cost": 80,  "cost_escalation": 150, "range": 80.0,  "fire_rate": 500.0,  "damage": 2,  "base_splash_radius": 0.0,  "base_limit": 3},
+		&"mortar": {"cost": 115, "cost_escalation": 270, "range": 120.0, "fire_rate": 2000.0, "damage": 5,  "base_splash_radius": 55.0, "base_limit": 3},
+		&"long":   {"cost": 165, "cost_escalation": 400, "range": 150.0, "fire_rate": 1500.0, "damage": 15, "base_splash_radius": 0.0,  "base_limit": 3},
 	}
 	for kind in expected.keys():
 		var def: Dictionary = Towers.DEFS[kind]
@@ -273,13 +273,13 @@ func test_the_fast_key_survives_the_rename() -> bool:
 
 # Art and a name only. Nothing about how either tower PLAYS moves.
 func test_swapping_the_art_moved_no_stats() -> bool:
-	assert_eq(int(Towers.DEFS[&"fast"]["cost"]), 50, "Magic still costs 50")
+	assert_eq(int(Towers.DEFS[&"fast"]["cost"]), 80, "Magic still costs 80")
 	assert_eq(float(Towers.DEFS[&"fast"]["fire_rate"]), 500.0, "and still fires every 500ms")
 	assert_eq(float(Towers.DEFS[&"fast"]["range"]), 80.0, "and still reaches 80")
 	assert_eq(float(Towers.DEFS[&"fast"]["base_splash_radius"]), 0.0, "and still does not splash")
 	assert_eq(float(Towers.DEFS[&"mortar"]["base_splash_radius"]), 55.0, "Mortar still splashes")
 	assert_eq(float(Towers.DEFS[&"mortar"]["fire_rate"]), 2000.0, "and still fires every 2000ms")
-	assert_eq(int(Towers.DEFS[&"mortar"]["cost"]), 70, "and still costs 70")
+	assert_eq(int(Towers.DEFS[&"mortar"]["cost"]), 115, "and still costs 115")
 	return true
 
 # --------------------------------------------------------------------------
