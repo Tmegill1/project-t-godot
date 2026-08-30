@@ -7,7 +7,14 @@ and end of every task so Codex can take over at any point.**
 
 - Repository: `/home/tylermegill/Projects/project-t-godot`
 - Branch: **`feat/upgrade-branch-balance`**, off `master` at `6582655`.
-- Executing the plan inline. Tasks 1-2 done; Task 3 next.
+- Executing the plan inline. Tasks 1-3 done; Task 4 next.
+- **The suite is RED on exactly one assertion, deliberately.**
+  `test_hard_costs_the_strongest_board_real_lives_without_ending_the_run`: the
+  strongest board now loses 203 of its 15 lives on Hard's wave 20, because
+  removing splash from Basic and Long Range weakened every board that took them.
+  **Task 6 owns this** — it re-sweeps the difficulty rows against the roster
+  that now exists. Do not weaken the assertion to make it green.
+  Everything else passes, including both shut-out assertions.
 - **Task 2 came out behaviour-identical**, which is better than the plan
   predicted. Every tower's damage and fire-rate curve is unchanged at *every*
   tier, not merely at the maxed endpoint, because each flat value equals the
@@ -65,8 +72,8 @@ everything."*
 | — | Plan | ✅ committed — this handoff's commit |
 | 1 | Flat damage and fire rate, and a floor under it | ✅ done |
 | 2 | Convert every tier to flat damage and fire rate | ✅ done |
-| 3 | Return area damage to the Mortar | 🔄 **next** |
-| 4 | Delete the multiplier keys | ⬜ |
+| 3 | Return area damage to the Mortar | ✅ done — **suite red on one known assertion** |
+| 4 | Delete the multiplier keys | 🔄 **next** |
 | 5 | Close the branch spread, and pin a bound | ⬜ |
 | 6 | Re-sweep Hard and Nightmare | ⬜ |
 | 7 | A stat line generated from the effects | ⬜ |

@@ -17,7 +17,7 @@ const EXPECTED_COSTS := {
 
 const EXPECTED_TIER_LABELS := {
 	&"basic": {
-		&"sustained": ["Quick Loader", "Drum Feed", "Fragmentation", "Saturation"],
+		&"sustained": ["Quick Loader", "Drum Feed", "Open Bolt", "Sustained Fire"],
 		&"burst": ["Heavy Rounds", "Rifled Barrel", "Spotter", "Executioner"],
 	},
 	&"fast": {
@@ -29,7 +29,7 @@ const EXPECTED_TIER_LABELS := {
 		&"burst": ["Packed Charge", "Heavy Shell", "Siege Charge", "Bunker Buster"],
 	},
 	&"long": {
-		&"sustained": ["Long Barrel", "Rapid Loader", "Shellburst", "Carpet Fire"],
+		&"sustained": ["Long Barrel", "Rapid Loader", "Autoloader", "Overwatch"],
 		&"burst": ["Dense Slug", "Shaped Charge", "Tungsten Core", "Siege Cannon"],
 	},
 }
@@ -40,8 +40,8 @@ const EXPECTED_EFFECTS := {
 		&"sustained": [
 			{&"fire_rate_bonus_ms": 200.0},
 			{&"fire_rate_bonus_ms": 160.0},
-			{&"splash_radius": 45.0, &"fire_rate_bonus_ms": 64.0},
-			{&"splash_radius": 75.0, &"damage_bonus": 2.0},
+			{&"fire_rate_bonus_ms": 140.0, &"range_multiplier": 1.15},
+			{&"fire_rate_bonus_ms": 150.0, &"damage_bonus": 2.0},
 		],
 		&"burst": [
 			{&"damage_bonus": 2.0},
@@ -82,8 +82,8 @@ const EXPECTED_EFFECTS := {
 		&"sustained": [
 			{&"range_multiplier": 1.2},
 			{&"fire_rate_bonus_ms": 450.0},
-			{&"splash_radius": 55.0},
-			{&"range_multiplier": 1.33, &"splash_radius": 90.0},
+			{&"fire_rate_bonus_ms": 250.0},
+			{&"range_multiplier": 1.33, &"fire_rate_bonus_ms": 200.0},
 		],
 		&"burst": [
 			{&"damage_bonus": 6.0},

@@ -484,15 +484,20 @@ func test_tick_source_carries_the_resolved_slow_and_gold_effects() -> bool:
 
 # Splash is resolved too, not read from the table - a Fragmentation basic must
 # actually splash.
+# The Mortar, because area damage belongs to it and to nothing else since
+# 2026-08-30 - this used to buy Basic's Fragmentation for a 45px blast, and
+# Basic no longer has one. Wide Bore raises the blast to 70 over the table's
+# base 55, so the assertion still distinguishes the RESOLVED radius from the
+# table's, which is the thing under test.
 func test_tick_splash_comes_from_the_resolved_stats() -> bool:
-	var t := _setup_tower(&"basic")
-	for i in range(3):
-		t.apply_upgrade(&"sustained")  # Fragmentation: 45px splash
+	var t := _setup_tower(&"mortar")
+	t.apply_upgrade(&"sustained")  # Wide Bore: blast grows to 70px
 	var target_node := Node2D.new()
 	var captured := {"splash": -1.0}
 	t.wants_to_fire.connect(func(_tn, _src, sp): captured["splash"] = sp)
 	t.tick(16.0, [_candidate(1, t.position + Vector2(10, 0), {"node": target_node})])
-	assert_almost_eq(captured["splash"], 45.0, 0.0001, "the upgrade's splash radius, not the table's zero")
+	assert_almost_eq(captured["splash"], 70.0, 0.0001,
+		"the upgrade's splash radius, not the table's base 55")
 	t.free()
 	target_node.free()
 	return true

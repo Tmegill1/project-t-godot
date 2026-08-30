@@ -12,6 +12,23 @@ class_name Upgrades
 ## Scarce counters sit at tier 3+ deliberately: the cross-path rule hands every
 ## tower two free tiers of its off-branch, so a counter any cheaper would be
 ## given to every build for nothing.
+##
+## AREA DAMAGE BELONGS TO THE MORTAR, and to nothing else. Basic and Long Range
+## both used to buy splash on their deep sustained tiers; measured 2026-08-30,
+## eleven of the sixteen legal fully-upgraded boards then shut the hardest
+## difficulty out with zero leaks, because a splash hit carries its WHOLE
+## payload - the Magic tower's slow included - to everything it catches. One
+## Magic tower plus any splasher slowed the entire wave, and Long Range was the
+## worst of them: 90px of blast at 239px of reach, wider effective area than the
+## tower whose whole identity is area. test_upgrades.gd's
+## test_only_the_mortar_ever_resolves_splash pins this on RESOLVED stats, so a
+## tier that finds some other route to splash fails too.
+##
+## DAMAGE AND FIRE RATE ARE FLAT, never multipliers. Compounding is what made
+## the deep tiers explode - two tiers of x1.4 is +96%, not +80%, and it got
+## worse the deeper a branch went. A flat amount costs what it says wherever it
+## sits, and reads as something a player can act on: "hits for 12 more" rather
+## than "damage doubles", which doubles what?
 
 const BRANCHES: Array[StringName] = [&"sustained", &"burst"]
 
@@ -19,16 +36,16 @@ const DEFS := {
 	&"basic": {
 		&"sustained": {
 			"label": "Barrage",
-			"summary": "Faster fire, then splash damage. Clears crowds and splitters.",
+			"summary": "Faster fire and longer reach. Clears crowds by volume, not by blast.",
 			"tiers": [
 				{"label": "Quick Loader", "description": "Fires 0.2s faster.",
 					"cost": 30, "effects": {&"fire_rate_bonus_ms": 200.0}},
 				{"label": "Drum Feed", "description": "Fires 0.16s faster.",
 					"cost": 60, "effects": {&"fire_rate_bonus_ms": 160.0}},
-				{"label": "Fragmentation", "description": "Shots splash for 45px, and fire 0.064s faster.",
-					"cost": 130, "effects": {&"splash_radius": 45.0, &"fire_rate_bonus_ms": 64.0}},
-				{"label": "Saturation", "description": "Splash grows to 75px and hits for 2 more.",
-					"cost": 260, "effects": {&"splash_radius": 75.0, &"damage_bonus": 2.0}},
+				{"label": "Open Bolt", "description": "Fires 0.14s faster and reaches 15% further.",
+					"cost": 130, "effects": {&"fire_rate_bonus_ms": 140.0, &"range_multiplier": 1.15}},
+				{"label": "Sustained Fire", "description": "Fires 0.15s faster and hits for 2 more.",
+					"cost": 260, "effects": {&"fire_rate_bonus_ms": 150.0, &"damage_bonus": 2.0}},
 			],
 		},
 		&"burst": {
@@ -120,16 +137,16 @@ const DEFS := {
 	&"long": {
 		&"sustained": {
 			"label": "Bombardment",
-			"summary": "Reach and cadence, then splash. Covers ground nothing else can.",
+			"summary": "Reach and cadence. Covers ground nothing else can.",
 			"tiers": [
 				{"label": "Long Barrel", "description": "Range up by 20%.",
 					"cost": 60, "effects": {&"range_multiplier": 1.2}},
 				{"label": "Rapid Loader", "description": "Fires 0.45s faster.",
 					"cost": 120, "effects": {&"fire_rate_bonus_ms": 450.0}},
-				{"label": "Shellburst", "description": "Shots splash for 55px.",
-					"cost": 240, "effects": {&"splash_radius": 55.0}},
-				{"label": "Carpet Fire", "description": "Splash grows to 90px and range extends by a third.",
-					"cost": 450, "effects": {&"splash_radius": 90.0, &"range_multiplier": 1.33}},
+				{"label": "Autoloader", "description": "Fires 0.25s faster.",
+					"cost": 240, "effects": {&"fire_rate_bonus_ms": 250.0}},
+				{"label": "Overwatch", "description": "Fires 0.2s faster and range extends by a third.",
+					"cost": 450, "effects": {&"fire_rate_bonus_ms": 200.0, &"range_multiplier": 1.33}},
 			],
 		},
 		&"burst": {

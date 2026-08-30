@@ -547,3 +547,22 @@ func test_a_tower_can_never_out_fire_the_floor() -> bool:
 		"the interval floors rather than going negative")
 	assert_true(UpgradesSim.MIN_FIRE_RATE_MS > 0.0, "and the floor is positive")
 	return true
+
+# The Mortar's own comment in data/upgrades.gd states the rule: area damage
+# belongs to it, and "a tower that could take them would answer everything."
+# Basic and Long Range both used to reach for it, and a board that took them
+# did answer everything - eleven of the sixteen legal maxed boards shut the
+# hardest tier out with zero leaks.
+#
+# Asserted on RESOLVED stats rather than on the table, so a tier that grants
+# splash by some other route is caught too.
+func test_only_the_mortar_ever_resolves_splash() -> bool:
+	for kind in Towers.KINDS:
+		for branch in Upgrades.BRANCHES:
+			var other: StringName = &"burst" if branch == &"sustained" else &"sustained"
+			var s := UpgradesSim.resolve_tower_stats(kind,
+				{branch: UpgradesSim.MAX_TIER, other: UpgradesSim.CROSS_PATH_CAP})
+			var splashes: bool = float(s["splash_radius"]) > 0.0
+			assert_eq(splashes, kind == &"mortar",
+				"%s/%s splash, got %s" % [kind, branch, s["splash_radius"]])
+	return true
