@@ -959,8 +959,16 @@ both counts — the same discipline as `MAX_BRANCH_SPREAD`, and for the same
 reason. Pin a bound, not an example.
 
 **Two consequences to know before touching tower costs again.** Slowing the
-build-out also made the early game *harder*, which was not the intent but is not
-separable: a thinner board leaks, so waves 2 and 3 now cost a naive player about
-seven lives where they used to cost none. And on The Pass's 100 starting gold
-you can open with exactly one Basic or one Magic — a Mortar or a Long Range is
-no longer a first purchase, which several tests had silently assumed.
+build-out also makes the early game *harder*, which was not the intent but is
+not separable: a thinner board leaks. And a Mortar or a Long Range is no longer
+a first purchase, which several tests had silently assumed.
+
+**The opening purse moved with the costs.** The Pass went 100 → 200 the same
+day, because 100 bought exactly one tower once the second Basic escalated to
+135. At 200 it buys two, wave 1 stays clean, and the early cost drops from seven
+lives to two — while the build-out stays exactly where the costs put it, full at
+wave 13 and maxed at 20. 170 was measured and rejected: it affords the second
+tower and nothing else, so the board leaks on wave 1. **If you change tower
+costs again, re-measure this purse in the same pass** — the two numbers only
+mean anything together. The Fork (250) and The Coils (200) already open with
+three towers and two, so they were left alone.

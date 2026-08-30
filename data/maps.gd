@@ -6,7 +6,23 @@ const DEFS := {
 	&"demoMap": {
 		"label": "The Pass",
 		"cols": 23, "rows": 14, "tile_size": 48,
-		"tower_budget": 12, "starting_gold": 100,
+		# 200, raised from 100 on 2026-08-30. The tower costs that landed the
+		# same day left this purse buying exactly ONE tower - a Basic at 35, or
+		# a Magic at 80 - because the second Basic escalates to 135. Measured
+		# against a player who merely spends, on this map:
+		#
+		#   start   opening   wave 1   lives lost by w3   board full   lives left
+		#     100   1 tower   0 leaks                 7          w13           10
+		#     170   2 towers   1 leak                 6          w12           12
+		#     200   2 towers  0 leaks                 2          w13           18
+		#     250   3 towers  0 leaks                 0          w13            9
+		#
+		# 200 buys the second tower without buying away the wave-2 sting, and
+		# leaves the build-out exactly where the cost change put it: the budget
+		# still fills at wave 13 and still maxes at 20. 170 is worse than either
+		# neighbour - it affords the tower and nothing else, so the board is
+		# thin enough to leak on wave 1.
+		"tower_budget": 12, "starting_gold": 200,
 		"biome": &"forest",
 		"layout": "res://data/maps/the_pass.txt",
 		"next": &"map2",

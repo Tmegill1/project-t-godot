@@ -34,10 +34,15 @@ func _full_board_cost() -> int:
 			total += UpgradesSim.total_invested(kind, MAXED)
 	return total
 
-## FINDING (2026-08-29): the full twelve-tower maxed board IS affordable -
-## 16,199 gold of income against an 11,415 cost, 4,784 to spare - so the
-## shut-out threshold of ten maxed towers is a board a player genuinely
-## reaches, and Task 8 sets its tiers against twelve.
+## FINDING (2026-08-29, re-measured twice since): the full twelve-tower maxed
+## board IS affordable - 16,299 gold of income against a 14,310 cost, 1,889 to
+## spare - so the shut-out threshold of ten maxed towers is a board a player
+## genuinely reaches, and the difficulty tiers are set against twelve.
+##
+## The headroom was 4,784 when this was first measured. The 2026-08-30 pacing
+## change spent most of it deliberately: a board that cost 11,415 against this
+## income completed itself by wave 7 of 20. Income has not moved except by the
+## 100 gold The Pass's opening purse gained; the price of a board did.
 ##
 ## Read it as generous rather than exact: the board is fully built and fully
 ## maxed from wave 1 here, so it kills everything and collects every reward,
@@ -72,7 +77,7 @@ func test_a_full_run_income_against_a_full_board_cost() -> bool:
 	# PINNED from the run above on 2026-08-29. The point of the pin is that a
 	# change to the gold curve or to the tower caps has to move it
 	# deliberately rather than quietly.
-	assert_eq(income + starting, 16199, "run income is the measured figure")
+	assert_eq(income + starting, 16299, "run income is the measured figure")
 	assert_eq(cost, 14310, "full-board cost is the measured figure")
 	return true
 
