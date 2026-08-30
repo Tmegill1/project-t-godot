@@ -16,6 +16,8 @@ script = ExtResource("2_map")
 
 [node name="Projectiles" type="Node2D" parent="."]
 
+[node name="Effects" type="Node2D" parent="."]
+
 [node name="PlacementPreview" type="Sprite2D" parent="."]
 visible = false
 z_index = 2

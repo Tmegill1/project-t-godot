@@ -784,6 +784,58 @@ func test_game_over_does_not_fire_twice_for_a_second_leak_after_the_run_is_finis
 # Splash / hit resolution
 # --------------------------------------------------------------------------
 
+func test_a_mortar_hit_explodes_where_its_shell_landed() -> bool:
+	var b := _ready_board()
+	var target := _ready_enemy_under(b._enemies_root, &"goblin", Vector2(420, 360))
+	var effects_root := b.get_node_or_null("Effects")
+	assert_true(effects_root != null, "the board has a dedicated root for transient impact effects")
+	if effects_root == null:
+		target.free(); b.free()
+		return true
+
+	b._on_projectile_hit(target, {"damage": 1.0}, 48.0, &"mortar")
+
+	assert_eq(effects_root.get_child_count(), 1, "a mortar shell creates one explosion")
+	var effect := effects_root.get_child(0) as MortarExplosion
+	assert_true(effect != null, "the spawned effect is the mortar explosion scene")
+	assert_eq(effect.global_position, target.global_position, "the explosion is centered where the shell landed")
+	assert_eq(effect.scale, Vector2(0.75, 0.75), "the visible diameter matches the 48px splash radius")
+	target.free(); b.free()
+	return true
+
+## The rule this file exists to protect. Splash is NOT artillery: Basic reaches
+## 45px of splash at Fragmentation and 75px at Saturation, and Long Range
+## reaches 55px at Shellburst, so gating the blast on "splash > 0" drew a shell
+## burst over a crystal bolt and an arrow. Only the mortar explodes.
+func test_no_other_tower_explodes_however_wide_its_splash() -> bool:
+	for kind in [&"basic", &"long", &"fast"]:
+		var b := _ready_board()
+		var target := _ready_enemy_under(b._enemies_root, &"goblin", Vector2(420, 360))
+		var effects_root := b.get_node_or_null("Effects")
+
+		b._on_projectile_hit(target, {"damage": 1.0}, 75.0, kind)
+
+		assert_eq(effects_root.get_child_count(), 0,
+			"%s never draws the mortar's explosion, even at 75px of splash" % kind)
+		target.free(); b.free()
+	return true
+
+## The blast is drawn AFTER the impact resolves, so it never covers a frame in
+## which the damage had not yet been applied.
+func test_the_explosion_follows_the_damage_it_illustrates() -> bool:
+	var b := _ready_board()
+	var target := _ready_enemy_under(b._enemies_root, &"goblin", Vector2(420, 360))
+	var neighbour := _ready_enemy_under(b._enemies_root, &"goblin", Vector2(450, 360))
+	var before: float = neighbour.sim["health"]
+	var effects_root := b.get_node_or_null("Effects")
+
+	b._on_projectile_hit(target, {"damage": 1.0}, 60.0, &"mortar")
+
+	assert_true(neighbour.sim["health"] < before, "the splash landed on the neighbour")
+	assert_eq(effects_root.get_child_count(), 1, "and the explosion was drawn for it")
+	target.free(); neighbour.free(); b.free()
+	return true
+
 func test_splash_hit_damages_enemies_inside_the_radius_and_spares_ones_outside() -> bool:
 	var b := _ready_board()
 	var target := _ready_enemy_under(b._enemies_root, &"goblin", Vector2(500, 500))
@@ -793,7 +845,7 @@ func test_splash_hit_damages_enemies_inside_the_radius_and_spares_ones_outside()
 	var health_inside: float = inside.sim["health"]
 	var health_outside: float = outside.sim["health"]
 
-	b._on_projectile_hit(target, {"damage": 1.0}, 40.0)  # radius 40 catches "inside" (30), not "outside" (60)
+	b._on_projectile_hit(target, {"damage": 1.0}, 40.0, &"basic")  # radius 40 catches "inside" (30), not "outside" (60)
 
 	assert_true(target.sim["health"] < health_target, "the direct target takes damage")
 	assert_true(inside.sim["health"] < health_inside, "an enemy inside the splash radius takes damage")
@@ -809,7 +861,7 @@ func test_splash_hit_includes_an_enemy_at_exactly_the_radius_boundary() -> bool:
 	var at_boundary := _ready_enemy_under(b._enemies_root, &"goblin", Vector2(40, 0))  # exactly 40px away
 	var health_before: float = at_boundary.sim["health"]
 
-	b._on_projectile_hit(target, {"damage": 1.0}, 40.0)  # splash radius equals the distance exactly
+	b._on_projectile_hit(target, {"damage": 1.0}, 40.0, &"basic")  # splash radius equals the distance exactly
 
 	assert_true(at_boundary.sim["health"] < health_before, "an enemy exactly at the splash radius is hit (<=, not <)")
 	target.free(); at_boundary.free(); b.free()
@@ -822,7 +874,7 @@ func test_zero_splash_radius_does_not_touch_a_co_located_enemy() -> bool:
 	var co_located := _ready_enemy_under(b._enemies_root, &"goblin", Vector2(200, 200))  # distance 0
 	var health_before: float = co_located.sim["health"]
 
-	b._on_projectile_hit(target, {"damage": 1.0}, 0.0)
+	b._on_projectile_hit(target, {"damage": 1.0}, 0.0, &"basic")
 
 	assert_eq(co_located.sim["health"], health_before,
 		"a splash radius of exactly zero touches nothing but the direct target (<= 0.0, not < 0.0)")
@@ -837,7 +889,7 @@ func test_splash_hit_does_not_double_damage_the_direct_target() -> bool:
 	var target := _ready_enemy_under(b._enemies_root, &"goblin", Vector2(0, 0))
 	var health_before: float = target.sim["health"]
 
-	b._on_projectile_hit(target, {"damage": 1.0}, 100.0)  # generous radius that trivially covers the target itself
+	b._on_projectile_hit(target, {"damage": 1.0}, 100.0, &"basic")  # generous radius that trivially covers the target itself
 
 	assert_eq(target.sim["health"], health_before - 1.0,
 		"the target takes exactly one hit's worth of damage, not two, despite sitting at distance 0 from itself")
@@ -856,7 +908,7 @@ func test_splash_hit_skips_non_enemy_children_of_the_enemies_root() -> bool:
 	var neighbor := _ready_enemy_under(b._enemies_root, &"goblin", Vector2(10, 0))
 	var neighbor_health_before: float = neighbor.sim["health"]
 
-	b._on_projectile_hit(target, {"damage": 1.0}, 50.0)
+	b._on_projectile_hit(target, {"damage": 1.0}, 50.0, &"basic")
 
 	assert_true(neighbor.sim["health"] < neighbor_health_before,
 		"a real Enemy after a non-Enemy sibling in iteration order still takes splash damage")
@@ -884,7 +936,7 @@ func test_splash_over_an_already_dying_enemy_pays_no_second_reward() -> bool:
 
 	# A second hit lands on the same corpse - e.g. a splash from another
 	# projectile already in flight when the first one landed.
-	b._on_projectile_hit(dying, {"damage": 5.0}, 20.0)  # radius also covers alive_neighbor
+	b._on_projectile_hit(dying, {"damage": 5.0}, 20.0, &"basic")  # radius also covers alive_neighbor
 
 	assert_eq(b.get_gold(), gold_after_first_kill, "no second reward is paid for hitting an already-dying enemy")
 	assert_true(alive_neighbor.sim["health"] < neighbor_health_before,

@@ -1,0 +1,11 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Texture2D" path="res://assets/art/effects/mortar_explosion.png" id="1_texture"]
+[ext_resource type="Script" path="res://game/mortar_explosion.gd" id="2_script"]
+
+[node name="MortarExplosion" type="Sprite2D"]
+z_index = 5
+texture_filter = 1
+texture = ExtResource("1_texture")
+hframes = 6
+script = ExtResource("2_script")

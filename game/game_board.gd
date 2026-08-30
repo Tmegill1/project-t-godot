@@ -26,6 +26,7 @@ signal tower_sold(kind: StringName)
 const ENEMY_SCENE := preload("res://game/enemy.tscn")
 const TOWER_SCENE := preload("res://game/tower.tscn")
 const PROJECTILE_SCENE := preload("res://game/projectile.tscn")
+const MORTAR_EXPLOSION_SCENE := preload("res://game/mortar_explosion.tscn")
 
 ## Width the build panel needs beside the map.
 ##
@@ -82,6 +83,7 @@ var _spawn_rng := Rng.new(Seeds.DEFAULT_SPAWN_SEED)
 @onready var _towers_root: Node2D = $Towers
 @onready var _enemies_root: Node2D = $Enemies
 @onready var _projectiles_root: Node2D = $Projectiles
+@onready var _effects_root: Node2D = $Effects
 @onready var _ghost: Sprite2D = $PlacementPreview
 @onready var _ghost_range: RangeIndicator = $PreviewRange
 
@@ -594,25 +596,46 @@ func _on_tower_fired(target_node: Node2D, source: Dictionary,
 	var projectile: Projectile = PROJECTILE_SCENE.instantiate()
 	_projectiles_root.add_child(projectile)
 	projectile.global_position = tower.global_position
-	projectile.hit.connect(_on_projectile_hit)
+	# The kind is bound at connect time rather than added to the `hit` signal:
+	# the projectile carries what it needs to ARRIVE, and which tower fired it
+	# is the board's business, not the shot's.
+	projectile.hit.connect(_on_projectile_hit.bind(tower.kind))
 	projectile.launch(target_node, source,
 		float(tower.get_def()["projectile_speed"]),
 		bool(tower.get_def()["projectile_arcs"]), splash, tower.kind)
 
-func _on_projectile_hit(target_node: Node2D, source: Dictionary, splash: float) -> void:
+func _on_projectile_hit(target_node: Node2D, source: Dictionary, splash: float,
+		tower_kind: StringName) -> void:
 	if not is_instance_valid(target_node):
 		return
+	# Captured before the hit resolves, so the blast is drawn where the shell
+	# actually landed rather than wherever the target ended up.
+	var impact_position := target_node.global_position
 	target_node.take_damage(source)
-	if splash <= 0.0:
-		return
-	for enemy in _enemies_root.get_children():
-		# The primary target took its hit above, so it is excluded here; the
-		# geometry itself is Damage.in_splash, the single copy of the splash
-		# rule that sim/harness.gd's balance tests also run.
-		if enemy == target_node or not enemy is Enemy:
-			continue
-		if Damage.in_splash(target_node.global_position, enemy.global_position, splash):
-			enemy.take_damage(source)
+
+	if splash > 0.0:
+		for enemy in _enemies_root.get_children():
+			# The primary target took its hit above, so it is excluded here; the
+			# geometry itself is Damage.in_splash, the single copy of the splash
+			# rule that sim/harness.gd's balance tests also run.
+			if enemy == target_node or not enemy is Enemy:
+				continue
+			if Damage.in_splash(impact_position, enemy.global_position, splash):
+				enemy.take_damage(source)
+
+	# AFTER the impact resolves, and for the mortar alone.
+	#
+	# Splash is not artillery. Basic reaches 45px of splash at its
+	# Fragmentation tier and 75px at Saturation, and Long Range reaches 55px at
+	# Shellburst, so the earlier "splash > 0" rule drew a shell burst over a
+	# crystal bolt and an arrow. Only the mortar throws an explosion, and only
+	# once the damage it illustrates has been dealt.
+	if tower_kind == &"mortar":
+		var explosion: MortarExplosion = MORTAR_EXPLOSION_SCENE.instantiate()
+		_effects_root.add_child(explosion)
+		explosion.global_position = impact_position
+		explosion.setup(splash)
+		_play_sound(&"explosion")
 
 ## Selection is announced as well as drawn: the range ring is the board's own
 ## feedback, and the inspector is a separate view that has to follow it.
