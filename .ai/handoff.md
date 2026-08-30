@@ -6,8 +6,11 @@ proceeds so Codex can take over at any point.**
 ## Where the work is
 
 - Repository: `/home/tylermegill/Projects/project-t-godot`
-- Branch: **`feat/pause-menu`**, off `master` at `22eea1f`. **Complete**, suite
-  green at **13,781 checks across 46 files, exit 0**. Nothing pushed or merged.
+- Branch: **`feat/pause-menu`**, merged to `master` as `77f19f7` on the owner's
+  instruction. Both branches pushed; the Pages deploy succeeded, so the pause
+  menu is live. Suite green on the merged result at **13,781 checks across 46
+  files, exit 0**.
+- **Nothing is in flight.** Everything in this session is merged and deployed.
 - **Verified in the running game, not only in tests:** Escape raised the menu
   (one instance, despite two presses — the re-entry guard holds, and
   `process_mode` read 3 = `WHEN_PAUSED` live); Continue freed it and play
