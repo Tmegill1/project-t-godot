@@ -147,8 +147,7 @@ func test_every_tier_has_a_nonempty_description() -> bool:
 # resolve_tower_stats would silently ignore it.
 func test_every_effect_key_is_recognised() -> bool:
 	var known := [
-		&"damage_bonus", &"fire_rate_bonus_ms",
-		&"damage_multiplier", &"fire_rate_multiplier", &"range_multiplier",
+		&"damage_bonus", &"fire_rate_bonus_ms", &"range_multiplier",
 		&"pierce_bonus", &"splash_radius", &"detection",
 		&"slow_factor", &"slow_duration_ms",
 		&"gold_multiplier", &"bonus_gold_per_kill",
@@ -210,4 +209,18 @@ func test_tier_effects_match_the_reference_table() -> bool:
 						"%s/%s tier %d carries %s" % [kind, branch, i + 1, key])
 					assert_eq(actual.get(key), want[key],
 						"%s/%s tier %d %s" % [kind, branch, i + 1, key])
+	return true
+
+# Damage and fire rate are flat now, and the multiplier keys are gone from the
+# resolver. A tier carrying one would be silently ignored, which is worse than
+# a crash - so the table is checked rather than trusted.
+func test_no_tier_carries_a_dead_multiplier_key() -> bool:
+	for kind in Towers.KINDS:
+		for branch in Upgrades.BRANCHES:
+			for tier in Upgrades.DEFS[kind][branch]["tiers"]:
+				var effects: Dictionary = tier["effects"]
+				assert_false(effects.has(&"damage_multiplier"),
+					"%s/%s %s has no damage_multiplier" % [kind, branch, tier["label"]])
+				assert_false(effects.has(&"fire_rate_multiplier"),
+					"%s/%s %s has no fire_rate_multiplier" % [kind, branch, tier["label"]])
 	return true

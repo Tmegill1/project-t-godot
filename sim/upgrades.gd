@@ -123,10 +123,15 @@ static func sprite_frame_for(kind: StringName, tiers: Dictionary) -> int:
 
 ## A tower's live combat stats after upgrades.
 ##
-## Multipliers compose, flat bonuses add, and radii, slows and gold take the
-## strongest value rather than stacking - otherwise tier 4's big splash would
-## be added to tier 2's small one and the numbers would drift from what the
-## tier text says.
+## Damage and fire rate are FLAT: bonuses add, and the interval floors at
+## MIN_FIRE_RATE_MS. They used to be multipliers, and compounding is what made
+## the deep tiers explode - two tiers of x1.4 is +96%, not +80%, and it got
+## worse the deeper a branch went. Range is the one stat that still multiplies,
+## because a percentage of reach is what reach means.
+##
+## Radii, slows and gold take the strongest value rather than stacking -
+## otherwise tier 4's big splash would be added to tier 2's small one and the
+## numbers would drift from what the tier text says.
 static func resolve_tower_stats(kind: StringName, tiers: Dictionary) -> Dictionary:
 	var base: Dictionary = Towers.DEFS[kind]
 	var stats := {
@@ -162,12 +167,8 @@ static func resolve_tower_stats(kind: StringName, tiers: Dictionary) -> Dictiona
 ## path runs, so a test that calls it is testing the rules rather than a
 ## parallel implementation of them.
 static func _apply_effects(stats: Dictionary, effects: Dictionary) -> Dictionary:
-	if effects.has(&"damage_multiplier"):
-		stats["damage"] *= float(effects[&"damage_multiplier"])
 	if effects.has(&"damage_bonus"):
 		stats["damage"] += float(effects[&"damage_bonus"])
-	if effects.has(&"fire_rate_multiplier"):
-		stats["fire_rate"] *= float(effects[&"fire_rate_multiplier"])
 	if effects.has(&"fire_rate_bonus_ms"):
 		stats["fire_rate"] = maxf(MIN_FIRE_RATE_MS,
 			stats["fire_rate"] - float(effects[&"fire_rate_bonus_ms"]))

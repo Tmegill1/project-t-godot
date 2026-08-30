@@ -7,7 +7,7 @@ and end of every task so Codex can take over at any point.**
 
 - Repository: `/home/tylermegill/Projects/project-t-godot`
 - Branch: **`feat/upgrade-branch-balance`**, off `master` at `6582655`.
-- Executing the plan inline. Tasks 1-3 done; Task 4 next.
+- Executing the plan inline. Tasks 1-4 done; Task 5 next.
 - **The suite is RED on exactly one assertion, deliberately.**
   `test_hard_costs_the_strongest_board_real_lives_without_ending_the_run`: the
   strongest board now loses 203 of its 15 lives on Hard's wave 20, because
@@ -73,8 +73,8 @@ everything."*
 | 1 | Flat damage and fire rate, and a floor under it | ✅ done |
 | 2 | Convert every tier to flat damage and fire rate | ✅ done |
 | 3 | Return area damage to the Mortar | ✅ done — **suite red on one known assertion** |
-| 4 | Delete the multiplier keys | 🔄 **next** |
-| 5 | Close the branch spread, and pin a bound | ⬜ |
+| 4 | Delete the multiplier keys | ✅ done |
+| 5 | Close the branch spread, and pin a bound | 🔄 **next** |
 | 6 | Re-sweep Hard and Nightmare | ⬜ |
 | 7 | A stat line generated from the effects | ⬜ |
 | 8 | The panel says what the tier does | ⬜ |
