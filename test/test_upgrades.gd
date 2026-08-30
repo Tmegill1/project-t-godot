@@ -505,3 +505,45 @@ func test_a_maxed_magic_tower_rides_the_floor_against_late_armour() -> bool:
 		"the floor, not the pierce, is what carries magic against a wave 20 ogre")
 	assert_true(r["damage_dealt"] > 0.0, "and it is never nothing")
 	return true
+
+# --------------------------------------------------------------------------
+# Flat damage and fire rate
+# --------------------------------------------------------------------------
+#
+# These call UpgradesSim._apply_effects directly rather than through a tier.
+# At this point no tier in the shipped table carries a flat key, and inventing
+# one to test against would mean testing a fixture instead of the rules. The
+# leading underscore is convention, not access control - this is the same
+# function resolve_tower_stats runs, not a parallel implementation.
+
+# Flat bonuses ADD rather than compose. That is the whole point of the change:
+# two tiers of +6 is +12, where two tiers of x1.4 was +96%, and the deeper the
+# branch went the worse the shape got.
+func test_resolve_adds_flat_damage_bonuses() -> bool:
+	var stats := UpgradesSim.resolve_tower_stats(&"basic", UpgradesSim.empty_tiers())
+	var base: float = stats["damage"]
+	UpgradesSim._apply_effects(stats, {&"damage_bonus": 6.0})
+	UpgradesSim._apply_effects(stats, {&"damage_bonus": 6.0})
+	assert_almost_eq(stats["damage"], base + 12.0, 0.0001,
+		"two flat bonuses add rather than compose")
+	return true
+
+# Lower is faster, so a fire-rate bonus is SUBTRACTED from the interval.
+func test_resolve_subtracts_flat_fire_rate_bonuses() -> bool:
+	var stats := UpgradesSim.resolve_tower_stats(&"basic", UpgradesSim.empty_tiers())
+	var base: float = stats["fire_rate"]
+	UpgradesSim._apply_effects(stats, {&"fire_rate_bonus_ms": 200.0})
+	assert_almost_eq(stats["fire_rate"], base - 200.0, 0.0001,
+		"a fire-rate bonus shortens the interval")
+	return true
+
+# Flat bonuses do not compound, but they do not asymptote either: without a
+# floor a deep branch walks the interval to zero and then negative, and a
+# tower firing every -50ms is an infinite damage source.
+func test_a_tower_can_never_out_fire_the_floor() -> bool:
+	var stats := UpgradesSim.resolve_tower_stats(&"fast", UpgradesSim.empty_tiers())
+	UpgradesSim._apply_effects(stats, {&"fire_rate_bonus_ms": 999999.0})
+	assert_almost_eq(stats["fire_rate"], UpgradesSim.MIN_FIRE_RATE_MS, 0.0001,
+		"the interval floors rather than going negative")
+	assert_true(UpgradesSim.MIN_FIRE_RATE_MS > 0.0, "and the floor is positive")
+	return true

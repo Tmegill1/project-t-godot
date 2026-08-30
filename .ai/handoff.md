@@ -7,8 +7,12 @@ and end of every task so Codex can take over at any point.**
 
 - Repository: `/home/tylermegill/Projects/project-t-godot`
 - Branch: **`feat/upgrade-branch-balance`**, off `master` at `6582655`.
-- Nothing implemented yet. The branch holds **the spec and the plan only**;
-  the nine implementation tasks have not started.
+- Executing the plan inline. Task 1 done; Task 2 next.
+- **One deviation from the plan, deliberate:** it specified a
+  `_apply_effect_for_test` wrapper around `_apply_effects`. The wrapper was
+  dropped — GDScript's leading underscore is convention, not access control, so
+  the tests call `UpgradesSim._apply_effects` directly. A production function
+  existing only to be called by a test is worse than the thing it was avoiding.
 - Spec: `docs/superpowers/specs/2026-08-30-upgrade-branch-balance-design.md`
 - Plan: `docs/superpowers/plans/2026-08-30-upgrade-branch-balance.md` (9 tasks)
 
@@ -54,8 +58,8 @@ everything."*
 |---|---|---|
 | — | Spec | ✅ committed — `Design the upgrade branch rebalance` |
 | — | Plan | ✅ committed — this handoff's commit |
-| 1 | Flat damage and fire rate, and a floor under it | ⬜ **next** |
-| 2 | Convert every tier to flat damage and fire rate | ⬜ |
+| 1 | Flat damage and fire rate, and a floor under it | ✅ done |
+| 2 | Convert every tier to flat damage and fire rate | 🔄 **next** |
 | 3 | Return area damage to the Mortar | ⬜ |
 | 4 | Delete the multiplier keys | ⬜ |
 | 5 | Close the branch spread, and pin a bound | ⬜ |
