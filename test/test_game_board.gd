@@ -1689,3 +1689,47 @@ func test_an_unknown_difficulty_falls_back_to_normal() -> bool:
 		"a tier the table does not know never reaches the rules")
 	GameBoard.pending_difficulty = &""
 	return true
+
+# --------------------------------------------------------------------------
+# Escape: cancel first, pause second
+# --------------------------------------------------------------------------
+
+# Escape already cancelled a selected tower or a half-made placement before the
+# pause menu existed. It still does - the menu only opens when there is nothing
+# left to back out of, so Escape backs out one level at a time and never yanks
+# the player into a menu mid-placement.
+func test_escape_clears_a_pending_build_rather_than_pausing() -> bool:
+	var b := _ready_board()
+	b.select_tower_kind(&"basic")
+	var asked := {"n": 0}
+	b.pause_requested.connect(func(): asked["n"] += 1)
+
+	b.request_escape()
+
+	assert_eq(b.get_selected_kind(), &"", "the pending build is cleared")
+	assert_eq(asked["n"], 0, "and no pause was requested")
+	b.free()
+	return true
+
+func test_escape_asks_for_a_pause_when_there_is_nothing_to_clear() -> bool:
+	var b := _ready_board()
+	var asked := {"n": 0}
+	b.pause_requested.connect(func(): asked["n"] += 1)
+
+	b.request_escape()
+
+	assert_eq(asked["n"], 1, "with nothing pending, Escape asks for the pause menu")
+	b.free()
+	return true
+
+func test_escape_does_nothing_once_the_run_has_ended() -> bool:
+	var b := _ready_board()
+	var asked := {"n": 0}
+	b.pause_requested.connect(func(): asked["n"] += 1)
+	b._run_finished = true
+
+	b.request_escape()
+
+	assert_eq(asked["n"], 0, "the end screens own the input once a run is over")
+	b.free()
+	return true
