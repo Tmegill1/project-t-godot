@@ -27,6 +27,11 @@ const MIN_TAP_SIZE := Vector2(120, 56)
 const KICKER_FONT_SIZE := 11
 const NAME_FONT_SIZE := 20
 const COUNTER_FONT_SIZE := 14
+
+## Smaller and dimmer than the branch counter: this is detail under a control,
+## not a heading of its own.
+const SUMMARY_FONT_SIZE := 11
+const SUMMARY_COLOR := Color(0.72, 0.76, 0.72)
 const KICKER_COLOR := Color(0.62, 0.66, 0.62)
 const NAME_COLOR := Color(0.94, 0.96, 0.94)
 
@@ -39,6 +44,7 @@ const BUYABLE_CORNER_RADIUS := 4
 var _board: GameBoard
 var _tower: Tower = null
 var _rows := {}
+var _summaries := {}
 var _counters := {}
 var _kicker: Label = null
 var _name: Label = null
@@ -65,6 +71,13 @@ func has_tower() -> bool:
 ## shown - the nodes persist, but they are not a view of anything.
 func branch_rows() -> Dictionary:
 	return _rows if has_tower() else {}
+
+## What the panel is currently saying the next tier on a branch does. Empty
+## when there is no next tier.
+func summary_text(branch: StringName) -> String:
+	if not _summaries.has(branch):
+		return ""
+	return (_summaries[branch] as Label).text
 
 func sell_row() -> Button:
 	return _sell if has_tower() else null
@@ -111,6 +124,18 @@ func _build_rows() -> void:
 		button.pressed.connect(_on_branch_pressed.bind(branch))
 		_rows_root.add_child(button)
 		_rows[branch] = button
+
+		# A Label, not a fourth line on the Button: the sidebar is 140px and a
+		# Button does not wrap its text, which is why what a tier does was a
+		# tooltip until now and invisible on a touch screen. Labels wrap, so
+		# the same 140px holds a short line over two or three rows instead of
+		# clipping one long one.
+		var summary := Label.new()
+		summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		summary.add_theme_font_size_override(&"font_size", SUMMARY_FONT_SIZE)
+		summary.add_theme_color_override(&"font_color", SUMMARY_COLOR)
+		_rows_root.add_child(summary)
+		_summaries[branch] = summary
 
 	# One cycling button rather than one per priority. Five side-by-side
 	# controls would report a minimum width the 140px sidebar cannot hold -
@@ -165,6 +190,8 @@ func _refresh_gating() -> void:
 			var reason := "maxed" if tier >= UpgradesSim.MAX_TIER else "locked"
 			button.text = "%s\n%s" % [definition["label"], reason]
 			button.tooltip_text = definition["summary"]
+			# No next tier, so nothing to describe.
+			_summaries[branch].text = ""
 			button.disabled = true
 			_set_buyable(button, false)
 			continue
@@ -175,7 +202,11 @@ func _refresh_gating() -> void:
 		# 30g" on one line was measured overflowing it. The tier's description
 		# is the tooltip for the same reason.
 		button.text = "%s\n%s\n%d gold" % [definition["label"], next["label"], price]
+		# The description stays as the tooltip - it carries flavour and the
+		# dormant-effect notes. What goes under the button is generated from
+		# the effects themselves, so the number shown is the number applied.
 		button.tooltip_text = String(next["description"])
+		_summaries[branch].text = Upgrades.effect_summary(next["effects"])
 		var affordable := EconomySim.can_afford(_board.get_gold(), price)
 		button.disabled = not affordable
 		_set_buyable(button, affordable)

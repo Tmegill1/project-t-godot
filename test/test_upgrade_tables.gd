@@ -17,7 +17,7 @@ const EXPECTED_COSTS := {
 
 const EXPECTED_TIER_LABELS := {
 	&"basic": {
-		&"sustained": ["Quick Loader", "Drum Feed", "Fragmentation", "Saturation"],
+		&"sustained": ["Quick Loader", "Drum Feed", "Open Bolt", "Sustained Fire"],
 		&"burst": ["Heavy Rounds", "Rifled Barrel", "Spotter", "Executioner"],
 	},
 	&"fast": {
@@ -29,7 +29,7 @@ const EXPECTED_TIER_LABELS := {
 		&"burst": ["Packed Charge", "Heavy Shell", "Siege Charge", "Bunker Buster"],
 	},
 	&"long": {
-		&"sustained": ["Long Barrel", "Rapid Loader", "Shellburst", "Carpet Fire"],
+		&"sustained": ["Long Barrel", "Rapid Loader", "Autoloader", "Overwatch"],
 		&"burst": ["Dense Slug", "Shaped Charge", "Tungsten Core", "Siege Cannon"],
 	},
 }
@@ -38,58 +38,58 @@ const EXPECTED_TIER_LABELS := {
 const EXPECTED_EFFECTS := {
 	&"basic": {
 		&"sustained": [
-			{&"fire_rate_multiplier": 0.8},
-			{&"fire_rate_multiplier": 0.8},
-			{&"splash_radius": 45.0, &"fire_rate_multiplier": 0.9},
-			{&"damage_multiplier": 1.5, &"splash_radius": 75.0},
+			{&"fire_rate_bonus_ms": 200.0},
+			{&"fire_rate_bonus_ms": 160.0},
+			{&"fire_rate_bonus_ms": 140.0, &"range_multiplier": 1.15},
+			{&"fire_rate_bonus_ms": 150.0, &"damage_bonus": 2.0},
 		],
 		&"burst": [
-			{&"damage_multiplier": 1.4},
-			{&"damage_multiplier": 1.4},
-			{&"detection": true, &"damage_multiplier": 1.5},
-			{&"range_multiplier": 1.25, &"damage_multiplier": 2.0},
+			{&"damage_bonus": 2.0},
+			{&"damage_bonus": 2.0},
+			{&"detection": true, &"damage_bonus": 4.0},
+			{&"damage_bonus": 12.0, &"range_multiplier": 1.25},
 		],
 	},
 	&"fast": {
 		&"sustained": [
-			{&"fire_rate_multiplier": 0.75},
-			{&"fire_rate_multiplier": 0.75},
+			{&"fire_rate_bonus_ms": 125.0},
+			{&"fire_rate_bonus_ms": 94.0},
 			{&"slow_duration_ms": 1500, &"slow_factor": 0.7},
-			{&"slow_duration_ms": 2500, &"slow_factor": 0.45, &"fire_rate_multiplier": 0.8},
+			{&"slow_duration_ms": 2500, &"slow_factor": 0.45, &"fire_rate_bonus_ms": 56.0},
 		],
 		&"burst": [
-			{&"damage_multiplier": 1.5},
+			{&"damage_bonus": 1.0},
 			{&"bonus_gold_per_kill": 1},
-			{&"gold_multiplier": 1.6, &"damage_multiplier": 1.4},
+			{&"gold_multiplier": 1.6, &"damage_bonus": 1.0},
 			{&"gold_multiplier": 2.0, &"bonus_gold_per_kill": 2},
 		],
 	},
 	&"mortar": {
 		&"sustained": [
 			{&"splash_radius": 70.0},
-			{&"fire_rate_multiplier": 0.75},
-			{&"splash_radius": 95.0, &"fire_rate_multiplier": 0.85},
-			{&"damage_multiplier": 1.5, &"splash_radius": 130.0},
+			{&"fire_rate_bonus_ms": 500.0},
+			{&"splash_radius": 95.0, &"fire_rate_bonus_ms": 225.0},
+			{&"splash_radius": 130.0, &"damage_bonus": 3.0},
 		],
 		&"burst": [
-			{&"damage_multiplier": 1.6},
-			{&"damage_multiplier": 1.6},
-			{&"range_multiplier": 1.2, &"damage_multiplier": 2.0},
-			{&"damage_multiplier": 2.0},
+			{&"damage_bonus": 3.0},
+			{&"damage_bonus": 5.0},
+			{&"damage_bonus": 13.0, &"range_multiplier": 1.2},
+			{&"damage_bonus": 25.0},
 		],
 	},
 	&"long": {
 		&"sustained": [
 			{&"range_multiplier": 1.2},
-			{&"fire_rate_multiplier": 0.7},
-			{&"splash_radius": 55.0},
-			{&"range_multiplier": 1.33, &"splash_radius": 90.0},
+			{&"fire_rate_bonus_ms": 450.0},
+			{&"fire_rate_bonus_ms": 250.0},
+			{&"range_multiplier": 1.33, &"fire_rate_bonus_ms": 200.0},
 		],
 		&"burst": [
-			{&"damage_multiplier": 1.4},
-			{&"damage_multiplier": 1.4},
-			{&"pierce_bonus": 5, &"damage_multiplier": 1.3},
-			{&"pierce_bonus": 10, &"damage_multiplier": 2.0},
+			{&"damage_bonus": 6.0},
+			{&"damage_bonus": 8.0},
+			{&"pierce_bonus": 5, &"damage_bonus": 9.0},
+			{&"pierce_bonus": 10, &"damage_bonus": 38.0},
 		],
 	},
 }
@@ -147,7 +147,7 @@ func test_every_tier_has_a_nonempty_description() -> bool:
 # resolve_tower_stats would silently ignore it.
 func test_every_effect_key_is_recognised() -> bool:
 	var known := [
-		&"damage_multiplier", &"fire_rate_multiplier", &"range_multiplier",
+		&"damage_bonus", &"fire_rate_bonus_ms", &"range_multiplier",
 		&"pierce_bonus", &"splash_radius", &"detection",
 		&"slow_factor", &"slow_duration_ms",
 		&"gold_multiplier", &"bonus_gold_per_kill",
@@ -167,7 +167,7 @@ func test_tungsten_core_carries_an_interim_live_effect() -> bool:
 	var tier: Dictionary = Upgrades.DEFS[&"long"][&"burst"]["tiers"][2]
 	assert_eq(tier["label"], "Tungsten Core", "tier 3 of long/burst")
 	assert_eq(int(tier["effects"][&"pierce_bonus"]), 5, "keeps the reference's pierce")
-	assert_almost_eq(float(tier["effects"][&"damage_multiplier"]), 1.3, 0.0001,
+	assert_almost_eq(float(tier["effects"][&"damage_bonus"]), 9.0, 0.0001,
 		"carries interim damage so the purchase is not inert while pierce is dormant")
 	return true
 
@@ -209,4 +209,55 @@ func test_tier_effects_match_the_reference_table() -> bool:
 						"%s/%s tier %d carries %s" % [kind, branch, i + 1, key])
 					assert_eq(actual.get(key), want[key],
 						"%s/%s tier %d %s" % [kind, branch, i + 1, key])
+	return true
+
+# Damage and fire rate are flat now, and the multiplier keys are gone from the
+# resolver. A tier carrying one would be silently ignored, which is worse than
+# a crash - so the table is checked rather than trusted.
+func test_no_tier_carries_a_dead_multiplier_key() -> bool:
+	for kind in Towers.KINDS:
+		for branch in Upgrades.BRANCHES:
+			for tier in Upgrades.DEFS[kind][branch]["tiers"]:
+				var effects: Dictionary = tier["effects"]
+				assert_false(effects.has(&"damage_multiplier"),
+					"%s/%s %s has no damage_multiplier" % [kind, branch, tier["label"]])
+				assert_false(effects.has(&"fire_rate_multiplier"),
+					"%s/%s %s has no fire_rate_multiplier" % [kind, branch, tier["label"]])
+	return true
+
+# --------------------------------------------------------------------------
+# effect_summary
+# --------------------------------------------------------------------------
+
+func test_effect_summary_renders_flat_damage_and_fire_rate() -> bool:
+	assert_eq(Upgrades.effect_summary({&"damage_bonus": 12.0}), "+12 damage",
+		"flat damage reads as a plain addition")
+	assert_eq(Upgrades.effect_summary({&"fire_rate_bonus_ms": 400.0}),
+		"fires 0.4s faster", "a fire-rate bonus reads in seconds")
+	return true
+
+func test_effect_summary_joins_several_effects() -> bool:
+	assert_eq(
+		Upgrades.effect_summary({&"damage_bonus": 2.0, &"fire_rate_bonus_ms": 150.0}),
+		"+2 damage · fires 0.15s faster",
+		"effects join in a fixed order regardless of dictionary order")
+	return true
+
+func test_effect_summary_is_empty_for_no_effects() -> bool:
+	assert_eq(Upgrades.effect_summary({}), "", "nothing to say about nothing")
+	return true
+
+# THE anti-drift test. A hand-written description drifts the first time a value
+# is tuned, and this slice tuned all thirty-two of them. Generating the line
+# means the number on screen is the number the tier applies - but only while
+# every key the table uses is one the renderer knows.
+func test_every_tier_renders_a_summary() -> bool:
+	for kind in Towers.KINDS:
+		for branch in Upgrades.BRANCHES:
+			for tier in Upgrades.DEFS[kind][branch]["tiers"]:
+				var summary := Upgrades.effect_summary(tier["effects"])
+				assert_true(summary.length() > 0,
+					"%s/%s %s renders" % [kind, branch, tier["label"]])
+				assert_false(summary.contains("?"),
+					"%s/%s %s has no unrendered key" % [kind, branch, tier["label"]])
 	return true

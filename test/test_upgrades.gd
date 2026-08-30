@@ -319,25 +319,25 @@ func test_resolve_returns_base_stats_for_an_unupgraded_tower() -> bool:
 	assert_eq(s["bonus_gold_per_kill"], 0, "no flat gold by default")
 	return true
 
-# basic/sustained tiers 1 and 2 are 0.8 fire-rate multipliers each: they must
-# compose to 0.64, not overwrite to 0.8 or add to 1.6.
-func test_resolve_composes_multipliers_across_tiers() -> bool:
+# basic/sustained tiers 1 and 2 take 200ms and 160ms off the interval. They
+# must ADD to 360, not compose and not overwrite. This is the test that would
+# fail if multiplicative fire rate crept back in.
+func test_resolve_adds_fire_rate_bonuses_across_tiers() -> bool:
 	var base := float(Towers.DEFS[&"basic"]["fire_rate"])
 	var s := UpgradesSim.resolve_tower_stats(&"basic", _tiers(2, 0))
-	assert_almost_eq(s["fire_rate"], round(base * 0.8 * 0.8), 0.5,
-		"two 20% cuts compose to 0.64 of the base gap")
+	assert_almost_eq(s["fire_rate"], base - 360.0, 0.5,
+		"two flat cuts add to 360ms off the interval")
 	return true
 
-# mortar/burst tiers 1 and 2 (Packed Charge, Heavy Shell) are 1.6 damage
-# multipliers each with no other effects: they must compose to 2.56x, not
-# overwrite to 1.6x. Distinct from the fire-rate composition test above -
-# damage_multiplier is accumulated with its own `*=` in resolve_tower_stats,
-# so a mutation there would not be caught by the fire-rate test alone.
-func test_resolve_composes_damage_multipliers_across_tiers() -> bool:
+# mortar/burst tiers 1 and 2 (Packed Charge, Heavy Shell) add 3 and 5 damage
+# with no other effects: 8 more, not a multiple. Distinct from the fire-rate
+# test above - damage_bonus has its own `+=` in _apply_effects, so a mutation
+# there would not be caught by the fire-rate test alone.
+func test_resolve_adds_damage_bonuses_across_tiers() -> bool:
 	var base := float(Towers.DEFS[&"mortar"]["damage"])
 	var s := UpgradesSim.resolve_tower_stats(&"mortar", _tiers(0, 2))
-	assert_almost_eq(s["damage"], round(base * 1.6 * 1.6), 0.5,
-		"two 60% damage boosts compose to 2.56x base, not overwrite to 1.6x")
+	assert_almost_eq(s["damage"], base + 8.0, 0.5,
+		"two flat bonuses add to +8, not a product")
 	return true
 
 # long/sustained tiers 1 and 4 (Long Barrel, Carpet Fire) are the only tiers
@@ -504,4 +504,65 @@ func test_a_maxed_magic_tower_rides_the_floor_against_late_armour() -> bool:
 		float(st["damage"]) * Damage.MIN_DAMAGE_FRACTION, 0.001,
 		"the floor, not the pierce, is what carries magic against a wave 20 ogre")
 	assert_true(r["damage_dealt"] > 0.0, "and it is never nothing")
+	return true
+
+# --------------------------------------------------------------------------
+# Flat damage and fire rate
+# --------------------------------------------------------------------------
+#
+# These call UpgradesSim._apply_effects directly rather than through a tier.
+# At this point no tier in the shipped table carries a flat key, and inventing
+# one to test against would mean testing a fixture instead of the rules. The
+# leading underscore is convention, not access control - this is the same
+# function resolve_tower_stats runs, not a parallel implementation.
+
+# Flat bonuses ADD rather than compose. That is the whole point of the change:
+# two tiers of +6 is +12, where two tiers of x1.4 was +96%, and the deeper the
+# branch went the worse the shape got.
+func test_resolve_adds_flat_damage_bonuses() -> bool:
+	var stats := UpgradesSim.resolve_tower_stats(&"basic", UpgradesSim.empty_tiers())
+	var base: float = stats["damage"]
+	UpgradesSim._apply_effects(stats, {&"damage_bonus": 6.0})
+	UpgradesSim._apply_effects(stats, {&"damage_bonus": 6.0})
+	assert_almost_eq(stats["damage"], base + 12.0, 0.0001,
+		"two flat bonuses add rather than compose")
+	return true
+
+# Lower is faster, so a fire-rate bonus is SUBTRACTED from the interval.
+func test_resolve_subtracts_flat_fire_rate_bonuses() -> bool:
+	var stats := UpgradesSim.resolve_tower_stats(&"basic", UpgradesSim.empty_tiers())
+	var base: float = stats["fire_rate"]
+	UpgradesSim._apply_effects(stats, {&"fire_rate_bonus_ms": 200.0})
+	assert_almost_eq(stats["fire_rate"], base - 200.0, 0.0001,
+		"a fire-rate bonus shortens the interval")
+	return true
+
+# Flat bonuses do not compound, but they do not asymptote either: without a
+# floor a deep branch walks the interval to zero and then negative, and a
+# tower firing every -50ms is an infinite damage source.
+func test_a_tower_can_never_out_fire_the_floor() -> bool:
+	var stats := UpgradesSim.resolve_tower_stats(&"fast", UpgradesSim.empty_tiers())
+	UpgradesSim._apply_effects(stats, {&"fire_rate_bonus_ms": 999999.0})
+	assert_almost_eq(stats["fire_rate"], UpgradesSim.MIN_FIRE_RATE_MS, 0.0001,
+		"the interval floors rather than going negative")
+	assert_true(UpgradesSim.MIN_FIRE_RATE_MS > 0.0, "and the floor is positive")
+	return true
+
+# The Mortar's own comment in data/upgrades.gd states the rule: area damage
+# belongs to it, and "a tower that could take them would answer everything."
+# Basic and Long Range both used to reach for it, and a board that took them
+# did answer everything - eleven of the sixteen legal maxed boards shut the
+# hardest tier out with zero leaks.
+#
+# Asserted on RESOLVED stats rather than on the table, so a tier that grants
+# splash by some other route is caught too.
+func test_only_the_mortar_ever_resolves_splash() -> bool:
+	for kind in Towers.KINDS:
+		for branch in Upgrades.BRANCHES:
+			var other: StringName = &"burst" if branch == &"sustained" else &"sustained"
+			var s := UpgradesSim.resolve_tower_stats(kind,
+				{branch: UpgradesSim.MAX_TIER, other: UpgradesSim.CROSS_PATH_CAP})
+			var splashes: bool = float(s["splash_radius"]) > 0.0
+			assert_eq(splashes, kind == &"mortar",
+				"%s/%s splash, got %s" % [kind, branch, s["splash_radius"]])
 	return true

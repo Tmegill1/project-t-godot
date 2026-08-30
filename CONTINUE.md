@@ -99,7 +99,7 @@ and 20.
 | `audio/` — pooled playback, 17 core-slice events | ✅ complete |
 | Web export | ✅ preset + build; **boots and renders in a browser; not yet played in one** |
 | Deploy | ✅ live at **https://tmegill1.github.io/project-t-godot/** — every push to `master` republishes, at the address GitHub assigns (no custom domain) |
-| Tests | ✅ 13,599 checks across 45 files, exit 0 |
+| Tests | ✅ 13,763 checks across 45 files, exit 0 |
 | Map authoring | ✅ text format (`data/maps/*.txt`) + a `@tool` painting scene — see §12 |
 | Decoration | ✅ camps (wall + fires) in forest; scattered landmarks in ice/desert — see §13 |
 | Enemies | ✅ five — goblin, bat, shaman, ogre (rank and file) and troll (**boss only**) |
@@ -776,6 +776,14 @@ so a fit test must sum the children itself; and the inspector needs its own
 text-less and reports the bare 56px tap minimum instead of the 69px three lines
 of tier text actually take.
 
+**Since 2026-08-30 the inspector also carries two wrapping summary Labels**, one
+under each branch button, showing what the next tier does — generated from its
+effects, so the number on screen is the number applied. Worst case went 465px ->
+476px of the shortest map's 672px. A `Label` and not a fourth line on the
+`Button` because Buttons do not wrap, which is why that text was a tooltip until
+then, and invisible on a touch screen. **If a future line overflows, shorten the
+phrasing in `Upgrades._render_effect` — do not widen the column.**
+
 ---
 
 ## 14. What a leak costs
@@ -830,8 +838,8 @@ regression net: if a Normal multiplier drifts, something else fails.
 | Tier | count | interval | health | speed | gold | lives |
 |---|---|---|---|---|---|---|
 | Normal | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 | 20 |
-| Hard | 1.00 | 1.00 | 4.00 | 1.40 | 0.90 | 15 |
-| Nightmare | 1.00 | 1.00 | 4.50 | 1.40 | 0.85 | 12 |
+| Hard | 1.00 | 1.00 | 2.35 | 1.30 | 0.90 | 15 |
+| Nightmare | 1.00 | 1.00 | 2.50 | 1.30 | 0.85 | 12 |
 
 Smaller is harsher for `interval_multiplier` and `gold_multiplier`; larger is
 harsher for the other three. `test_difficulty.gd` encodes both directions, so a
@@ -886,6 +894,14 @@ gap that let a shut-out board read as balanced. The full legal roster now sits
 beside it, with the assertion written directionally so it survives retuning: *a
 full maxed board must not shut out the hardest tier.*
 
+**Two standing rules the tiers are measured against, both learned the hard way.**
+*Area damage belongs to the Mortar* — when Basic and Long Range could also buy
+splash, eleven of the sixteen legal boards shut the hardest tier out, because a
+splash hit carries its whole payload (the Magic tower's slow included) to
+everything it catches. And *damage and fire rate are flat, never multipliers* —
+compounding is what made the deep tiers explode. `data/upgrades.gd`'s header
+carries both, and `test_upgrades.gd` pins the first on resolved stats.
+
 **"A full maxed board" is sixteen boards.** The cross-path rule lets exactly one
 branch pass tier 2, so a fully upgraded tower is either `sustained 4 / burst 2`
 or `sustained 2 / burst 4`, and a board picks one per kind. The first version of
@@ -895,15 +911,14 @@ fifteen shut Nightmare's last wave out with zero leaks. It now walks all sixteen
 on Nightmare and on Normal. **If you add a tier or move a row, do not replace
 that loop with a single board.**
 
-**Before touching the tiers, know that the branches are not balanced.** Best
-build against worst is a two-order-of-magnitude spread at every row and no tier
-value closes it: `sustained` (fire rate → splash) dominates `burst` (damage →
-pierce) against late waves. The selector revealed this rather than causing it —
-it is invisible on Normal, because every build shuts Normal out. Rebalancing the
-branches is its own piece of work and probably belongs before further tier
-tuning, since every tier number is measured against an asymmetry this large.
+**The branch spread is bounded now, and the bound has a reference wave.**
+`MAX_BRANCH_SPREAD := 3.0` is measured at **wave 30**, not at wave 20, and that
+reference is load-bearing: at the wave a tier is actually decided the best board
+loses almost nothing, so the ratio tracks where the threshold sits rather than
+how far apart the branches are. The same roster read 6.90× at wave 20 and 1.68×
+at wave 30. **Do not move that assertion back to `Waves.MAX_WAVES`.**
 
-Nightmare is beatable, but only by the strongest build: it loses 9 of its 12
-lives and survives with 3. The harness has no projectile travel time, so it is
+Nightmare is beatable, but only by the best build there is: it loses 10 of its 12
+lives across a run and survives with two. The harness has no projectile travel time, so it is
 kinder than the live board; these values are a starting point to be played, not
 a finished tuning.

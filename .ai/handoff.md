@@ -1,92 +1,99 @@
-# Claude Handoff — Difficulty Selector
+# Claude Handoff — Upgrade Branch Balance
 
-Generated: 2026-08-29 (America/Chicago). **Live document — rewritten at the start
+Generated: 2026-08-30 (America/Chicago). **Live document — rewritten at the start
 and end of every task so Codex can take over at any point.**
 
 ## Where the work is
 
 - Repository: `/home/tylermegill/Projects/project-t-godot`
-- **Merged and deployed.** `feat/difficulty-selector` was merged to `master` as
-  `b0263a9` on the owner's instruction and both branches are pushed. The Pages
-  workflow republishes <https://tmegill1.github.io/project-t-godot/> on every
-  push to `master`, so the selector is live.
-- The branch is kept rather than deleted, matching how `feat/leak-model` and the
-  other feature branches are kept.
-- Plan: `docs/superpowers/plans/2026-08-29-difficulty-selector.md` (11 tasks)
-- Spec: `docs/superpowers/specs/2026-08-29-difficulty-selector-design.md`
+- Branch: **`feat/upgrade-branch-balance`**, off `master` at `6582655`.
+- **All nine tasks are complete.** Suite green at **13,763 checks across 45
+  files, exit 0**. Nothing pushed, nothing merged — the branch is ready and that
+  decision is the owner's.
+- All 32 generated lines were printed and read. The longest is
+  `fires 0.056s faster · slows to 45% for 2.5s` at 42 characters.
+- **The panel fits, measured two ways.** Summing minimum sizes gives 476px
+  against the 465px it was before the labels; computing the labels' real wrapped
+  height at the sidebar's 124px of usable width gives 474px. The minimum-size
+  sum is the larger, so the existing fit check stays an over-estimate, which is
+  the safe direction. Both are well inside the shortest map's 672px.
+- **The in-game check was inconclusive, for a tooling reason.** The Godot MCP
+  bridge cannot marshal a Dictionary into a `Vector2`
+  (`Cannot convert argument 1 from Dictionary to Vector2`), so `_try_place`
+  never ran and no tower was ever selected. The behaviour is covered by
+  `test_tower_inspector.gd` on the real `show_tower` -> `_refresh_gating` path,
+  and the heights above were measured off the same path. **If you want the live
+  look, drive it with `game_click` on real screen coordinates rather than
+  `game_call_method` with a Vector2 argument.**
 
-## Follow-up in progress: the benchmark still missed
+### Two corrections made during Task 6, both worth knowing
 
-The owner asked whether a fully upgraded board survives wave 20 on Nightmare.
-Measuring it exposed a defect in the work that was just merged and deployed.
+**The parity bound was measuring the wrong thing.** Task 5 pinned the
+best-to-worst ratio at wave 20 and got 2.01×. Re-sweeping the difficulty rows
+moved it to 6.90×, and a quarter-point of health swung it from 12.40× to
+undefined — because at the wave where a tier is actually decided, the best board
+loses almost nothing and the ratio measures where the threshold sits rather than
+how far apart the branches are. It now measures at **wave 30**, past anything a
+board can hold, where the comparison is graded: 1.68× for this roster, stable
+across rows.
 
-**Eleven of the sixteen legal fully-upgraded boards shut out Nightmare's wave 20
-with zero leaks.** The cross-path rule allows exactly two maxed splits per tower
-(`sustained 4 / burst 2` or `sustained 2 / burst 4`) and a board picks one per
-kind, so there are 2^4 = 16 legal maxed boards. `test_balance_tuning.gd` pinned
-**one** of them — the burst split — which happens to be the weakest. Extending
-the benchmark from six towers to twelve and never questioning the upgrade split
-is the same mistake one level down.
+**And it was verified, not assumed.** Splash was temporarily put back on Basic
+and Long Range and the metric re-run: **3.18×**, over the 3.0 bound. So the
+assertion catches the defect it was written for rather than merely describing
+the fix.
 
-**Why sustained wins.** The tiers raised `count_multiplier` and lowered
-`interval_multiplier`, both of which raise enemy *density*. The sustained branch
-grants fire rate and then **splash** (45px, then 75px). Splash scales with
-density, so the two levers chosen to attack coverage are precisely the ones a
-splash build answers best. The selector did not create this imbalance — it
-revealed a pre-existing one between the two upgrade branches, invisible on
-Normal because every build shuts Normal out.
+**"The strongest board" is now found, not named.** `_strongest_board()`
+hardcoded all-sustained, which was true when splash sat on three towers and
+false the moment it went back to one. It is `_best_board_result(tier, wave)`
+now, which measures. The first-bend claim is asked of all sixteen boards rather
+than one.
 
-Branch: **`feat/difficulty-benchmark-splits`**, off `master` at `45a48ac`.
-Complete, suite green at **13,599 checks across 45 files, exit 0**.
+### The shipped rows
 
-**Shipped rows, second set:**
+| Tier | health | speed | gold | lives |
+|---|---|---|---|---|
+| Normal | 1.00 | 1.00 | 1.00 | 20 |
+| Hard | 2.35 | 1.30 | 0.90 | 15 |
+| Nightmare | 2.50 | 1.30 | 0.85 | 12 |
 
-| Tier | count | interval | health | speed | gold | lives |
-|---|---|---|---|---|---|---|
-| Normal | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 | 20 |
-| Hard | 1.00 | 1.00 | 4.00 | 1.40 | 0.90 | 15 |
-| Nightmare | 1.00 | 1.00 | 4.50 | 1.40 | 0.85 | 12 |
+Count and interval stay at 1.0 — the Mortar still splashes, and density is what
+splash is for. Hard costs the best legal board 5 of its 15 lives on wave 20;
+Nightmare costs it 10 of 12 across a run, so it survives with two. The threshold
+where the last board stops shutting wave 20 out sits between 2.25 and 2.35
+health, and both tiers sit just past it.
 
-`test_balance_tuning.gd` now walks **all sixteen** legal maxed boards on
-Nightmare and on Normal. The old rows fail it, verified by putting them back and
-watching `board SSSS must not shut out Nightmare's last wave` fire. **Do not
-replace that loop with a single board.**
+## What the owner asked for, in their own terms
 
-**The open problem this uncovered, and did not fix:** the two upgrade branches
-are two orders of magnitude apart against late waves. `sustained` (fire rate →
-splash) dominates `burst` (damage → pierce), because splash kills a cluster in
-one hit however many are in it. No tier value closes that gap. It is invisible on
-Normal because every build shuts Normal out. Rebalancing the branches is its own
-piece of work and probably belongs before any further tier tuning.
+Three things, all in the plan:
 
-## Task progress
+1. **Fix the branch imbalance.** Splash returns to the Mortar; Basic's and Long
+   Range's deep sustained tiers get reach and cadence instead.
+2. **Show descriptions next to the upgrades**, so you do not have to hover. They
+   are a tooltip today because the sidebar is 140px and a `Button` does not wrap.
+   A wrapping `Label` under each branch button does, and the line is **generated
+   from the effects dictionary** so the number on screen cannot drift from the
+   number applied.
+3. **Flat amounts instead of percentages** — "fires 0.4s faster", "+12 damage".
+   Adopted for damage and fire rate, with per-tower values, because base rates
+   run 500ms to 2000ms and a shared flat value would take Magic to zero. Range
+   keeps its multiplier; splash, slow and gold already take the strongest value
+   rather than stacking, so they never compounded.
 
-| # | Task | State |
-|---|---|---|
-| A | Benchmark every legal maxed board, not one | ✅ done |
-| B | Re-sweep Hard and Nightmare against the strongest board | ✅ done |
-| C | Correct the lever documentation and the docs | ✅ done |
+## Three things that will bite an executor
 
-### The re-sweep, measured 2026-08-30
-
-Strongest board = every kind on sustained; weakest = every kind on burst.
-Run totals are lives lost across all twenty waves.
-
-| count | interval | health | speed | strongest | weakest |
-|---|---|---|---|---|---|
-| 1.40 | 0.60 | 1.40 | 1.15 | **0 — shut out** | 46 |
-| 1.20 | 0.80 | 2.50 | 1.30 | **0 — shut out** | 120 |
-| 1.00 | 1.00 | 3.50 | 1.30 | **0 — shut out** | 146 |
-| 1.00 | 1.00 | 4.00 | 1.35 | **0 — shut out** | 246 |
-| 1.00 | 1.00 | 4.00 | 1.40 | 3 | 258 |
-| 1.00 | 1.00 | 4.50 | 1.40 | 9 | 336 |
-| 1.00 | 1.00 | 4.75 | 1.40 | 12 | 380 |
-| 1.00 | 1.00 | 5.00 | 1.40 | 27 | 441 |
-
-Two things fall out. **Speed 1.40 is a floor**: below it the strongest board
-leaks nothing at all, at any health up to 4.0. And **count and interval are
-counter-productive** — raising density widens the gap between a splash build and
-a non-splash one, so both go back to 1.0 and the teeth move to health and speed.
+1. **Task 3 will break balance tests, and that is expected.** Removing splash
+   from two towers weakens every board that took them, and the difficulty rows
+   were swept against boards that had it. The plan says which failures to carry
+   forward into Tasks 5 and 6, and forbids weakening either shut-out assertion
+   to hide them.
+2. **The sidebar budget is real.** `CONTINUE.md` §14: the inspector already uses
+   465px of a 672px viewport, and the viewport height is the *shortest* map's
+   pixel height. If the generated lines do not fit, shorten the phrasing — never
+   widen the column.
+3. **Screenshots come back blank on this machine** (`glx: failed to create dri3
+   screen`). Read layout back with the Godot MCP server's `game_get_ui`, which
+   reports every control's real rect. That is how the difficulty selector's
+   layout was verified.
 
 ## Standing rules that govern this work
 
@@ -96,21 +103,33 @@ a non-splash one, so both go back to 1.0 and the teeth move to health and speed.
 - Every `test_*` method is declared `-> bool` and ends with `return true`,
   including every early return. Enforced crash detection, not style.
 - `data/` and `sim/` are pure — `test/test_sim_purity.gd` bans scene types,
-  clocks, RNG and platform state. Difficulty is a **parameter**, never a global.
-- Normal must stay byte-identical. Any moved Normal-path number is a bug in this
-  work, not a rebalance; the existing 13,436 assertions are the detector.
+  clocks, RNG and platform state. `effect_summary` returns a `String` and touches
+  nothing else, which is why it may live in `data/`.
+- **Adding a new `class_name` needs `godot --headless --import`** before the
+  suite will see it, or it fails with `Parse Error: Identifier "X" not
+  declared`. That pass also writes the `.uid`; every other `.gd.uid` here is
+  tracked, so commit it with its script.
 - **NO NEW ASSETS.** Owner's standing rule: if any visual, audio, animation,
-  sprite, texture or icon turns out to be needed, stop and return to Codex. The
-  selector is plain `Button` nodes and the existing theme.
-- Do not commit `test/test_balance_tuning.gd.uid` or anything under `.ai/`.
-  Another agent may share this tree: `git status` before every commit and stage
-  only the files the task names. Never `git add -A`.
+  sprite, texture or icon turns out to be needed, stop and return to Codex.
+- **No invented numbers.** Both of this week's misses — the six-tower benchmark
+  and the first difficulty rows — came from figures written down before they
+  were measured. The spec deliberately contains none; the plan derives Task 2's
+  from measured endpoints and sweeps for the rest.
+- Do not commit `test/test_balance_tuning.gd.uid`. Another agent may share this
+  tree: `git status` before every commit, stage only what the task names, never
+  `git add -A`.
+- **Pushing `master` redeploys the live site.** Do not push without the owner
+  asking. They have asked twice so far, each time explicitly.
 
-## Prior work still standing (from the pre-branch handoff)
+## What landed on `master` before this branch
 
-- `121bc7f Cap each tower kind at three` — every kind capped at 3, every map at a
-  12-tower budget. Deployed.
-- `2a1ac6a Give each tower a themed projectile` — four 32x32 projectile sprites
-  under `assets/art/projectiles/`, four distinct fire sounds. Deployed.
-- If the owner reports a visual defect, check the lower-left build stamp before
-  changing code — a stale browser cache has already caused one false report.
+- `Merge feat/difficulty-selector` — three tiers chosen per run, difficulty
+  threaded as a parameter, `deepest_progress` and `progress_at_death` on the
+  harness result, the full twelve-tower benchmark.
+- `Merge feat/difficulty-benchmark-splits` — the benchmark walks all sixteen
+  legal maxed boards after eleven of them were found shutting Nightmare out;
+  tiers re-swept against the strongest board; count and interval returned to 1.0
+  because raising density feeds a splash build rather than threatening it.
+- Two findings recorded there and still open: the opening cannot be given a
+  pulse with enemy health (the lever is the Basic tower or wave 1's
+  composition), and this branch's imbalance, which it named and did not fix.

@@ -33,6 +33,16 @@ const CROSS_PATH_CAP := 2
 ## pierce tiers add 15 on top.
 const PIERCE_PER_TIER := 1
 
+## Floor under a tower's firing interval, in milliseconds.
+##
+## Flat bonuses do not compound, which is why they replaced multipliers - but
+## they do not asymptote either. Without a floor a deep branch walks the
+## interval to zero and then negative, and a tower firing every -50ms is an
+## infinite damage source rather than a fast one. 100.0 is well below the
+## fastest tower the shipped table can produce, so it guards a mistake rather
+## than binding a build.
+const MIN_FIRE_RATE_MS := 100.0
+
 static func empty_tiers() -> Dictionary:
 	return {&"sustained": 0, &"burst": 0}
 
@@ -113,10 +123,15 @@ static func sprite_frame_for(kind: StringName, tiers: Dictionary) -> int:
 
 ## A tower's live combat stats after upgrades.
 ##
-## Multipliers compose, flat bonuses add, and radii, slows and gold take the
-## strongest value rather than stacking - otherwise tier 4's big splash would
-## be added to tier 2's small one and the numbers would drift from what the
-## tier text says.
+## Damage and fire rate are FLAT: bonuses add, and the interval floors at
+## MIN_FIRE_RATE_MS. They used to be multipliers, and compounding is what made
+## the deep tiers explode - two tiers of x1.4 is +96%, not +80%, and it got
+## worse the deeper a branch went. Range is the one stat that still multiplies,
+## because a percentage of reach is what reach means.
+##
+## Radii, slows and gold take the strongest value rather than stacking -
+## otherwise tier 4's big splash would be added to tier 2's small one and the
+## numbers would drift from what the tier text says.
 static func resolve_tower_stats(kind: StringName, tiers: Dictionary) -> Dictionary:
 	var base: Dictionary = Towers.DEFS[kind]
 	var stats := {
@@ -137,31 +152,41 @@ static func resolve_tower_stats(kind: StringName, tiers: Dictionary) -> Dictiona
 	for branch in Upgrades.BRANCHES:
 		var definition: Dictionary = Upgrades.DEFS[kind][branch]
 		for tier in range(int(tiers.get(branch, 0))):
-			var effects: Dictionary = definition["tiers"][tier]["effects"]
-
-			if effects.has(&"damage_multiplier"):
-				stats["damage"] *= float(effects[&"damage_multiplier"])
-			if effects.has(&"fire_rate_multiplier"):
-				stats["fire_rate"] *= float(effects[&"fire_rate_multiplier"])
-			if effects.has(&"range_multiplier"):
-				stats["range"] *= float(effects[&"range_multiplier"])
-			if effects.has(&"pierce_bonus"):
-				stats["pierce"] += int(effects[&"pierce_bonus"])
-			if effects.has(&"splash_radius"):
-				stats["splash_radius"] = maxf(stats["splash_radius"], float(effects[&"splash_radius"]))
-			if effects.has(&"detection") and bool(effects[&"detection"]):
-				stats["detection"] = true
-			if effects.has(&"gold_multiplier"):
-				stats["gold_multiplier"] = maxf(stats["gold_multiplier"], float(effects[&"gold_multiplier"]))
-			if effects.has(&"bonus_gold_per_kill"):
-				stats["bonus_gold_per_kill"] = maxi(
-					int(stats["bonus_gold_per_kill"]), int(effects[&"bonus_gold_per_kill"]))
-			# Lower is stronger, and the duration travels with the factor that won.
-			if effects.has(&"slow_factor") and float(effects[&"slow_factor"]) < stats["slow_factor"]:
-				stats["slow_factor"] = float(effects[&"slow_factor"])
-				stats["slow_duration_ms"] = float(effects.get(&"slow_duration_ms", stats["slow_duration_ms"]))
+			_apply_effects(stats, definition["tiers"][tier]["effects"])
 
 	stats["damage"] = round(stats["damage"])
 	stats["fire_rate"] = round(stats["fire_rate"])
 	stats["range"] = round(stats["range"])
+	return stats
+
+## Applies ONE tier's effects to a stats dictionary, in place, and returns it.
+##
+## Split out of resolve_tower_stats so a test can exercise a single effect
+## without adding a fictitious tier to the shipped table. The leading
+## underscore is convention, not access control: this is the same code the real
+## path runs, so a test that calls it is testing the rules rather than a
+## parallel implementation of them.
+static func _apply_effects(stats: Dictionary, effects: Dictionary) -> Dictionary:
+	if effects.has(&"damage_bonus"):
+		stats["damage"] += float(effects[&"damage_bonus"])
+	if effects.has(&"fire_rate_bonus_ms"):
+		stats["fire_rate"] = maxf(MIN_FIRE_RATE_MS,
+			stats["fire_rate"] - float(effects[&"fire_rate_bonus_ms"]))
+	if effects.has(&"range_multiplier"):
+		stats["range"] *= float(effects[&"range_multiplier"])
+	if effects.has(&"pierce_bonus"):
+		stats["pierce"] += int(effects[&"pierce_bonus"])
+	if effects.has(&"splash_radius"):
+		stats["splash_radius"] = maxf(stats["splash_radius"], float(effects[&"splash_radius"]))
+	if effects.has(&"detection") and bool(effects[&"detection"]):
+		stats["detection"] = true
+	if effects.has(&"gold_multiplier"):
+		stats["gold_multiplier"] = maxf(stats["gold_multiplier"], float(effects[&"gold_multiplier"]))
+	if effects.has(&"bonus_gold_per_kill"):
+		stats["bonus_gold_per_kill"] = maxi(
+			int(stats["bonus_gold_per_kill"]), int(effects[&"bonus_gold_per_kill"]))
+	# Lower is stronger, and the duration travels with the factor that won.
+	if effects.has(&"slow_factor") and float(effects[&"slow_factor"]) < stats["slow_factor"]:
+		stats["slow_factor"] = float(effects[&"slow_factor"])
+		stats["slow_duration_ms"] = float(effects.get(&"slow_duration_ms", stats["slow_duration_ms"]))
 	return stats
