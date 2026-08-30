@@ -49,7 +49,20 @@ const PANEL_WIDTH := 140
 ## that touch it set and clear it explicitly.
 static var pending_map: StringName = &""
 
+## The tier the next board runs at, set by the main menu and consumed on
+## _ready - the same pattern pending_map uses, for the same reason: a run's
+## settings have to outlive the scene change that starts it.
+static var pending_difficulty: StringName = &""
+
+## The tier in force, with an unset or unknown name falling back to Normal.
+##
+## Validated rather than indexed: this value arrives from outside the table
+## (a menu today, a saved run later), and a typo must not crash a run.
+static func active_difficulty() -> StringName:
+	return pending_difficulty if Difficulty.is_valid(pending_difficulty) else Difficulty.NORMAL
+
 var _map_name: StringName = Maps.FIRST
+var _difficulty: StringName = Difficulty.NORMAL
 var _tiles: Array = []
 var _paths: Array[PackedVector2Array] = []
 var _gold := 0
@@ -93,6 +106,11 @@ func _ready() -> void:
 		_map_name = pending_map
 		pending_map = &""
 
+	# Consumed the same way, so "Play" always means a fresh run at the tier
+	# the menu just chose rather than the one the last run happened to use.
+	_difficulty = active_difficulty()
+	pending_difficulty = &""
+
 	var def := Maps.get_def(_map_name)
 	Grid.set_active(def["cols"], def["rows"], def["tile_size"])
 	_tiles = Maps.build_tiles(_map_name)
@@ -100,7 +118,7 @@ func _ready() -> void:
 	_paths = PathFinder.get_all_spawn_paths(_tiles)
 
 	_gold = int(def["starting_gold"])
-	_lives = Economy.STARTING_LIVES
+	_lives = Difficulty.starting_lives(_difficulty)
 	for kind in Towers.KINDS:
 		_counts[kind] = 0
 
@@ -245,7 +263,7 @@ func start_next_wave() -> void:
 	_wave_active = true
 	_wave_clock = 0.0
 	_spawn_rng = Rng.new(Seeds.DEFAULT_SPAWN_SEED)
-	var schedule := Waves.build_schedule(_wave)
+	var schedule := Waves.build_schedule(_wave, _difficulty)
 	_spawn_queues = []
 	_spawned_per_path = []
 	for i in maxi(1, _paths.size()):
@@ -347,7 +365,8 @@ func _spawn(kind: StringName, path_index: int, is_boss: bool = false) -> void:
 		return
 	var enemy: Enemy = ENEMY_SCENE.instantiate()
 	_enemies_root.add_child(enemy)
-	enemy.setup(kind, _paths[mini(path_index, _paths.size() - 1)], _wave, _spawn_rng)
+	enemy.setup(kind, _paths[mini(path_index, _paths.size() - 1)], _wave,
+		_spawn_rng, _difficulty)
 	# A boss is an ordinary enemy with different numbers - the same node, the
 	# same rules downstream, only its stats overridden. The harness does
 	# exactly this too.

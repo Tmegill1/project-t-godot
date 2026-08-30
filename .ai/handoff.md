@@ -21,8 +21,8 @@ and end of every task so Codex can take over at any point.**
 | 3 | `Waves` takes a tier | ✅ done — `Let a wave be built at a difficulty tier` |
 | 4 | The harness accepts a tier | ✅ done — `Run a harness wave at a difficulty tier` |
 | 5 | Teach the harness where enemies died | ✅ done — `Teach the harness where enemies died` |
-| 6 | The live board runs at a tier | 🔄 **next** |
-| 7 | The menu selector and the HUD readout | ⬜ |
+| 6 | The live board runs at a tier | ✅ done — `Run the live board at the chosen difficulty` |
+| 7 | The menu selector and the HUD readout | 🔄 **next** |
 | 8 | Sweep the tiers and set their numbers | ⬜ |
 | 9 | Give the opening a pulse | ⬜ |
 | 10 | Benchmark the board the game actually hands out | ⬜ |
@@ -80,9 +80,24 @@ Long Range towers decide wave 1 before `FIRST_BEND_FRACTION := 0.31`.
 Existing keys and their order were left alone on purpose — several tests compare
 whole result dictionaries for equality.
 
-Task 6 is next: the live board runs at a tier (`GameBoard.pending_difficulty`,
-tier-sourced starting lives, tier passed to `build_schedule` and
-`get_modifiers`).
+Task 6 is complete and committed. The live board now carries a tier:
+
+- `GameBoard.pending_difficulty` — a static, the same shape and lifetime as
+  `pending_map`, consumed and cleared in `_ready`.
+- `GameBoard.active_difficulty()` — validates through `Difficulty.is_valid`, so
+  an unset or misspelled tier falls back to Normal instead of crashing a run.
+- `_lives` comes from `Difficulty.starting_lives(_difficulty)`.
+- The tier reaches `Waves.build_schedule` and, through `Enemy.setup`, both
+  `Waves.get_modifiers` call sites in `game/enemy.gd`.
+
+One correction to the plan text, applied: it says to "add a `difficulty` field
+to the setup dictionary the board passes", but `Enemy.setup` takes positional
+arguments, not a dictionary. It gained a trailing
+`difficulty: StringName = Difficulty.NORMAL` instead, which keeps every existing
+three-argument call site in `test/test_enemy.gd` working unchanged.
+
+Task 7 is next: three toggle `Button`s on the main menu and a tier readout on
+the HUD. **Plain buttons and the existing theme — no new assets.**
 
 ## Adding a new `class_name` script? Run the importer
 

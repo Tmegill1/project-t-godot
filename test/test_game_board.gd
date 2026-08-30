@@ -1668,3 +1668,19 @@ func test_escape_is_ignored_once_the_run_is_over() -> bool:
 		"the board stops listening when the run is finished")
 	board.free()
 	return true
+
+func test_a_board_starts_at_the_pending_difficulty() -> bool:
+	GameBoard.pending_difficulty = Difficulty.NIGHTMARE
+	assert_eq(GameBoard.active_difficulty(), Difficulty.NIGHTMARE,
+		"the pending tier is the active one")
+	GameBoard.pending_difficulty = &""
+	assert_eq(GameBoard.active_difficulty(), Difficulty.NORMAL,
+		"an unset tier falls back to Normal")
+	return true
+
+func test_an_unknown_difficulty_falls_back_to_normal() -> bool:
+	GameBoard.pending_difficulty = &"impossible"
+	assert_eq(GameBoard.active_difficulty(), Difficulty.NORMAL,
+		"a tier the table does not know never reaches the rules")
+	GameBoard.pending_difficulty = &""
+	return true

@@ -24,6 +24,9 @@ var kind: StringName
 var sim := {}
 var _path: PackedVector2Array
 var _wave := 1
+## The tier this enemy was spawned at. Carried rather than looked up, because
+## the board owns the run's difficulty and an enemy must not read a global.
+var _difficulty: StringName = Difficulty.NORMAL
 var _travelled := 0.0
 var _flip := false
 ## Whether this spawn is a boss, and what it pays. A boss draws from
@@ -36,11 +39,13 @@ var boss_life_loss := 0
 ## How much larger a boss draws than its kind. 1.0 for everything else.
 var _boss_display_scale := 1.0
 
-func setup(enemy_kind: StringName, path: PackedVector2Array, wave: int, rng: Rng = null) -> void:
+func setup(enemy_kind: StringName, path: PackedVector2Array, wave: int,
+		rng: Rng = null, difficulty: StringName = Difficulty.NORMAL) -> void:
 	kind = enemy_kind
 	_path = path
 	_wave = wave
-	var modifiers := Waves.get_modifiers(wave)
+	_difficulty = difficulty
+	var modifiers := Waves.get_modifiers(wave, _difficulty)
 	var health := float(Enemies.scaled_health(kind, modifiers["health_modifier"]))
 
 	sim = {
@@ -290,7 +295,7 @@ func _die(source: Dictionary) -> void:
 	var base_reward := boss_reward if is_boss else int(Enemies.DEFS[kind]["reward"])
 	died.emit(EconomySim.kill_reward(
 		base_reward, source,
-		float(Waves.get_modifiers(_wave)["gold_modifier"])), kind)
+		float(Waves.get_modifiers(_wave, _difficulty)["gold_modifier"])), kind)
 	_health_bar.visible = false
 	# Every enemy the test harness builds is outside the scene tree (see the
 	# header of test/test_enemy.gd), and both create_timer and the frames
