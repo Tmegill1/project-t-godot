@@ -30,11 +30,30 @@ const DEFS := {
 	&"map2": {
 		"label": "The Fork",
 		"cols": 26, "rows": 17, "tile_size": 48,
-		# Two entrances means the full wave runs down both, so this map fields
-		# twice the enemies of the same wave number on The Pass. Its larger
-		# opening purse pays for that difficulty; tower variety still caps at
-		# three of each kind, as it does on every map.
-		"tower_budget": 12, "starting_gold": 250,
+		# 400, raised from 250 on 2026-08-30, and exactly twice The Pass's purse
+		# so the relationship is arithmetic rather than an inherited number.
+		#
+		# Two entrances means the full wave runs down BOTH, so this map fields
+		# twice the enemies of the same wave number on The Pass - and each lane
+		# is only about 59% as long (1,440px and 1,392px against 2,448px), so
+		# every enemy is under fire for well under half as long. Double the
+		# threat, less than half the time to answer it.
+		#
+		# 400 buys four towers where The Pass's 200 buys two, which matches the
+		# doubled threat. 250 bought three. The ladder is lumpy and that is what
+		# picks the number: anything from 250 to 399 buys the same three towers
+		# with more idle change, because the fourth costs 135. Nothing buys a
+		# fifth until 630, so going past 400 is dead gold.
+		#
+		# NOT simulated, unlike The Pass's purse. Harness.run_wave takes a
+		# single path and is one-lane by design; running each of this map's
+		# lanes separately with the same towers would have every tower firing
+		# down both at full rate, which over-counts coverage. This rests on what
+		# a purse buys and on the geometry above. Measuring it properly needs
+		# multi-lane harness support, which is its own piece of work.
+		#
+		# Tower variety still caps at three of each kind, as on every map.
+		"tower_budget": 12, "starting_gold": 400,
 		"biome": &"ice",
 		"layout": "res://data/maps/the_fork.txt",
 		"next": &"map3",

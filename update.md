@@ -4,7 +4,7 @@
 not yet built, and what is still open. `CONTINUE.md` records what *is*; this
 records what *should be*.
 
-Last updated: 2026-08-30 (revised again after the pause menu).
+Last updated: 2026-08-30 (revised again after The Fork's purse).
 
 ---
 
@@ -21,7 +21,8 @@ Last updated: 2026-08-30 (revised again after the pause menu).
 | **Upgrade branch balance** — splash to the Mortar, flat numbers, a legible panel | ✅ merged and **deployed** |
 | **Build-out pacing** — a board that takes a run to finish | ✅ merged and **deployed** |
 | **Opening purse** — The Pass starts with two towers, not one | ✅ merged and **deployed** |
-| **Pause menu** — Escape pauses; Continue, Restart, Quit | ✅ **built**, on `feat/pause-menu`, **not merged** |
+| **Pause menu** — Escape pauses; Continue, Restart, Quit | ✅ merged and **deployed** |
+| **The Fork's purse** — doubled, to match a doubled map | ✅ **built**, on `feat/fork-gold`, **not merged** |
 | Slice 2 — tactical powers | ⬜ decided, not designed |
 | Slice 3 — versioned save + meta-progression | ⬜ decided, not designed |
 | Slice 4 — hero | ⬜ decided, not designed |
@@ -423,11 +424,35 @@ enough to leak on wave 1.
 open with three towers and two; The Pass was the only map that had collapsed to
 one.
 
-**One relationship narrowed, and it is worth an eye.** The Fork's comment
-justifies its larger purse as payment for having two entrances. That gap was
-2.5× over The Pass and is now 1.25×. The Fork still opens one tower ahead, so
-the intent survives — but if the gap should be restored, it is The Fork's number
-that should move, and it wants measuring rather than guessing.
+**The Fork's purse followed, 250 → 400** *(same day)*. Its comment justifies the
+larger opening as payment for two entrances, and the cost change had narrowed
+that gap from 2.5× over The Pass to 1.25×.
+
+The map is harder than that comment says. Both lanes carry the full wave, **and
+each lane is only about 59% as long** — 1,440px and 1,392px against The Pass's
+2,448px — so every enemy is under fire for well under half as long. Double the
+threat, less than half the time to answer it.
+
+| Map | Purse | Lanes | Route | Buys |
+|---|---|---|---|---|
+| The Pass | 200 | 1 | 2,448px | 2 towers |
+| **The Fork** | **400** | **2** | **1,440 + 1,392px** | **4 towers** |
+| The Coils | 200 | 1 | 3,696px | 2 towers |
+
+400 buys four towers to The Pass's two, matching the doubled threat, and is
+exactly twice The Pass's purse — so the relationship is arithmetic rather than
+an inherited number, and `test_data_tables.gd` asserts the *relationship* as
+well as the literal. The ladder picks the figure: 250 through 399 all buy the
+same three towers because the fourth costs 135, and nothing buys a fifth until
+630, so going past 400 is dead gold.
+
+**Not simulated, and that limit is worth knowing.** `Harness.run_wave` takes a
+single path and is one-lane by design; running each of The Fork's lanes
+separately with the same towers would have every tower firing down both at full
+rate, which over-counts coverage. This number rests on what a purse buys and on
+the geometry above, not on a run. **Measuring any two-lane map properly needs
+multi-lane harness support**, which is its own piece of work and is now the
+biggest hole in this project's measurement story.
 
 ### The opening still has no pulse from enemy health, and cannot get one
 

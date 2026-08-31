@@ -99,7 +99,7 @@ and 20.
 | `audio/` — pooled playback, 17 core-slice events | ✅ complete |
 | Web export | ✅ preset + build; **boots and renders in a browser; not yet played in one** |
 | Deploy | ✅ live at **https://tmegill1.github.io/project-t-godot/** — every push to `master` republishes, at the address GitHub assigns (no custom domain) |
-| Tests | ✅ 13,781 checks across 46 files, exit 0 |
+| Tests | ✅ 13,782 checks across 46 files, exit 0 |
 | Map authoring | ✅ text format (`data/maps/*.txt`) + a `@tool` painting scene — see §12 |
 | Decoration | ✅ camps (wall + fires) in forest; scattered landmarks in ice/desert — see §13 |
 | Enemies | ✅ five — goblin, bat, shaman, ogre (rank and file) and troll (**boss only**) |
@@ -963,15 +963,25 @@ build-out also makes the early game *harder*, which was not the intent but is
 not separable: a thinner board leaks. And a Mortar or a Long Range is no longer
 a first purchase, which several tests had silently assumed.
 
-**The opening purse moved with the costs.** The Pass went 100 → 200 the same
-day, because 100 bought exactly one tower once the second Basic escalated to
-135. At 200 it buys two, wave 1 stays clean, and the early cost drops from seven
+**The opening purses moved with the costs.** The Pass went 100 → 200 and The
+Fork 250 → 400, because 100 bought exactly one tower once the second Basic
+escalated to 135. At 200 it buys two, wave 1 stays clean, and the early cost drops from seven
 lives to two — while the build-out stays exactly where the costs put it, full at
 wave 13 and maxed at 20. 170 was measured and rejected: it affords the second
 tower and nothing else, so the board leaks on wave 1. **If you change tower
-costs again, re-measure this purse in the same pass** — the two numbers only
-mean anything together. The Fork (250) and The Coils (200) already open with
-three towers and two, so they were left alone.
+costs again, re-measure these purses in the same pass** — the numbers only mean
+anything together.
+
+**The Fork is twice The Pass, deliberately**, and `test_data_tables.gd` asserts
+that relationship as well as the literal. Both its lanes carry the full wave and
+each is only about 59% as long (1,440px and 1,392px against 2,448px), so it is
+double the threat with less than half the time to answer it; 400 buys four
+towers against The Pass's two. **That number was not simulated** —
+`Harness.run_wave` is one-lane by design, and running each lane separately with
+the same towers would have every tower firing down both at full rate. Measuring
+any two-lane map properly needs multi-lane harness support, which is the biggest
+remaining hole in this project's measurement story. The Coils (200, one lane,
+the longest route at 3,696px) was left alone.
 
 ---
 
