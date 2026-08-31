@@ -837,3 +837,19 @@ func test_an_overwhelming_board_kills_before_the_first_bend() -> bool:
 	assert_true(r["deepest_progress"] < FIRST_BEND_FRACTION,
 		"wave 1 is over before the first bend, at %f" % r["deepest_progress"])
 	return true
+
+# --------------------------------------------------------------------------
+# Lanes
+# --------------------------------------------------------------------------
+
+# THE compatibility guarantee. Every balance number this project has measured
+# came through the single-path interface, so `paths: [p]` has to be that
+# interface and not merely something close to it - equality, including ticks
+# and both progress fields, not a tolerance.
+func test_one_lane_by_either_name_is_the_same_wave() -> bool:
+	var towers := [{"kind": &"basic", "position": Grid.tile_to_world_center(5, 3)}]
+	var path := _path()
+	var by_path := Harness.run_wave({"wave": 6, "towers": towers, "path": path})
+	var by_lanes := Harness.run_wave({"wave": 6, "towers": towers, "paths": [path]})
+	assert_eq(by_lanes, by_path, "paths:[p] is exactly path:p")
+	return true

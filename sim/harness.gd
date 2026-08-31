@@ -48,7 +48,10 @@ static func _progress_of(position: Vector2, path_index: int,
 
 static func run_wave(config: Dictionary) -> Dictionary:
 	var wave: int = config["wave"]
-	var path: PackedVector2Array = config["path"]
+	# One lane or many. `path` is the older spelling and means exactly one lane;
+	# every balance number this project has measured came through it, so it
+	# stays a first-class spelling rather than a deprecated one.
+	var paths: Array = config["paths"] if config.has("paths") else [config["path"]]
 	var tick_ms: float = config.get("tick_ms", DEFAULT_TICK_MS)
 	var max_ticks: int = config.get("max_ticks", DEFAULT_MAX_TICKS)
 
@@ -92,8 +95,19 @@ static func run_wave(config: Dictionary) -> Dictionary:
 	var leaks := 0
 	var lives_lost := 0
 	var gold_earned := 0
-	var spawned := 0
-	var route := _route_metrics(path)
+	# One cursor per lane over one shared schedule, mirroring GameBoard's
+	# _spawn_queues and _spawned_per_path. Sharing the schedule is safe because
+	# it is only ever read, and build_schedule already returns fresh
+	# dictionaries per call - the board's own comment records that a per-lane
+	# deep copy was measured to change nothing.
+	var spawned: Array[int] = []
+	for i in paths.size():
+		spawned.append(0)
+	# Precomputed once per lane: a lane's route never changes during a wave and
+	# this is read for every living enemy on every tick.
+	var routes: Array = []
+	for lane_path in paths:
+		routes.append(_route_metrics(lane_path))
 	var deepest_progress := 0.0
 	var death_progress_total := 0.0
 	var deaths := 0
@@ -102,42 +116,54 @@ static func run_wave(config: Dictionary) -> Dictionary:
 		ticks += 1
 		elapsed += tick_ms
 
-		# Spawns due this tick.
-		while spawned < schedule.size() and schedule[spawned]["at_ms"] <= elapsed:
-			var s: Dictionary = schedule[spawned]
-			var kind: StringName = s["kind"]
-			# A boss is an ordinary enemy with different numbers - same
-			# dictionary, same rules downstream, only the stats overridden.
-			# Enemy.make_boss does exactly this on the live board.
-			var boss: Dictionary = Bosses.on_wave(wave) if s.get("boss", false) else {}
-			var is_boss := not boss.is_empty()
-			var health := float(boss["health"]) if is_boss \
-				else float(Enemies.scaled_health(kind, modifiers["health_modifier"]))
-			enemies.append({
-				"id": next_id,
-				"kind": kind,
-				"position": path[0],
-				"path_index": Movement.starting_path_index(path[0], path),
-				"health": health,
-				"max_health": health,
-				"speed": float(boss["speed"]) if is_boss \
-					else Enemies.scaled_speed(kind, modifiers["speed_modifier"]),
-				"alive": true,
-				"dying": false,
-				"slow": Slow.none(),
-				# Read by sim/damage.gd. The live board sets the same two keys in
-				# Enemy.setup; if only one side carried them, every balance number
-				# this harness produces would be a fiction.
-				"armor": int(boss["armor"]) if is_boss \
-					else int(Enemies.resistance_for(kind, wave)["armor"]),
-				"shield": int(boss["shield"]) if is_boss \
-					else int(Enemies.resistance_for(kind, wave)["shield"]),
-				"boss": is_boss,
-				"reward_override": int(boss["reward"]) if is_boss else 0,
-				"boss_life_loss": int(boss["life_loss"]) if is_boss else 0,
-			})
-			next_id += 1
-			spawned += 1
+		# Spawns due this tick, lane by lane. Every lane issues the WHOLE
+		# schedule, so an N-lane map fields N times the enemies of the same
+		# wave number - which is what the board does, and what The Fork's map
+		# comment has always claimed.
+		for lane in paths.size():
+			var lane_path: PackedVector2Array = paths[lane]
+			while spawned[lane] < schedule.size() \
+					and schedule[spawned[lane]]["at_ms"] <= elapsed:
+				var s: Dictionary = schedule[spawned[lane]]
+				var kind: StringName = s["kind"]
+				# A boss is an ordinary enemy with different numbers - same
+				# dictionary, same rules downstream, only the stats overridden.
+				# Enemy.make_boss does exactly this on the live board.
+				var boss: Dictionary = Bosses.on_wave(wave) if s.get("boss", false) else {}
+				var is_boss := not boss.is_empty()
+				var health := float(boss["health"]) if is_boss \
+					else float(Enemies.scaled_health(kind, modifiers["health_modifier"]))
+				enemies.append({
+					"id": next_id,
+					"kind": kind,
+					# The lane this enemy walks. Carried on the enemy rather
+					# than looked up, because a lane belongs to the thing
+					# walking it - which is why targeting, damage, splash, slow
+					# and the aura all needed no change at all: not one of them
+					# ever looks at a path.
+					"lane": lane,
+					"position": lane_path[0],
+					"path_index": Movement.starting_path_index(lane_path[0], lane_path),
+					"health": health,
+					"max_health": health,
+					"speed": float(boss["speed"]) if is_boss \
+						else Enemies.scaled_speed(kind, modifiers["speed_modifier"]),
+					"alive": true,
+					"dying": false,
+					"slow": Slow.none(),
+					# Read by sim/damage.gd. The live board sets the same two keys in
+					# Enemy.setup; if only one side carried them, every balance number
+					# this harness produces would be a fiction.
+					"armor": int(boss["armor"]) if is_boss \
+						else int(Enemies.resistance_for(kind, wave)["armor"]),
+					"shield": int(boss["shield"]) if is_boss \
+						else int(Enemies.resistance_for(kind, wave)["shield"]),
+					"boss": is_boss,
+					"reward_override": int(boss["reward"]) if is_boss else 0,
+					"boss_life_loss": int(boss["life_loss"]) if is_boss else 0,
+				})
+				next_id += 1
+				spawned[lane] += 1
 
 		# Move.
 		var survivors: Array = []
@@ -148,12 +174,15 @@ static func run_wave(config: Dictionary) -> Dictionary:
 			# game/enemy.gd's _physics_process so a wave times the same here
 			# as it does on screen.
 			e["slow"] = Slow.tick(e["slow"], tick_ms)
-			var m := Movement.advance(e["position"], e["path_index"], path,
+			var walking: PackedVector2Array = paths[e["lane"]]
+			var m := Movement.advance(e["position"], e["path_index"], walking,
 				Slow.effective_speed(float(e["speed"]), e["slow"]), tick_ms)
 			e["position"] = m["position"]
 			e["path_index"] = m["path_index"]
-			deepest_progress = maxf(deepest_progress,
-				_progress_of(e["position"], e["path_index"], path, route))
+			# A fraction of ITS OWN lane, maxed across lanes - so a single-lane
+			# wave reports exactly what it always did.
+			deepest_progress = maxf(deepest_progress, _progress_of(
+				e["position"], e["path_index"], walking, routes[e["lane"]]))
 			if m["reached_goal"]:
 				# A leak has by definition walked the whole route.
 				deepest_progress = 1.0
@@ -225,8 +254,8 @@ static func run_wave(config: Dictionary) -> Dictionary:
 				if r["lethal"]:
 					e["alive"] = false
 					kills += 1
-					death_progress_total += _progress_of(
-						e["position"], e["path_index"], path, route)
+					death_progress_total += _progress_of(e["position"],
+						e["path_index"], paths[e["lane"]], routes[e["lane"]])
 					deaths += 1
 					# A boss pays its own bounty, not its kind's.
 					var base_reward: int = int(e["reward_override"]) if e.get("boss", false) \
@@ -236,12 +265,23 @@ static func run_wave(config: Dictionary) -> Dictionary:
 
 		enemies = enemies.filter(func(e): return e["alive"])
 
-		if spawned >= schedule.size() and enemies.is_empty():
+		if _all_spawns_issued(spawned, schedule.size()) and enemies.is_empty():
 			return _result(kills, leaks, lives_lost, gold_earned, ticks, false,
 				deepest_progress, death_progress_total, deaths)
 
 	return _result(kills, leaks, lives_lost, gold_earned, ticks, true,
 		deepest_progress, death_progress_total, deaths)
+
+## Whether every lane has issued its whole schedule.
+##
+## Checking one cursor is not enough: a wave is not over while any entrance
+## still has enemies to send. GameBoard._all_spawns_issued exists for exactly
+## this reason and says exactly this.
+static func _all_spawns_issued(spawned: Array[int], total: int) -> bool:
+	for issued in spawned:
+		if issued < total:
+			return false
+	return true
 
 static func _result(kills: int, leaks: int, lives_lost: int, gold: int,
 		ticks: int, timed_out: bool, deepest_progress: float,
