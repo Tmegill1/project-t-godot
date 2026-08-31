@@ -4,6 +4,7 @@
 
 [node name="TowerInspector" type="Control"]
 script = ExtResource("1_inspector")
+mouse_filter = 2
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0

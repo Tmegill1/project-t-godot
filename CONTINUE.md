@@ -99,7 +99,7 @@ and 20.
 | `audio/` — pooled playback, 17 core-slice events | ✅ complete |
 | Web export | ✅ preset + build; **boots and renders in a browser; not yet played in one** |
 | Deploy | ✅ live at **https://tmegill1.github.io/project-t-godot/** — every push to `master` republishes, at the address GitHub assigns (no custom domain) |
-| Tests | ✅ 13,770 checks across 47 files, exit 0 (about 127s) |
+| Tests | ✅ 13,772 checks across 47 files, exit 0 (about 127s) |
 | Map authoring | ✅ text format (`data/maps/*.txt`) + a `@tool` painting scene — see §12 |
 | Decoration | ✅ camps (wall + fires) in forest; scattered landmarks in ice/desert — see §13 |
 | Enemies | ✅ five — goblin, bat, shaman, ogre (rank and file) and troll (**boss only**) |
@@ -1210,3 +1210,47 @@ The Pass has failed to transfer.
   is **withdrawn**. It finishes with 19 of 20. That figure came from a probe
   placing towers at full-budget slots, which clusters an early board — the same
   artifact §20 warns about.
+
+---
+
+## 22. The palette was unclickable for weeks — read this before touching the sidebar
+
+The first time the game was driven through its own input rather than the
+harness, **no tower could be bought with the mouse at all.**
+
+`TowerInspector`'s root is a full-column `Control`, always visible — only its
+`Rows` child toggles — and it had no `mouse_filter`, so it defaulted to STOP and
+swallowed every click meant for the palette underneath. It shipped that way with
+`ce41a08`.
+
+**The root is now `MOUSE_FILTER_IGNORE`, and that is load-bearing.** Its own
+buttons are picked independently and still work; a click that misses them is
+stopped by TowerPanel's Background. **Do not "tidy" it back to the default.**
+
+**The lesson is the test, not the filter.**
+`test_the_build_palette_and_the_inspector_are_never_both_showing` asserted the
+palette's visibility flag flips — and it always did. Nothing checked the node
+doing the covering: the test watched the node that hides, not the node that
+hides it. `test_nothing_drawn_over_the_palette_can_swallow_its_clicks` now
+asserts that no sibling drawn *above* the palette is both visible and
+mouse-stopping, written generally so the next overlay is caught too. It was
+verified by reverting the fix and watching it fail.
+
+**Taps now read the event position**, via `GameBoard._world_of`, not
+`get_global_mouse_position()`. Identical for a person; the difference is that the
+global position is the OS cursor, so synthesised clicks could never place a
+tower — which is precisely why placement had never been exercised end to end in
+this project's life.
+
+### If you automate the game again
+
+- **`game_get_ui` reports pre-layout sizes.** It showed inspector labels as 1px
+  wide when they are 124px. Read `get_global_rect()` through `game_eval` instead.
+- **The game runs between tool calls.** The 20s prep timer will auto-start waves
+  while you read state, and a run can end underneath you. Set
+  `_prep_remaining_ms` high first.
+- **Synthetic clicks are not wholly reliable** — some give a button focus without
+  firing `pressed`. Prefer an A/B/A with the same coordinates when a negative
+  result matters.
+- **`game_eval` cannot define functions**; a stray `func` drops the game into the
+  debugger and every later command times out.

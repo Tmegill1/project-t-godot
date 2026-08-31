@@ -4,7 +4,7 @@
 not yet built, and what is still open. `CONTINUE.md` records what *is*; this
 records what *should be*.
 
-Last updated: 2026-08-31 (revised after re-measuring the other two maps).
+Last updated: 2026-08-31 (revised after the first real playtest).
 
 ---
 
@@ -24,6 +24,7 @@ Last updated: 2026-08-31 (revised after re-measuring the other two maps).
 | **Pause menu** — Escape pauses; Continue, Restart, Quit | ✅ merged and **deployed** |
 | **The Fork's purse** — doubled, to match a doubled map | ✅ merged and **deployed** |
 | **Multi-lane harness** — every map measurable, every map benchmarked | ✅ merged and **deployed** |
+| **The unclickable palette** — no tower could be bought with the mouse | ✅ **fixed**, on `fix/unclickable-tower-palette`, **not merged** |
 | **Splitting the wave** — a second entrance is two approaches, not twice the enemies | ✅ merged and **deployed** |
 | **Playable tiers** — difficulty moves into the build-out | ✅ **built**, on `feat/playable-tiers`, **not merged** |
 | Slice 2 — tactical powers | ⬜ decided, not designed |
@@ -661,6 +662,66 @@ wave 10 with its towers clustered at the entrance and finishes with 7 lives with
 them spread along the route.** Two towers side by side cover one window between
 them; two spread give an enemy two windows to walk through. A benchmark of a
 build-out has to place like a player building, or it measures its own fixture.
+
+## No tower could be bought with the mouse, and nothing noticed for weeks *(2026-08-31)*
+
+The first time the game was driven through its own input rather than through the
+harness, the build palette turned out to be **completely unclickable**.
+
+`ui/tower_inspector.tscn`'s root is a full-column `Control` with no
+`mouse_filter`, so it defaulted to **STOP**, and nothing anywhere ever hid it —
+only its `Rows` child toggles. It sat invisibly on top of the palette and
+swallowed every click meant for it.
+
+Proven with an A/B/A on identical coordinates and mechanism, varying only the
+filter: **STOP → nothing selected; IGNORE → `basic` selected; STOP → nothing
+again.** `mouse_filter` has never appeared in any version of that scene, so the
+bug shipped with `ce41a08 Add the tower inspector`.
+
+**Why 13,772 assertions missed it.**
+`test_the_build_palette_and_the_inspector_are_never_both_showing` asserts the
+palette's visibility flag flips — and it always did. Nothing checked the node
+doing the covering. **The test watched the node that hides, not the node that
+hides it.**
+
+Three fixes:
+
+1. **The inspector root is `MOUSE_FILTER_IGNORE`.** Its own buttons are picked
+   independently and still work; a click that misses them is stopped by the
+   panel's Background.
+2. **A test written against every sibling drawn above the palette**, not against
+   the inspector by name, so the next full-panel overlay is caught too. Verified
+   by reverting the fix and watching it fail.
+3. **Taps read the event position, not `get_global_mouse_position()`.** The two
+   are identical for a person, but the global position is the OS cursor, so a
+   synthesised click could never place a tower — measured, the viewport reported
+   the mouse at (5, 621) while clicks arrived at (408, 72). This is why placement
+   had never once been exercised end to end.
+
+**Verified live afterwards:** two real clicks — palette, then map — place a Basic
+(gold 200 → 165, budget 1/12); clicking it opens the inspector; clicking the
+upgrade row buys the tier (gold 165 → 135, fire rate 1000 → 800) and the
+generated summary line updates from *"fires 0.2s faster"* to *"fires 0.16s
+faster"*.
+
+### What else the playtest confirmed, and what it could not reach
+
+**Works:** difficulty selection end to end (Normal 20 lives, Hard 15, Nightmare
+12, each shown in the HUD); the whole wave loop (Nightmare with no towers cost 5
+lives on wave 1 and ended the run on wave 2); the pause menu; **Retry preserving
+map and difficulty** — the fix made the day before and until now only tested
+headlessly; and the upgrade labels, which fit on one line each at 124px and use
+438px of the 620 available.
+
+**Could not reach:** art, animation, whether audio is audible, projectile
+flight, victory → next-map chaining, and touch input. Screenshots come back
+blank on this machine (`glx: failed to create dri3 screen`), so "does it look
+right" is still a human job.
+
+**Two traps for whoever automates next.** `game_get_ui` reports **pre-layout**
+sizes — it showed every inspector label as 1px wide when they are really 124px.
+And the game keeps running between tool calls, so the 20s prep timer auto-starts
+waves while you read state; suppress `_prep_remaining_ms` first.
 
 ## Re-measured against the new tiers, and two recorded findings were wrong
 
