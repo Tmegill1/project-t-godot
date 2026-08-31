@@ -219,8 +219,15 @@ func test_the_maps_chain_and_the_last_one_terminates() -> bool:
 
 func test_budgets_and_starting_gold_are_ported() -> bool:
 	assert_eq(int(Maps.DEFS[&"map2"]["tower_budget"]), 12, "The Fork's budget")
-	assert_eq(int(Maps.DEFS[&"map2"]["starting_gold"]), 250,
+	# Exactly twice The Pass's purse, which is the point: doubled waves down
+	# lanes barely half as long need a doubled opening, and asserting the
+	# RELATIONSHIP rather than a bare literal is what keeps the two numbers
+	# meaning something together if either moves again.
+	assert_eq(int(Maps.DEFS[&"map2"]["starting_gold"]), 400,
 		"and its opening gold, doubled waves needing a doubled opening")
+	assert_eq(int(Maps.DEFS[&"map2"]["starting_gold"]),
+		2 * int(Maps.DEFS[Maps.FIRST]["starting_gold"]),
+		"which is twice what The Pass opens with")
 	assert_eq(int(Maps.DEFS[&"map3"]["tower_budget"]), 12,
 		"The Coils is wider but its folds double up, so it needs fewer towers")
 	assert_eq(int(Maps.DEFS[&"map3"]["starting_gold"]), 200, "and its opening gold")

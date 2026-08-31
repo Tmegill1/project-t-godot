@@ -6,48 +6,31 @@ proceeds so Codex can take over at any point.**
 ## Where the work is
 
 - Repository: `/home/tylermegill/Projects/project-t-godot`
-- Branch: **`feat/pause-menu`**, merged to `master` as `77f19f7` on the owner's
-  instruction. Both branches pushed; the Pages deploy succeeded, so the pause
-  menu is live. Suite green on the merged result at **13,781 checks across 46
-  files, exit 0**.
-- **Nothing is in flight.** Everything in this session is merged and deployed.
-- **Verified in the running game, not only in tests:** Escape raised the menu
-  (one instance, despite two presses — the re-entry guard holds, and
-  `process_mode` read 3 = `WHEN_PAUSED` live); Continue freed it and play
-  resumed; Escape then Quit reached the main menu; picking Hard and pressing
-  Play started a run reading **Hard** and **Lives 15**. That last step is the
-  proof the tree was not left paused, since the main menu's buttons had to
-  process for it to happen.
-- Everything before this session's pause work is merged and deployed. Suite on
-  `master`: **13,767 checks across 45 files, exit 0**.
+- Branch: **`feat/fork-gold`**, off `master` at `1a6830a`. **Complete**, suite
+  green at **13,782 checks across 46 files, exit 0**. Nothing pushed or merged.
+- Everything before it in this session is merged and deployed.
 
-## What this branch adds
+## This branch
 
-Escape opens a pause menu with **Continue / Restart / Quit**; Quit returns to
-the main menu, which is where difficulty is chosen.
+The Fork's `starting_gold` goes **250 → 400**, exactly twice The Pass's 200. The
+cost change earlier in the session had narrowed the gap from 2.5x to 1.25x, and
+the map is harder than its own comment claimed: both lanes carry the full wave
+**and** each lane is only about 59% as long (1,440px and 1,392px against The
+Pass's 2,448px), so it is double the threat with less than half the time to
+answer it. 400 buys four towers to The Pass's two.
 
-**Escape shares the key, it does not take it.** It already cancels a selected
-tower or a half-made placement (shipped as *"Let Escape clear whatever the
-player is in the middle of"*). Owner's decision: cancel first, pause only when
-there is nothing to cancel — Escape backs out one level at a time, and it never
-yanks the player into a menu mid-placement.
+The purse ladder picks the number: 250 through 399 all buy the same three towers
+because the fourth costs 135, and nothing buys a fifth until 630.
+`test_data_tables.gd` now asserts the **relationship** (2x The Pass) as well as
+the literal, so the two numbers stay meaningful together if either moves.
 
-**Pausing is `get_tree().paused`**, the Godot-native one, because it stops
-`_physics_process` — which is what drives the wave clock, the prep timer and
-every enemy. The menu itself runs `PROCESS_MODE_WHEN_PAUSED` or its own buttons
-would stop responding the moment it paused the tree. Quit unpauses **before**
-changing scene: `paused` is global tree state and survives a scene change, the
-same hazard the HUD already documents for `Engine.time_scale`.
-
-## A pre-existing bug fixed in the same pass
-
-**`reload_current_scene()` loses the run's map and difficulty.**
-`GameBoard._ready` consumes `pending_map` and `pending_difficulty` and clears
-both, and `_map_name` defaults to `Maps.FIRST` — so a plain reload restarts on
-The Pass at Normal wherever you were. The game-over screen's **Retry** has done
-this all along: dying on The Fork on Nightmare drops you onto The Pass on
-Normal. Both Restart and Retry now re-set the two statics from the board before
-reloading.
+**This one was NOT simulated, unlike The Pass's purse.** `Harness.run_wave`
+takes a single path and is one-lane by design; running each of The Fork's lanes
+separately with the same towers would have every tower firing down both at full
+rate, which over-counts coverage. The number rests on what a purse buys and on
+the measured geometry. **Multi-lane harness support is now the biggest hole in
+this project's measurement story** — every balance claim about The Fork and any
+future two-lane map is currently unmeasurable.
 
 ## Standing rules that govern this work
 
