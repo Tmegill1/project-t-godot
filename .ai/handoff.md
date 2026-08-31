@@ -6,10 +6,16 @@ proceeds so Codex can take over at any point.**
 ## Where the work is
 
 - Repository: `/home/tylermegill/Projects/project-t-godot`
-- Branch: **`fix/unclickable-tower-palette`**, off `master` at `caae5f4`.
-  **Complete**, suite green at **13,772 checks across 47 files, exit 0**.
-  Nothing pushed.
-- Everything before it this session is merged and deployed.
+- Branch: **`fix/unclickable-tower-palette`**, merged to `master` as `afd4b8e` on
+  the owner's instruction. Both branches pushed; the Pages deploy succeeded.
+  Suite green on the merged result at **13,772 checks across 47 files, exit 0**.
+- **Nothing is in flight.** Everything in this session is merged and deployed.
+
+## The single most useful thing to do next
+
+**Play one run.** It is now possible - it was not, until this branch. Everything
+else on the open list is measured, documented and can wait behind twenty minutes
+of somebody actually holding the thing.
 
 ## The game could not be played with a mouse, and this fixes it
 
