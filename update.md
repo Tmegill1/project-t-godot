@@ -4,7 +4,7 @@
 not yet built, and what is still open. `CONTINUE.md` records what *is*; this
 records what *should be*.
 
-Last updated: 2026-08-30 (revised again after The Fork's purse).
+Last updated: 2026-08-30 (revised again after the multi-lane harness).
 
 ---
 
@@ -22,7 +22,8 @@ Last updated: 2026-08-30 (revised again after The Fork's purse).
 | **Build-out pacing** — a board that takes a run to finish | ✅ merged and **deployed** |
 | **Opening purse** — The Pass starts with two towers, not one | ✅ merged and **deployed** |
 | **Pause menu** — Escape pauses; Continue, Restart, Quit | ✅ merged and **deployed** |
-| **The Fork's purse** — doubled, to match a doubled map | ✅ **built**, on `feat/fork-gold`, **not merged** |
+| **The Fork's purse** — doubled, to match a doubled map | ✅ merged and **deployed** |
+| **Multi-lane harness** — every map measurable, every map benchmarked | ✅ **built**, on `feat/multi-lane-harness`, **not merged** |
 | Slice 2 — tactical powers | ⬜ decided, not designed |
 | Slice 3 — versioned save + meta-progression | ⬜ decided, not designed |
 | Slice 4 — hero | ⬜ decided, not designed |
@@ -513,6 +514,66 @@ Verified in the running game rather than only in tests: Escape raised the menu,
 Continue freed it and play resumed, Escape and Quit reached the main menu, and
 picking Hard and pressing Play started a run reading **Hard** and **Lives 15** —
 which is also the proof the tree was not left paused.
+
+---
+
+## Every map, measured for the first time *(2026-08-30)*
+
+**Spec:** [`docs/superpowers/specs/2026-08-30-multi-lane-harness-design.md`](docs/superpowers/specs/2026-08-30-multi-lane-harness-design.md)
+**Plan:** [`docs/superpowers/plans/2026-08-30-multi-lane-harness.md`](docs/superpowers/plans/2026-08-30-multi-lane-harness.md)
+
+`Harness.run_wave` now takes `paths`; `path` still means one lane and returns
+byte-identical results, so all 64 existing call sites went unedited and no
+measured number moved. Every lane runs the whole schedule with its own cursor,
+mirroring the board. `test_balance_tuning.gd` benchmarks all three maps, placing
+twelve towers by a stated rule — spaced along each lane, legality asked of
+`Placement.can_place` — instead of the hand-picked line that only ever fitted
+The Pass.
+
+Lives lost by a completed twelve-tower board on wave 20:
+
+| Map | Lanes | Route | Normal | Hard | Nightmare |
+|---|---|---|---|---|---|
+| The Pass | 1 | 2,448px | 0 / 1 | 0 / 41 | 7 / 45 |
+| **The Fork** | **2** | 2,832px | **101 / 128** | **508 / 439** | **530 / 458** |
+| The Coils | 1 | 3,696px | 0 / 0 | 10 / 34 | 13 / 37 |
+
+*(sustained build / burst build; the life budget is 20 on Normal, 15 on Hard,
+12 on Nightmare.)*
+
+### The Fork is unwinnable, and the reason is the tower budget
+
+**It loses 101 lives on Normal against a budget of 20** — five times over,
+before difficulty is even raised. The Coils, by contrast, is well shaped: clean
+on Normal, biting on Hard, harder on Nightmare.
+
+The mechanism is not the purse that was doubled this morning. **Every map has a
+twelve-tower budget, and The Fork has to split it across two lanes** — six
+towers per lane against a full wave each, where The Pass puts all twelve on its
+one. The purse buys the towers; the budget caps them; only the purse was ever
+doubled.
+
+**Not fixed here, deliberately.** This change exists to make the map measurable,
+and rebalancing it inside the same change would destroy the evidence it was
+built to produce. `test_balance_tuning.gd` excludes The Fork from the
+Normal-comfort assertion under a named constant, and separately **pins how
+broken it is**, so a fix cannot land unnoticed and the exclusion cannot be
+forgotten. The obvious lever is `tower_budget` in `data/maps.gd`, which has been
+12 on every map since the cap landed — but that is a decision, not a
+measurement, and it is the owner's.
+
+### A correction to an earlier finding
+
+On 2026-08-29 this file recorded that at Normal, against a full maxed board,
+`deepest_progress` never exceeds **0.18** — nothing ever reaching the first bend
+at 0.31. That was measured with the twelve towers **massed at the entrance**,
+which was the only placement the benchmark had.
+
+Spaced along the route instead, the same board on the same map lets enemies
+reach **0.76**. So "nothing reaches the first bend" is a property of a board
+clustered at the start, not of the game. It does not undo the tier tuning — that
+was swept against the clustered board consistently, and the tiers still behave —
+but the phrase should not be repeated as though it described the map.
 
 ---
 
