@@ -6,9 +6,10 @@ proceeds so Codex can take over at any point.**
 ## Where the work is
 
 - Repository: `/home/tylermegill/Projects/project-t-godot`
-- Branch: **`feat/tiers-across-maps`**, off `master` at `2e2f6d9`. Docs only -
-  no game numbers changed. Suite unaffected.
-- Everything before it this session is merged and deployed.
+- Branch: **`feat/tiers-across-maps`**, merged to `master` as `16be937` on the
+  owner's instruction. Both branches pushed; the Pages deploy succeeded. Docs
+  only - no game numbers changed, suite unaffected at **13,770 checks, exit 0**.
+- **Nothing is in flight.** Everything in this session is merged and deployed.
 
 ## Re-measured against the new tiers: two findings were wrong, one is new
 
