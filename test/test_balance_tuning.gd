@@ -251,3 +251,98 @@ func test_no_upgrade_branch_runs_away_from_the_other() -> bool:
 		"worst board %s lost %d against the best board's %d, over the %.1fx bound"
 			% [worst_name, worst, best, MAX_BRANCH_SPREAD])
 	return true
+
+
+# --------------------------------------------------------------------------
+# Placing twelve towers on a map nobody hardcoded
+# --------------------------------------------------------------------------
+
+## Every lane of a map, in the order PathFinder reports them.
+func _lanes_for(map_name: StringName) -> Array:
+	Grid.set_active(Maps.cols(map_name), Maps.rows(map_name))
+	return PathFinder.get_all_spawn_paths(Maps.build_tiles(map_name))
+
+## The map's whole tower budget, spaced along its lanes.
+##
+## THE RULE, stated because a benchmark whose placement is not stated is a
+## number nobody can argue with: walk each lane, take evenly spaced points along
+## it, and put a tower at the nearest legal spot to each. The budget is divided
+## between the lanes rather than spread over a concatenated route - six and six
+## on a two-lane map - because both lanes carry the same wave, and spacing by
+## total distance would under-cover the shorter one.
+##
+## Legality is asked of Placement.can_place, the same rule the board enforces,
+## rather than reimplemented. Props are deliberately passed as EMPTY: decoration
+## is seeded, and a benchmark that moved with the decoration seed would not be a
+## benchmark. Build space against decoration is test_placement.gd's job.
+func _spread_positions(map_name: StringName) -> Array[Vector2]:
+	var lanes := _lanes_for(map_name)
+	var budget := int(Maps.get_def(map_name)["tower_budget"])
+	var bounds := Rect2(Vector2.ZERO, Vector2(Maps.pixel_size(map_name)))
+	var radius := Placement.tower_radius(&"basic")
+	var tiles := Maps.build_tiles(map_name)
+
+	var positions: Array[Vector2] = []
+	var per_lane := int(ceil(float(budget) / float(maxi(1, lanes.size()))))
+	for lane in lanes:
+		for i in per_lane:
+			if positions.size() >= budget:
+				break
+			var at := int(float(lane.size() - 1) * (float(i) + 0.5) / float(per_lane))
+			var spot := _nearest_legal(lane[at], tiles, positions, lanes, bounds, radius)
+			if spot != Vector2.INF:
+				positions.append(spot)
+	return positions
+
+## The legal tile centre closest to a point on the route, searched outward so
+## the tower lands beside the road it is meant to cover.
+func _nearest_legal(near: Vector2, tiles: Array, placed: Array, lanes: Array,
+		bounds: Rect2, radius: float) -> Vector2:
+	var best := Vector2.INF
+	var best_distance := INF
+	for r in tiles.size():
+		for c in tiles[r].size():
+			var pos := Grid.tile_to_world_center(c, r)
+			var distance := pos.distance_to(near)
+			if distance >= best_distance:
+				continue
+			if Placement.can_place(pos, radius, [], placed, lanes, bounds)["ok"]:
+				best = pos
+				best_distance = distance
+	return best
+
+## Twelve towers on any map, each kind on the split named for it.
+func _board_on(map_name: StringName, splits: Array) -> Array:
+	var positions := _spread_positions(map_name)
+	var towers: Array = []
+	var per_kind := int(positions.size() / Towers.KINDS.size())
+	var i := 0
+	for k in Towers.KINDS.size():
+		for n in per_kind:
+			towers.append({"kind": Towers.KINDS[k],
+				"position": positions[i], "tiers": splits[k]})
+			i += 1
+	return towers
+
+# Where twelve towers land decides what a benchmark says, so the rule is stated
+# and pinned rather than left to whatever the loop happened to find. A naive
+# "first twelve legal tiles" clusters them in a corner and makes a map look far
+# worse than it plays.
+func test_every_generated_position_is_one_the_board_would_accept() -> bool:
+	for map_name in Maps.DEFS:
+		var positions := _spread_positions(map_name)
+		var budget := int(Maps.get_def(map_name)["tower_budget"])
+		assert_eq(positions.size(), budget,
+			"%s yields its whole budget of %d" % [map_name, budget])
+
+		Grid.set_active(Maps.cols(map_name), Maps.rows(map_name))
+		var bounds := Rect2(Vector2.ZERO, Vector2(Maps.pixel_size(map_name)))
+		var radius := Placement.tower_radius(&"basic")
+		var placed: Array = []
+		for pos in positions:
+			var verdict := Placement.can_place(
+				pos, radius, [], placed, _lanes_for(map_name), bounds)
+			assert_true(verdict["ok"],
+				"%s position %s is legal, got %s" % [map_name, pos, verdict])
+			placed.append(pos)
+	return true
