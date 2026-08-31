@@ -6,9 +6,10 @@ proceeds so Codex can take over at any point.**
 ## Where the work is
 
 - Repository: `/home/tylermegill/Projects/project-t-godot`
-- Branch: **`feat/fork-gold`**, off `master` at `1a6830a`. **Complete**, suite
-  green at **13,782 checks across 46 files, exit 0**. Nothing pushed or merged.
-- Everything before it in this session is merged and deployed.
+- Branch: **`feat/fork-gold`**, merged to `master` as `5ceaf33` on the owner's
+  instruction. Both branches pushed; the Pages deploy succeeded. Suite green on
+  the merged result at **13,782 checks across 46 files, exit 0**.
+- **Nothing is in flight.** Everything in this session is merged and deployed.
 
 ## This branch
 
