@@ -6,88 +6,42 @@ proceeds so Codex can take over at any point.**
 ## Where the work is
 
 - Repository: `/home/tylermegill/Projects/project-t-godot`
-- Branch: **`feat/split-the-wave`**, merged to `master` as `6edbca5` on the
-  owner's instruction. Both branches pushed; the Pages deploy succeeded. Suite
-  green on the merged result at **13,855 checks across 46 files, exit 0**.
-- **Nothing is in flight.** Everything in this session is merged and deployed.
-
-## The three things waiting, in the order I would take them
-
-1. **Per-map tower limits, then The Fork's budget to 16.** The only fix measured
-   for its Hard and Nightmare tiers. Blocked on `limit_bonus_map2` applying to
-   every map but the first, and on the map's halved income.
-2. **The tiers have never been tested against a build-out.** Hard and Nightmare
-   kill a spending player on wave 2-3 of *The Pass*, the easiest map. Every tier
-   value was swept against completed maxed boards.
-3. **The Coils kills a spending player on wave 10 of Normal**, despite the best
-   completed board in the game. An economy problem on that map.
-
-## Result: Normal fixed, the harder tiers still open
-
-| The Fork, completed board | Normal | Hard | Nightmare |
-|---|---|---|---|
-| Before | **101 / 128** | 508 / 439 | 530 / 458 |
-| **After** | **0 / 5** | 132 / 93 | 144 / 103 |
-
-**Sixteen towers would fix Hard and Nightmare** (3-4 and 3-7 lives, nothing shut
-out); fourteen is not enough and eighteen shuts them out. Two blockers, both
-decisions rather than measurements:
-
-1. `limit_bonus_map2` applies to every map but the first, so it cannot give The
-   Fork more towers without also giving The Coils more - and The Coils measures
-   well at twelve. **Per-map tower limits are needed first.**
-2. The Fork's income halved with the split, 30,371 -> 16,632, because it no
-   longer fields double the enemies. Sixteen maxed towers cost 20,920, so the
-   map cannot afford the board its own tiers require.
+- Branch: **`feat/playable-tiers`**, off `master` at `a7e1c48`. **Complete**,
+  suite green at **13,770 checks across 47 files, exit 0**, about 127s against a
+  180s budget. Nothing pushed.
 - Everything before it this session is merged and deployed.
 
-## Why: budgets could not fix The Fork, and measurement said so
+## What this branch did
 
-The owner asked to fix the tower budgets. Measured first, and they are not the
-lever:
+Hard and Nightmare killed a building player on **wave 3 of 20**. Both had been
+swept only against completed maxed boards. No lever bridged it - not lives (no
+effect), not gold, not a bigger purse, not ramping over thirty waves - because a
+maxed board is ~10x a full-but-unupgraded one and a tier is one curve across a
+run spanning that range.
 
-| The Fork, a player who spends | Normal | Hard | Nightmare |
-|---|---|---|---|
-| 12 towers / 400 gold *(shipped)* | dies wave 3 | dies wave 2 | dies wave 2 |
-| **23 towers** / 400 gold | dies wave 3 | dies wave 2 | dies wave 2 |
-| 23 towers / **1,800** gold | dies wave 13 | dies wave 5 | dies wave 3 |
+Owner's decision: **difficulty moves into the build-out.**
 
-The budget never binds - the player is dead long before reaching twelve towers,
-let alone twenty-three - and 4.5x the purse does not rescue it. The maxed
-23-tower board that *does* hold costs **33,605** against the map's **30,371** of
-income, so even the endgame board was unaffordable.
+| Tier | health | speed | lives | A player who spends |
+|---|---|---|---|---|
+| Normal | 1.00 | 1.00 | 20 | finishes with 13 of 20 |
+| Hard | 1.30 | 1.10 | 15 | finishes with 7 of 15 |
+| Nightmare | 1.35 | 1.10 | 12 | dies on wave 13 of 20 |
 
-Raising the budget would have turned `NORMAL_COMFORT_UNDECIDED` green over a map
-that stays unplayable: a benchmark passing on a board nobody plays, which is the
-exact failure this whole session has been chasing.
+**The cost, stated plainly: a fully maxed board now wins every tier without
+losing a life.** The two shut-out assertions are gone, with their reasoning left
+where they were. `test/test_playability.gd` replaced them and asks the same
+question of the board a player actually has. The branch-spread bound survived;
+its reference wave moved 30 -> 45.
 
-**Owner's decision (2026-08-31): split the wave between entrances.**
+**A mistake worth knowing about:** while reworking those tests I deleted the
+branch-spread bound and the per-map placement helpers by accident, and caught it
+on the next run. Both are restored. If something looks missing from
+`test_balance_tuning.gd`, check `git show HEAD~1` before assuming it was
+deliberate.
 
-## What this branch changes
-
-`Waves.split_schedule(schedule, lane_count)` distributes one wave's spawns
-round-robin across lanes - spawn 0 to lane 0, spawn 1 to lane 1 - so both
-entrances field a mix arriving together rather than one taking all the goblins.
-**Both `game_board.gd` and `sim/harness.gd` call it**, which is the invariant the
-harness exists to protect: one implementation, two callers.
-
-A second entrance stops meaning *twice the enemies* and starts meaning *the same
-enemies, two approaches*. That inverts a documented decision, so several things
-must move with it:
-
-- `test_harness.gd`'s "each lane runs the whole wave" - committed an hour before
-  this - inverts. That test doing its job is why it was written.
-- The Fork's map comment claims "twice the enemies"; no longer true.
-- `NORMAL_COMFORT_UNDECIDED` and the "The Fork is unwinnable" pin come out **if**
-  the map now holds. That pin exists to force exactly this moment.
-- The Fork's purse of 400 was doubled this morning *because* it faced double the
-  threat. If the threat halves, re-measure it.
-
-**Out of scope, deliberately:** Hard and Nightmare are also unsurvivable from
-the opening on The Pass - two different simulated strategies die on wave 2-3 of
-the easiest map, because every tier was swept against completed maxed boards and
-never against a build-out. Real, separate, and bundling it here would tangle two
-findings.
+**Placement is worth more than the tier.** The same run dies on wave 10 clustered
+and finishes with 7 lives spread. Both benchmarks recompute placement as the
+board grows.
 
 ## Standing rules that govern this work
 

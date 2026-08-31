@@ -4,7 +4,7 @@
 not yet built, and what is still open. `CONTINUE.md` records what *is*; this
 records what *should be*.
 
-Last updated: 2026-08-31 (revised after splitting the wave).
+Last updated: 2026-08-31 (revised after making the tiers playable).
 
 ---
 
@@ -24,7 +24,8 @@ Last updated: 2026-08-31 (revised after splitting the wave).
 | **Pause menu** — Escape pauses; Continue, Restart, Quit | ✅ merged and **deployed** |
 | **The Fork's purse** — doubled, to match a doubled map | ✅ merged and **deployed** |
 | **Multi-lane harness** — every map measurable, every map benchmarked | ✅ merged and **deployed** |
-| **Splitting the wave** — a second entrance is two approaches, not twice the enemies | ✅ **built**, on `feat/split-the-wave`, **not merged** |
+| **Splitting the wave** — a second entrance is two approaches, not twice the enemies | ✅ merged and **deployed** |
+| **Playable tiers** — difficulty moves into the build-out | ✅ **built**, on `feat/playable-tiers`, **not merged** |
 | Slice 2 — tactical powers | ⬜ decided, not designed |
 | Slice 3 — versioned save + meta-progression | ⬜ decided, not designed |
 | Slice 4 — hero | ⬜ decided, not designed |
@@ -600,6 +601,66 @@ measurements:
    it no longer fields double the enemies. Sixteen maxed towers cost 20,920. So
    the map would need a larger purse or a gentler cost curve to reach the board
    its tiers now require.
+
+## The tiers are playable from wave 1 now, and it cost the endgame assertions *(2026-08-31)*
+
+Hard and Nightmare killed a player who has to build on **wave 3 of twenty**, on
+the easiest map. Both had been swept exclusively against a completed, fully-maxed
+board, where they looked reasonable.
+
+**Nothing bridged it.** Every lever was measured:
+
+| Lever | Spending player on Hard |
+|---|---|
+| as shipped (2.35× health) | dies wave 3 |
+| 20 lives instead of 15 | dies wave 3 |
+| 400 starting gold | dies wave 8 |
+| +25% income | dies wave 9 |
+| tier ramped in over 10 waves | dies wave 8 |
+| tier ramped over 30 (never reaching full) | dies wave 14 |
+
+The cause is not the tier. **A fully-maxed board is roughly ten times a
+full-but-unupgraded one**, and a tier is one curve across a run in which the
+player's board spans that range. No flat multiplier is gentle at wave 3 and
+meaningful at wave 20, and no ramp bridges it.
+
+**Owner's decision: put the difficulty in the build-out**, which is where
+measurement says the run is decided — a maxed board took zero damage at every
+setting tried, on every tier.
+
+| Tier | health | speed | gold | lives | A player who spends |
+|---|---|---|---|---|---|
+| Normal | 1.00 | 1.00 | 1.00 | 20 | finishes with **13 of 20** |
+| Hard | **1.30** | **1.10** | 0.90 | 15 | finishes with **7 of 15** |
+| Nightmare | **1.35** | **1.10** | 0.85 | 12 | **dies on wave 13 of 20** |
+
+That simulated player is a **floor** — it buys the cheapest legal thing, never
+sells, never re-places, never calls a wave early. A good player should finish
+Nightmare; this one should not.
+
+### What it cost, stated rather than buried
+
+**A fully maxed board now wins every tier without losing a life.** The two
+assertions forbidding that — no legal maxed board may shut out the hardest tier,
+and no map may either — are **gone**, with their reasoning left in their place in
+`test_balance_tuning.gd`. They were written believing difficulty lived in the
+endgame. That belief is what the measurement contradicts.
+
+`test/test_playability.gd` replaced them, and asks the same question of the right
+board: does a player who has to build survive the opening, get pressed on Hard,
+and lose late rather than early on Nightmare.
+
+The branch-spread bound survived intact — its reference wave moved 30 → 45,
+because gentler tiers mean a maxed board is no longer overwhelmed at 30 and a
+ratio needs both sides graded.
+
+### Placement is worth more than the tier
+
+Found while building the benchmark and worth keeping: **the same run dies on
+wave 10 with its towers clustered at the entrance and finishes with 7 lives with
+them spread along the route.** Two towers side by side cover one window between
+them; two spread give an enemy two windows to walk through. A benchmark of a
+build-out has to place like a player building, or it measures its own fixture.
 
 ### Also found, and separate
 

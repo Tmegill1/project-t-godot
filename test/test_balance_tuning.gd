@@ -129,130 +129,6 @@ func _mid_board() -> Array:
 			"position": Grid.tile_to_world_center(cols[i], 3), "tiers": MAXED})
 	return towers
 
-## THE assertion this whole change exists to make, and the one that had to be
-## rewritten after it let a shut-out board through.
-##
-## Directional rather than a magic number, so it survives future retuning; and
-## asked of EVERY legal fully-upgraded board rather than one, because the first
-## version pinned a single upgrade split and eleven of the sixteen legal boards
-## shut Nightmare's last wave out with zero leaks. "A full maxed board" is not
-## one board. Whatever else moves, no way of spending the full budget may make
-## the hardest tier a walkover.
-func test_no_legal_maxed_board_shuts_out_the_hardest_tier() -> bool:
-	var path := _full_path()
-	for board in _every_legal_maxed_board():
-		var r := Harness.run_wave({"wave": Waves.MAX_WAVES, "towers": board["towers"],
-			"path": path, "difficulty": Difficulty.NIGHTMARE})
-		assert_true(r["leaks"] > 0,
-			"board %s must not shut out Nightmare's last wave, got %s" % [board["name"], r])
-		assert_false(r["timed_out"], "board %s completes" % board["name"])
-	return true
-
-## The owner's report as a permanent assertion: on Nightmare the enemies get
-## past the first bend.
-##
-## Asked of two boards, and NOT of wave 10 against the full one, which is what
-## the plan proposed. Measured on 2026-08-30, wave 10 against twelve maxed
-## towers cannot clear the bend at any tier that leaves the late game
-## playable - even a 2.5x count / 0.3x interval / 3.0x health row only reaches
-## 0.26 there while annihilating waves 13 onward. It is the wrong question:
-## nobody owns twelve maxed towers at wave 10, which costs 11,415 gold against
-## 16,199 of income across a WHOLE run (see test_affordability.gd).
-##
-## So the claim is made where it means something. Against the board a player
-## actually holds mid-run, wave 10 gets past the bend; against the complete
-## board, the last wave does.
-func test_enemies_reach_past_the_first_bend_on_the_hardest_tier() -> bool:
-	var mid := Harness.run_wave({"wave": 10, "towers": _mid_board(),
-		"path": _full_path(), "difficulty": Difficulty.NIGHTMARE})
-	assert_true(mid["deepest_progress"] > FIRST_BEND_FRACTION,
-		"wave 10 gets past the bend against a mid-run board, reached %f"
-			% mid["deepest_progress"])
-
-	var path := _full_path()
-	for board in _every_legal_maxed_board():
-		var full := Harness.run_wave({"wave": Waves.MAX_WAVES, "towers": board["towers"],
-			"path": path, "difficulty": Difficulty.NIGHTMARE})
-		assert_true(full["deepest_progress"] > FIRST_BEND_FRACTION,
-			"and the last wave does against full board %s, reached %f"
-				% [board["name"], full["deepest_progress"]])
-	return true
-
-## Normal keeps its shape, by owner decision (2026-08-29): a full maxed board
-## should win wave 20 comfortably. Pinned so a later tier change cannot make
-## the default harder as a side effect.
-func test_every_maxed_board_still_wins_on_normal() -> bool:
-	var path := _full_path()
-	for board in _every_legal_maxed_board():
-		var r := Harness.run_wave({"wave": Waves.MAX_WAVES, "towers": board["towers"],
-			"path": path, "difficulty": Difficulty.NORMAL})
-		assert_eq(r["leaks"], 0,
-			"Normal stays comfortable for completed board %s" % board["name"])
-	return true
-
-## Hard's brief, pinned: real lives late, without ending the run. Asked of the
-## BEST board there is, found by measurement, because a brief that only holds
-## for a weak build is the defect this file was rewritten to catch.
-func test_hard_costs_the_strongest_board_real_lives_without_ending_the_run() -> bool:
-	var r := _best_board_result(Difficulty.HARD, Waves.MAX_WAVES)
-	assert_true(r["lives_lost"] > 0, "Hard's last wave costs a full board lives")
-	assert_true(r["lives_lost"] < Difficulty.starting_lives(Difficulty.HARD),
-		"but not the whole budget, lost %s of %s"
-			% [r["lives_lost"], Difficulty.starting_lives(Difficulty.HARD)])
-	return true
-
-
-## The two upgrade branches must stay close to each other.
-##
-## Measured at wave 30, well past anything a board can hold, and NOT at wave 20.
-## That reference is load-bearing and was got wrong once already: at the wave a
-## tier is actually decided, the best board loses almost nothing and the worst
-## loses a lot, so the ratio measures where the threshold sits rather than how
-## far apart the branches are. The same roster read 6.90x at wave 20 and 1.68x
-## at wave 30, and moving Nightmare's health by a quarter swung the wave-20
-## figure from 12.40x to undefined. A ratio needs both sides to be graded.
-##
-## Verified against the roster this replaced, by putting splash back on Basic
-## and Long Range and re-running: 3.18x, over the bound. With splash confined to
-## the Mortar it reads 1.68x. So the bound catches the defect it was written for
-## rather than merely describing the fix.
-##
-## Pinned as a RATIO, not a pair of figures, so re-tuning the difficulty rows
-## moves both sides together and leaves the claim intact. Before this work the
-## all-sustained board lost 9 lives across a Nightmare run where the all-burst
-## board lost 336, which made the branch choice not a choice.
-##
-## This is the third attempt at an assertion that catches a runaway build, and
-## the first that pins a BOUND rather than a board. The six-tower benchmark
-## missed it, then the twelve-tower single-split benchmark missed it. A bound
-## cannot be satisfied by picking a convenient example.
-const MAX_BRANCH_SPREAD := 3.0
-
-## Deep enough that every legal board is overwhelmed, so the comparison is
-## graded rather than binary. Composition accumulates from wave 1, so this is a
-## real wave the rules already describe, not a synthetic one.
-const BRANCH_SPREAD_WAVE := 30
-
-func test_no_upgrade_branch_runs_away_from_the_other() -> bool:
-	var path := _full_path()
-	var best := 1 << 30
-	var worst := 0
-	var worst_name := ""
-	for board in _every_legal_maxed_board():
-		var r := Harness.run_wave({"wave": BRANCH_SPREAD_WAVE, "towers": board["towers"],
-			"path": path, "difficulty": Difficulty.NIGHTMARE})
-		var lost := int(r["lives_lost"])
-		if lost > worst:
-			worst = lost
-			worst_name = board["name"]
-		best = mini(best, lost)
-	assert_true(best > 0, "every legal board is overwhelmed at the reference wave")
-	assert_true(float(worst) <= float(best) * MAX_BRANCH_SPREAD,
-		"worst board %s lost %d against the best board's %d, over the %.1fx bound"
-			% [worst_name, worst, best, MAX_BRANCH_SPREAD])
-	return true
-
-
 # --------------------------------------------------------------------------
 # Placing twelve towers on a map nobody hardcoded
 # --------------------------------------------------------------------------
@@ -324,39 +200,48 @@ func _board_on(map_name: StringName, splits: Array) -> Array:
 			i += 1
 	return towers
 
-# Where twelve towers land decides what a benchmark says, so the rule is stated
-# and pinned rather than left to whatever the loop happened to find. A naive
-# "first twelve legal tiles" clusters them in a corner and makes a map look far
-# worse than it plays.
-func test_every_generated_position_is_one_the_board_would_accept() -> bool:
-	for map_name in Maps.DEFS:
-		var positions := _spread_positions(map_name)
-		var budget := int(Maps.get_def(map_name)["tower_budget"])
-		assert_eq(positions.size(), budget,
-			"%s yields its whole budget of %d" % [map_name, budget])
+## THE SHUT-OUT ASSERTIONS ARE GONE, and this is their obituary rather than a
+## quiet deletion.
+##
+## Two tests lived here: no legal maxed board may shut out the hardest tier, and
+## no map may either. They were written believing difficulty lives in the
+## endgame. Measured 2026-08-31 against a player who has to BUILD, that belief
+## was wrong in a way that mattered: every tier setting harsh enough to trouble
+## a maxed board killed a spending player on wave 3 of 20, on the easiest map,
+## and no amount of ramping, gold, lives or opening purse moved it past wave 14.
+##
+## A fully-maxed twelve-tower board is roughly ten times a full-but-unupgraded
+## one. One curve cannot be gentle at wave 3 and meaningful at wave 20. The
+## owner's decision was to put the difficulty in the build-out, where the run is
+## actually decided - so a maxed board now wins every tier without losing a
+## life, and asserting otherwise would mean asserting the game back into being
+## unplayable.
+##
+## What replaced them is test_playability.gd, which measures the board a player
+## actually has rather than the one they finish with. If you find yourself
+## wanting these assertions back, read that file first: it is the same claim,
+## asked of the right board.
 
-		Grid.set_active(Maps.cols(map_name), Maps.rows(map_name))
-		var bounds := Rect2(Vector2.ZERO, Vector2(Maps.pixel_size(map_name)))
-		var radius := Placement.tower_radius(&"basic")
-		var placed: Array = []
-		for pos in positions:
-			var verdict := Placement.can_place(
-				pos, radius, [], placed, _lanes_for(map_name), bounds)
-			assert_true(verdict["ok"],
-				"%s position %s is legal, got %s" % [map_name, pos, verdict])
-			placed.append(pos)
+## The owner's report - enemies must get past the first bend - moved to
+## test_playability.gd. It used to be asked of a mid-run maxed board at wave 10;
+## with the tiers re-swept for playability that board stops everything, and the
+## question is only meaningful against the board a player actually has.
+
+## Normal keeps its shape, by owner decision (2026-08-29): a full maxed board
+## should win wave 20 comfortably. Pinned so a later tier change cannot make
+## the default harder as a side effect.
+func test_every_maxed_board_still_wins_on_normal() -> bool:
+	var path := _full_path()
+	for board in _every_legal_maxed_board():
+		var r := Harness.run_wave({"wave": Waves.MAX_WAVES, "towers": board["towers"],
+			"path": path, "difficulty": Difficulty.NORMAL})
+		assert_eq(r["leaks"], 0,
+			"Normal stays comfortable for completed board %s" % board["name"])
 	return true
 
-
-# --------------------------------------------------------------------------
-# Every map, not just the one that was easy to measure
-# --------------------------------------------------------------------------
-#
-# The Pass keeps the sixteen-board sweeps above: the branch-spread bound needs
-# the full set, and it is the map every tier value was measured against. The
-# other maps are asked the narrower question they exist to answer - does a
-# completed board hold this map, and does the hardest tier still bite - which
-# the two extreme builds answer between them.
+## Hard's brief moved with the difficulty. It used to be "real lives late for a
+## completed board"; it is now "presses a player the whole way without ending
+## the run", and it lives in test_playability.gd where the spending player does.
 
 ## Every map is asked this now. The Fork was excluded from 2026-08-30 until
 ## 2026-08-31, when splitting the wave between its entrances fixed it: a
@@ -385,13 +270,57 @@ func test_every_map_is_comfortable_on_normal_for_a_completed_board() -> bool:
 			assert_false(r["timed_out"], "%s completes" % map_name)
 	return true
 
-func test_no_map_shuts_out_the_hardest_tier() -> bool:
-	for map_name in Maps.DEFS:
-		for splits in [[SUSTAINED, SUSTAINED, SUSTAINED, SUSTAINED],
-				[BURST, BURST, BURST, BURST]]:
-			var r := Harness.run_wave({"wave": Waves.MAX_WAVES,
-				"towers": _board_on(map_name, splits), "paths": _lanes_for(map_name),
-				"difficulty": Difficulty.NIGHTMARE})
-			assert_true(r["leaks"] > 0,
-				"%s must not shut out Nightmare's last wave, got %s" % [map_name, r])
+## The two upgrade branches must stay close to each other.
+##
+## Measured at wave 30, well past anything a board can hold, and NOT at wave 20.
+## That reference is load-bearing and was got wrong once already: at the wave a
+## tier is actually decided, the best board loses almost nothing and the worst
+## loses a lot, so the ratio measures where the threshold sits rather than how
+## far apart the branches are. The same roster read 6.90x at wave 20 and 1.68x
+## at wave 30, and moving Nightmare's health by a quarter swung the wave-20
+## figure from 12.40x to undefined. A ratio needs both sides to be graded.
+##
+## Verified against the roster this replaced, by putting splash back on Basic
+## and Long Range and re-running: 3.18x, over the bound. With splash confined to
+## the Mortar it reads 1.68x. So the bound catches the defect it was written for
+## rather than merely describing the fix.
+##
+## Pinned as a RATIO, not a pair of figures, so re-tuning the difficulty rows
+## moves both sides together and leaves the claim intact. Before this work the
+## all-sustained board lost 9 lives across a Nightmare run where the all-burst
+## board lost 336, which made the branch choice not a choice.
+##
+## This is the third attempt at an assertion that catches a runaway build, and
+## the first that pins a BOUND rather than a board. The six-tower benchmark
+## missed it, then the twelve-tower single-split benchmark missed it. A bound
+## cannot be satisfied by picking a convenient example.
+const MAX_BRANCH_SPREAD := 3.0
+
+## Deep enough that every legal board is overwhelmed, so the comparison is
+## graded rather than binary. Composition accumulates from wave 1, so this is a
+## real wave the rules already describe, not a synthetic one.
+##
+## Moved 30 -> 45 on 2026-08-31, when the tiers were re-swept to be playable
+## while building. Gentler tiers mean a maxed board is no longer overwhelmed at
+## wave 30, and a ratio needs both sides graded - the same reason the reference
+## was moved off wave 20 in the first place. The bound itself did not move.
+const BRANCH_SPREAD_WAVE := 45
+
+func test_no_upgrade_branch_runs_away_from_the_other() -> bool:
+	var path := _full_path()
+	var best := 1 << 30
+	var worst := 0
+	var worst_name := ""
+	for board in _every_legal_maxed_board():
+		var r := Harness.run_wave({"wave": BRANCH_SPREAD_WAVE, "towers": board["towers"],
+			"path": path, "difficulty": Difficulty.NIGHTMARE})
+		var lost := int(r["lives_lost"])
+		if lost > worst:
+			worst = lost
+			worst_name = board["name"]
+		best = mini(best, lost)
+	assert_true(best > 0, "every legal board is overwhelmed at the reference wave")
+	assert_true(float(worst) <= float(best) * MAX_BRANCH_SPREAD,
+		"worst board %s lost %d against the best board's %d, over the %.1fx bound"
+			% [worst_name, worst, best, MAX_BRANCH_SPREAD])
 	return true

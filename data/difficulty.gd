@@ -71,53 +71,67 @@ const DEFS := {
 		"gold_multiplier": 1.0,
 		"starting_lives": Economy.STARTING_LIVES,
 	},
-	## RE-SWEPT 2026-08-30, after area damage went back to the Mortar. The rows
-	## before this one were measured against boards carrying splash on three
-	## towers; that board does not exist any more, and against the roster that
-	## replaced it those rows cost the best board over two hundred lives.
+	## RE-SWEPT 2026-08-31 against A PLAYER WHO HAS TO BUILD, which is the thing
+	## every earlier sweep got wrong.
 	##
-	## Measured against every legal fully-upgraded board rather than a named
-	## one. The cross-path rule allows two maxed splits per tower and a board
-	## picks one per kind, so "the best board" is a thing you find, not a thing
-	## you name - it used to be all-sustained and is now whichever mix the sweep
-	## reports.
+	## Both previous sweeps measured a COMPLETED, fully-maxed twelve-tower board.
+	## Measured against a player who starts with two towers and buys as they can
+	## afford, the shipped rows were not hard - they were unplayable: Hard and
+	## Nightmare both killed that player on WAVE 3, of twenty, on the easiest
+	## map. Neither ramping the tier in, nor more lives, nor more gold, nor a
+	## larger opening purse moved it past wave 14:
 	##
-	## Best board's lives lost on wave 20, and how many of the sixteen boards
-	## shut the wave out entirely:
+	##   lever tried                       spending player on Hard
+	##   as shipped (2.35 health)          dies wave 3
+	##   20 lives instead of 15            dies wave 3
+	##   400 starting gold                 dies wave 8
+	##   +25% income                       dies wave 9
+	##   tier ramped in over 10 waves      dies wave 8
+	##   tier ramped over 30 (never full)  dies wave 14
 	##
-	##   health/speed        best board   boards with ZERO leaks
-	##   1.30 1.10                    0                       15
-	##   1.60 1.20                    0                       13
-	##   2.00 1.25                    0                        5
-	##   2.25 1.30                    0                        2
-	##   2.35 1.30 (Hard)             5                        0
-	##   2.50 1.30 (Nightmare)       10                        0
-	##   2.75 1.35                   14                        0
+	## The cause is not the tier. A fully-maxed board is roughly TEN TIMES a
+	## full-but-unupgraded one, and the tier is a single curve across a run in
+	## which the player's board spans that range. No flat multiplier is gentle
+	## at wave 3 and meaningful at wave 20, and no ramp bridges it either.
 	##
-	## The threshold where the last board stops shutting the wave out sits
-	## between 2.25 and 2.35, and both tiers are set just past it. Count and
-	## interval stay at 1.0 for the reason above: the Mortar still splashes, and
-	## density is what splash is for.
+	## OWNER'S DECISION (2026-08-31): put the difficulty in the BUILD-OUT, which
+	## is where measurement says the run is actually decided - a maxed board
+	## took zero damage at every setting tried, on every tier. These rows are
+	## therefore swept against the spending player, and they make a ladder:
+	##
+	##   Normal     survives with 13 of 20 lives
+	##   Hard       survives with  7 of 15
+	##   Nightmare  dies on wave 13 of 20
+	##
+	## The simulated player is a FLOOR, not a ceiling - it buys the cheapest
+	## legal thing, never sells, never re-places, and never calls a wave early.
+	## A good player should finish Nightmare; this one should not.
+	##
+	## What this costs, stated because it was a real trade: a fully maxed board
+	## now wins every tier without losing a life. The assertions that used to
+	## forbid that are gone from test_balance_tuning.gd, with the reasoning in
+	## their place. Difficulty lives in the build-out now, not in the endgame.
 	&"hard": {
-		## The best legal board loses 5 of its 15 lives, on wave 20, and
-		## finishes with 10: real lives late without ending the run.
+		## A spending player finishes with 7 of 15 lives, against 13 of 20 on
+		## Normal - pressed the whole way without the run ever being lost.
 		"label": "Hard",
-		"count_multiplier": 1.0,
-		"interval_multiplier": 1.0,
-		"health_multiplier": 2.35,
-		"speed_multiplier": 1.30,
+		"count_multiplier": 1.00,
+		"interval_multiplier": 1.00,
+		"health_multiplier": 1.30,
+		"speed_multiplier": 1.10,
 		"gold_multiplier": 0.90,
 		"starting_lives": 15,
 	},
 	&"nightmare": {
-		## Every one of the sixteen legal boards leaks on wave 20, and the best
-		## of them loses 10 of its 12 lives across a run - it survives with two.
-		## Beatable, and only by the best build there is.
+		## A spending player dies on wave 13 of 20. That player is a floor - it
+		## buys the cheapest legal thing and never calls a wave early - so the
+		## tier is meant to be finishable by someone playing well, and by nobody
+		## playing carelessly.
 		"label": "Nightmare",
-		"count_multiplier": 1.0,
-		"interval_multiplier": 1.0,
-		"health_multiplier": 2.50,
-		"speed_multiplier": 1.30,
+		"count_multiplier": 1.00,
+		"interval_multiplier": 1.00,
+		"health_multiplier": 1.35,
+		"speed_multiplier": 1.10,
 		"gold_multiplier": 0.85,
 		"starting_lives": 12,
 	},
