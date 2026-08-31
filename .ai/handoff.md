@@ -1,4 +1,4 @@
-# Claude Handoff — Pause Menu
+# Claude Handoff — Multi-lane Harness
 
 Generated: 2026-08-30 (America/Chicago). **Live document — rewritten as work
 proceeds so Codex can take over at any point.**
@@ -6,32 +6,63 @@ proceeds so Codex can take over at any point.**
 ## Where the work is
 
 - Repository: `/home/tylermegill/Projects/project-t-godot`
-- Branch: **`feat/fork-gold`**, merged to `master` as `5ceaf33` on the owner's
-  instruction. Both branches pushed; the Pages deploy succeeded. Suite green on
-  the merged result at **13,782 checks across 46 files, exit 0**.
-- **Nothing is in flight.** Everything in this session is merged and deployed.
+- Branch: **`feat/multi-lane-harness`**, off `master` at `4998840`. Spec and plan
+  committed; **execution starting**.
+- Everything before it in this session is merged and deployed. Suite on
+  `master`: **13,782 checks across 46 files, exit 0**.
+- Spec: `docs/superpowers/specs/2026-08-30-multi-lane-harness-design.md`
+- Plan: `docs/superpowers/plans/2026-08-30-multi-lane-harness.md` (6 tasks)
 
-## This branch
+## Why this work exists
 
-The Fork's `starting_gold` goes **250 → 400**, exactly twice The Pass's 200. The
-cost change earlier in the session had narrowed the gap from 2.5x to 1.25x, and
-the map is harder than its own comment claimed: both lanes carry the full wave
-**and** each lane is only about 59% as long (1,440px and 1,392px against The
-Pass's 2,448px), so it is double the threat with less than half the time to
-answer it. 400 buys four towers to The Pass's two.
+`sim/harness.gd` claims every balance number in this project is a test rather
+than an assertion. That holds for **one map out of three** — its header lists
+"one lane" among its simplifications and `run_wave` takes a single `path`.
 
-The purse ladder picks the number: 250 through 399 all buy the same three towers
-because the fourth costs 135, and nothing buys a fifth until 630.
-`test_data_tables.gd` now asserts the **relationship** (2x The Pass) as well as
-the literal, so the two numbers stay meaningful together if either moves.
+It became load-bearing when The Fork's purse moved to 400 earlier today. Every
+other number this week was swept and pinned, two of them verified by restoring
+the defect and watching the assertion fail. That one could not be, and its own
+comment says so.
 
-**This one was NOT simulated, unlike The Pass's purse.** `Harness.run_wave`
-takes a single path and is one-lane by design; running each of The Fork's lanes
-separately with the same towers would have every tower firing down both at full
-rate, which over-counts coverage. The number rests on what a purse buys and on
-the measured geometry. **Multi-lane harness support is now the biggest hole in
-this project's measurement story** — every balance claim about The Fork and any
-future two-lane map is currently unmeasurable.
+## The shape
+
+`config["paths"]` joins `config["path"]`, which keeps meaning exactly one lane.
+Enemies carry a `lane` index; routes are precomputed per lane; spawning uses one
+shared schedule with a cursor per lane — mirroring `GameBoard._spawn_queues` and
+`_spawned_per_path` rather than approximating them. Every lane runs the whole
+wave, so two entrances field twice the enemies.
+
+**Rejected on correctness: running each lane separately and summing.** No core
+loop change at all, which is why it is tempting, and wrong — every tower would
+fire down every lane at full rate. That is the exact error that stopped The
+Fork's purse being "measured" that way in the first place.
+
+## Task progress
+
+| # | Task | State |
+|---|---|---|
+| — | Spec | ✅ committed |
+| — | Plan | ✅ committed |
+| 1 | `run_wave` accepts `paths`, one lane unchanged | ⬜ **next** |
+| 2 | Two lanes are two lanes | ⬜ |
+| 3 | Twelve towers on any map, by a stated rule | ⬜ |
+| 4 | Benchmark every map | ⬜ |
+| 5 | Measure The Fork and The Coils, and report | ⬜ |
+| 6 | Docs | ⬜ |
+
+## Three things that will bite an executor
+
+1. **No call site may be edited to make a test pass.** The 64 existing
+   `run_wave` calls are the project's measured corpus. If one of their numbers
+   moves, the change is wrong — fix the change, not the pin.
+2. **Task 4 is expected to fail, and that is a finding, not a defect.** The Fork
+   and The Coils have never been measured. If one shuts out Nightmare or leaks
+   on Normal, carry it forward to Task 5 and **do not retune a map** — retuning
+   inside the change that made measurement possible destroys the evidence.
+3. **The suite has a three-minute budget** with the fallback named in advance
+   (two builds per map instead of sixteen; then Normal drops to burst alone).
+   Whichever cut is taken goes in the test's own comment with the runtime that
+   forced it.
 
 ## Standing rules that govern this work
 
