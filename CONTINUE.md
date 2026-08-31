@@ -1166,3 +1166,47 @@ route: two towers side by side cover one window between them, two spread give an
 enemy two windows. Both benchmarks recompute placement as the board grows. A
 fixed list of slots walked in order clusters the early board and measures the
 fixture instead of the game.
+
+---
+
+## 21. Why the tiers do not transfer between maps
+
+Hard leaves a building player 7 of 15 lives on The Pass and **kills them on wave
+10 of both other maps**. Every map is fine on Normal. The tiers were swept
+against The Pass alone, and two structural things stop them carrying over.
+
+### Coverage density — same budget, very different routes
+
+| Map | Route | Towers | Per 1,000px |
+|---|---|---|---|
+| The Pass | 2,448px | 12 | **4.9** |
+| The Fork | 2,832px | 12 | 4.2 |
+| The Coils | 3,696px | 12 | **3.2** |
+
+The Coils is 51% longer than The Pass on an identical budget — 35% less coverage
+per unit of route. Invisible on Normal, where everything dies inside the covered
+stretches; decisive on Hard, where enemies survive them and reach the gaps.
+
+### The wave-clear speed bonus punishes long maps
+
+`Economy.WAVE_CLEAR` pays in full at **20s** and nothing at **60s** — flat
+thresholds against routes of very different lengths. A long map clears slower for
+geometric reasons and is paid less for identical play. On Hard, The Coils earns
+**0** speed bonus from wave 9 while The Pass still earns 27; fewer upgrades,
+thinner board, more leaks, longer clears, and the spiral closes.
+
+**The levers, neither pulled:** per-map tower budgets scaled to route length, and
+speed-bonus thresholds scaled to the route rather than fixed in seconds. **If you
+touch either, re-measure every map** — this is the third time a number tuned on
+The Pass has failed to transfer.
+
+### Two corrections to earlier entries
+
+- §18's "The Fork is unwinnable, and the cause is the tower budget" is **spent**.
+  Splitting the wave and re-sweeping the tiers fixed it; a completed board now
+  loses 0-11 lives there. The sixteen-tower finding and the `limit_bonus_map2`
+  blocker are both obsolete.
+- The recorded claim that The Coils kills a spending player on wave 10 of Normal
+  is **withdrawn**. It finishes with 19 of 20. That figure came from a probe
+  placing towers at full-budget slots, which clusters an early board — the same
+  artifact §20 warns about.
