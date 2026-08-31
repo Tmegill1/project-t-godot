@@ -346,3 +346,76 @@ func test_every_generated_position_is_one_the_board_would_accept() -> bool:
 				"%s position %s is legal, got %s" % [map_name, pos, verdict])
 			placed.append(pos)
 	return true
+
+
+# --------------------------------------------------------------------------
+# Every map, not just the one that was easy to measure
+# --------------------------------------------------------------------------
+#
+# The Pass keeps the sixteen-board sweeps above: the branch-spread bound needs
+# the full set, and it is the map every tier value was measured against. The
+# other maps are asked the narrower question they exist to answer - does a
+# completed board hold this map, and does the hardest tier still bite - which
+# the two extreme builds answer between them.
+
+## The Fork is EXCLUDED, and that is a recorded defect rather than an oversight.
+##
+## Measured 2026-08-30, the first time it could be: a completed twelve-tower
+## maxed board loses 101 lives on Normal with the sustained build and 128 with
+## the burst build, against a budget of 20. It fields twice the enemies down
+## lanes barely 59% as long, and until this commit nothing could measure it.
+##
+## It is not retuned here on purpose. This change exists to make the map
+## measurable; rebalancing it inside the same change would destroy the evidence
+## it was built to produce, and what to do about it is the owner's call. The
+## test below pins how broken it is, so a fix cannot land unnoticed.
+const NORMAL_COMFORT_UNDECIDED: Array[StringName] = [&"map2"]
+
+## Comfortable means the run is won with most of the life budget intact, not
+## that nothing ever gets through.
+##
+## Deliberately not `leaks == 0`. That form lives on the sixteen-board sweep
+## above, which places towers in a hand-picked line and still passes at zero.
+## This one spaces them along the route instead, and a board spread over a route
+## kills fractionally later than one massed at its entrance - The Pass leaks 1
+## of 177 that way. One leak in 177 is placement noise; it is not the thing this
+## assertion is about.
+func test_every_map_is_comfortable_on_normal_for_a_completed_board() -> bool:
+	for map_name in Maps.DEFS:
+		if NORMAL_COMFORT_UNDECIDED.has(map_name):
+			continue
+		for splits in [[SUSTAINED, SUSTAINED, SUSTAINED, SUSTAINED],
+				[BURST, BURST, BURST, BURST]]:
+			var r := Harness.run_wave({"wave": Waves.MAX_WAVES,
+				"towers": _board_on(map_name, splits), "paths": _lanes_for(map_name),
+				"difficulty": Difficulty.NORMAL})
+			assert_true(int(r["lives_lost"]) < Economy.STARTING_LIVES / 2,
+				"%s is comfortable on Normal for a completed board, lost %s of %d"
+					% [map_name, r["lives_lost"], Economy.STARTING_LIVES])
+			assert_false(r["timed_out"], "%s completes" % map_name)
+	return true
+
+## How broken The Fork is, pinned so that fixing it fails this test and forces
+## the record above to be updated with it. A defect nobody has to notice is a
+## defect that survives.
+func test_the_fork_is_currently_unwinnable_on_normal() -> bool:
+	for splits in [[SUSTAINED, SUSTAINED, SUSTAINED, SUSTAINED],
+			[BURST, BURST, BURST, BURST]]:
+		var r := Harness.run_wave({"wave": Waves.MAX_WAVES,
+			"towers": _board_on(&"map2", splits), "paths": _lanes_for(&"map2"),
+			"difficulty": Difficulty.NORMAL})
+		assert_true(int(r["lives_lost"]) > Economy.STARTING_LIVES,
+			"The Fork still costs a completed board more than its whole life budget on NORMAL, lost %s of %d - if this now fails, the map was fixed and NORMAL_COMFORT_UNDECIDED should lose map2"
+				% [r["lives_lost"], Economy.STARTING_LIVES])
+	return true
+
+func test_no_map_shuts_out_the_hardest_tier() -> bool:
+	for map_name in Maps.DEFS:
+		for splits in [[SUSTAINED, SUSTAINED, SUSTAINED, SUSTAINED],
+				[BURST, BURST, BURST, BURST]]:
+			var r := Harness.run_wave({"wave": Waves.MAX_WAVES,
+				"towers": _board_on(map_name, splits), "paths": _lanes_for(map_name),
+				"difficulty": Difficulty.NIGHTMARE})
+			assert_true(r["leaks"] > 0,
+				"%s must not shut out Nightmare's last wave, got %s" % [map_name, r])
+	return true

@@ -99,7 +99,7 @@ and 20.
 | `audio/` — pooled playback, 17 core-slice events | ✅ complete |
 | Web export | ✅ preset + build; **boots and renders in a browser; not yet played in one** |
 | Deploy | ✅ live at **https://tmegill1.github.io/project-t-godot/** — every push to `master` republishes, at the address GitHub assigns (no custom domain) |
-| Tests | ✅ 13,782 checks across 46 files, exit 0 |
+| Tests | ✅ 13,845 checks across 46 files, exit 0 (about 105s) |
 | Map authoring | ✅ text format (`data/maps/*.txt`) + a `@tool` painting scene — see §12 |
 | Decoration | ✅ camps (wall + fires) in forest; scattered landmarks in ice/desert — see §13 |
 | Enemies | ✅ five — goblin, bat, shaman, ogre (rank and file) and troll (**boss only**) |
@@ -976,12 +976,10 @@ anything together.
 that relationship as well as the literal. Both its lanes carry the full wave and
 each is only about 59% as long (1,440px and 1,392px against 2,448px), so it is
 double the threat with less than half the time to answer it; 400 buys four
-towers against The Pass's two. **That number was not simulated** —
-`Harness.run_wave` is one-lane by design, and running each lane separately with
-the same towers would have every tower firing down both at full rate. Measuring
-any two-lane map properly needs multi-lane harness support, which is the biggest
-remaining hole in this project's measurement story. The Coils (200, one lane,
-the longest route at 3,696px) was left alone.
+towers against The Pass's two. That number was not simulated when it was chosen — the harness was one-lane —
+but it can be now, and The Fork turned out to have a much larger problem than
+its purse. See §18. The Coils (200, one lane, the longest route at 3,696px) was
+left alone and measures well.
 
 ---
 
@@ -1025,3 +1023,62 @@ menu's Restart now set the two statics from the board before reloading
 (`stage_retry()` and `stage_restart()`, split from their buttons so they can be
 tested without a live tree). **If you add another path that reloads the scene,
 it needs the same three lines.**
+
+---
+
+## 18. The harness sees every map now
+
+`sim/harness.gd` used to list "one lane" among its deliberate simplifications,
+which meant its central claim — every balance number here is a test rather than
+an assertion — held for **one map out of three**.
+
+`run_wave` takes `paths` now. **`path` still means exactly one lane and returns
+byte-identical results**, which is why all 64 existing call sites went unedited
+and no measured number moved. Two things a reader must not undo:
+
+- **`path` and `paths: [path]` are the same interface**, asserted as equality
+  rather than a tolerance. Every measured claim in this project came through the
+  older spelling; if they ever diverge, all of it is in question.
+- **The per-map benchmark's placement rule is written down** in
+  `test_balance_tuning.gd`: twelve towers spaced along each lane, legality asked
+  of `Placement.can_place`, props deliberately excluded because decoration is
+  seeded and a benchmark that moved with the seed would not be one. A benchmark
+  whose placement is unstated is a number nobody can argue with.
+
+Lanes work the way the board works: one shared schedule, a cursor each, so every
+lane runs the **whole** wave. Targeting, damage, splash, slow, the aura and leak
+resolution needed no changes at all — none of them ever looks at a path, which
+is the evidence a lane belongs to the enemy walking it.
+
+### What it found immediately
+
+| Map | Lanes | Route | Normal | Hard | Nightmare |
+|---|---|---|---|---|---|
+| The Pass | 1 | 2,448px | 0 / 1 | 0 / 41 | 7 / 45 |
+| **The Fork** | **2** | 2,832px | **101 / 128** | **508 / 439** | **530 / 458** |
+| The Coils | 1 | 3,696px | 0 / 0 | 10 / 34 | 13 / 37 |
+
+*(lives lost by a completed board on wave 20; sustained build / burst build.)*
+
+**The Fork is unwinnable — 101 lives lost on Normal against a budget of 20 —
+and the cause is the tower budget, not the purse.** Every map allows twelve
+towers, and The Fork must split them across two lanes: six per lane against a
+full wave each. `tower_budget` in `data/maps.gd` is the obvious lever and has
+been 12 everywhere since the cap landed, but changing it is a decision rather
+than a measurement.
+
+It is **not fixed**, on purpose: this work exists to make the map measurable,
+and retuning inside it would destroy the evidence. `test_balance_tuning.gd`
+excludes The Fork from the Normal-comfort assertion under
+`NORMAL_COMFORT_UNDECIDED`, and separately pins how broken it is — so a fix
+fails that pin and forces the exclusion to be revisited. **If you fix the map,
+that test is your reminder to update the record.**
+
+### And a correction worth carrying
+
+§15 records that at Normal `deepest_progress` never exceeds 0.18. That was
+measured with twelve towers **massed at the entrance**, the only placement the
+old benchmark had. Spaced along the route, the same board on the same map lets
+enemies reach **0.76**. "Nothing reaches the first bend" described a clustered
+board, not the game. The tier tuning stands — it was swept against the clustered
+board consistently — but do not repeat the phrase as though it described a map.

@@ -6,8 +6,36 @@ proceeds so Codex can take over at any point.**
 ## Where the work is
 
 - Repository: `/home/tylermegill/Projects/project-t-godot`
-- Branch: **`feat/multi-lane-harness`**, off `master` at `4998840`. Spec and plan
-  committed; **execution starting**.
+- Branch: **`feat/multi-lane-harness`**, off `master` at `4998840`. **All six
+  tasks complete**, suite green at **13,845 checks across 46 files, exit 0**, in
+  about 105s against a 180s budget. Nothing pushed or merged.
+
+## THE FINDING: The Fork is unwinnable, and it is not fixed here
+
+| Map | Lanes | Route | Normal | Hard | Nightmare |
+|---|---|---|---|---|---|
+| The Pass | 1 | 2,448px | 0 / 1 | 0 / 41 | 7 / 45 |
+| **The Fork** | **2** | 2,832px | **101 / 128** | **508 / 439** | **530 / 458** |
+| The Coils | 1 | 3,696px | 0 / 0 | 10 / 34 | 13 / 37 |
+
+*(lives lost by a completed twelve-tower board on wave 20; sustained / burst.
+The budget is 20 lives on Normal.)*
+
+**The cause is the tower budget, not the purse doubled this morning.** Every map
+allows twelve towers and The Fork must split them across two lanes - six per
+lane against a full wave each, where The Pass puts all twelve on its one.
+`tower_budget` in `data/maps.gd` is the obvious lever and has been 12 everywhere
+since the cap landed, but changing it is the owner's decision.
+
+`test_balance_tuning.gd` excludes The Fork from the Normal-comfort assertion
+under `NORMAL_COMFORT_UNDECIDED` **and separately pins how broken it is**, so a
+fix fails that pin and forces the exclusion to be revisited.
+
+**A correction also landed:** "at Normal nothing exceeds 0.18 of the route" was
+measured with towers massed at the entrance. Spaced along it, the same board on
+the same map reaches 0.76. That phrase described a clustered board, not the
+game. The tier tuning stands - it was swept against the clustered board
+consistently.
 - Everything before it in this session is merged and deployed. Suite on
   `master`: **13,782 checks across 46 files, exit 0**.
 - Spec: `docs/superpowers/specs/2026-08-30-multi-lane-harness-design.md`
@@ -46,9 +74,9 @@ Fork's purse being "measured" that way in the first place.
 | 1 | `run_wave` accepts `paths`, one lane unchanged | ✅ done |
 | 2 | Two lanes are two lanes | ✅ done |
 | 3 | Twelve towers on any map, by a stated rule | ✅ done |
-| 4 | Benchmark every map | 🔄 **next** |
-| 5 | Measure The Fork and The Coils, and report | ⬜ |
-| 6 | Docs | ⬜ |
+| 4 | Benchmark every map | ✅ done |
+| 5 | Measure The Fork and The Coils, and report | ✅ done |
+| 6 | Docs | ✅ done |
 
 ## Three things that will bite an executor
 
