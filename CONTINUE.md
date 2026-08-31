@@ -99,7 +99,7 @@ and 20.
 | `audio/` — pooled playback, 17 core-slice events | ✅ complete |
 | Web export | ✅ preset + build; **boots and renders in a browser; not yet played in one** |
 | Deploy | ✅ live at **https://tmegill1.github.io/project-t-godot/** — every push to `master` republishes, at the address GitHub assigns (no custom domain) |
-| Tests | ✅ 13,855 checks across 46 files, exit 0 (about 105s) |
+| Tests | ✅ 13,770 checks across 47 files, exit 0 (about 127s) |
 | Map authoring | ✅ text format (`data/maps/*.txt`) + a `@tool` painting scene — see §12 |
 | Decoration | ✅ camps (wall + fires) in forest; scattered landmarks in ice/desert — see §13 |
 | Enemies | ✅ five — goblin, bat, shaman, ogre (rank and file) and troll (**boss only**) |
@@ -1126,3 +1126,43 @@ decisions:
 2. **The Fork's income halved with the split**, 30,371 → 16,632, because it no
    longer fields double the enemies. Sixteen maxed towers cost 20,920, so the
    map cannot currently afford the board its own tiers require.
+
+---
+
+## 20. Difficulty lives in the build-out, not the endgame
+
+**The tiers were tuned against the wrong board for a week.** Hard and Nightmare
+were swept against a completed, fully-maxed twelve-tower board, where they looked
+reasonable. Against a player who starts with two towers and buys what they can
+afford, both killed that player on **wave 3 of twenty**, on the easiest map.
+
+Nothing bridged it — not more lives (no effect at all), not more gold, not a
+bigger purse, and not ramping the tier in over thirty waves. **A fully-maxed
+board is roughly ten times a full-but-unupgraded one**, and a tier is one curve
+across a run spanning that range.
+
+| Tier | health | speed | lives | A player who spends |
+|---|---|---|---|---|
+| Normal | 1.00 | 1.00 | 20 | finishes with 13 of 20 |
+| Hard | 1.30 | 1.10 | 15 | finishes with 7 of 15 |
+| Nightmare | 1.35 | 1.10 | 12 | dies on wave 13 of 20 |
+
+**`test/test_playability.gd` is the benchmark now.** It simulates a player rather
+than a board, and it is a floor rather than a ceiling: cheapest legal purchase
+every time, no selling, no re-placing, no calling waves early. If it dies on wave
+3 the tiers are not playable, whatever a maxed board says.
+
+### Two things not to undo
+
+**The shut-out assertions are gone on purpose.** A fully maxed board now wins
+every tier without losing a life, and `test_balance_tuning.gd` carries the
+reasoning where those tests used to be. Wanting them back means wanting the game
+back to killing a new player on wave 3 — read `test_playability.gd` first, it is
+the same claim asked of the right board.
+
+**Place like a player building.** The same run dies on wave 10 with its towers
+clustered at the entrance and finishes with 7 lives with them spread along the
+route: two towers side by side cover one window between them, two spread give an
+enemy two windows. Both benchmarks recompute placement as the board grows. A
+fixed list of slots walked in order clusters the early board and measures the
+fixture instead of the game.
