@@ -6,9 +6,19 @@ proceeds so Codex can take over at any point.**
 ## Where the work is
 
 - Repository: `/home/tylermegill/Projects/project-t-godot`
-- Branch: **`feat/multi-lane-harness`**, off `master` at `4998840`. **All six
-  tasks complete**, suite green at **13,845 checks across 46 files, exit 0**, in
-  about 105s against a 180s budget. Nothing pushed or merged.
+- Branch: **`feat/multi-lane-harness`**, merged to `master` as `f625726` on the
+  owner's instruction. Both branches pushed; the Pages deploy succeeded. Suite
+  green on the merged result at **13,845 checks across 46 files, exit 0**, in
+  about 105s against a 180s budget.
+- **Nothing is in flight.** Everything in this session is merged and deployed.
+
+## The one decision waiting for the owner
+
+**The Fork needs a bigger tower budget, or something equivalent.** The table
+below is the evidence; `tower_budget` in `data/maps.gd` is the obvious lever and
+has been 12 on every map since the cap landed. It was deliberately not touched -
+see below - so this is the natural next piece of work and it starts with a
+decision rather than a measurement.
 
 ## THE FINDING: The Fork is unwinnable, and it is not fixed here
 
