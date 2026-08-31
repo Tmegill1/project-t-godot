@@ -853,3 +853,52 @@ func test_one_lane_by_either_name_is_the_same_wave() -> bool:
 	var by_lanes := Harness.run_wave({"wave": 6, "towers": towers, "paths": [path]})
 	assert_eq(by_lanes, by_path, "paths:[p] is exactly path:p")
 	return true
+
+## The Fork's own two lanes, so this is the shipped geometry rather than a
+## fixture that happens to have two entries.
+func _fork_paths() -> Array:
+	Grid.set_active(Maps.cols(&"map2"), Maps.rows(&"map2"))
+	return PathFinder.get_all_spawn_paths(Maps.build_tiles(&"map2"))
+
+func test_the_fork_really_has_two_lanes() -> bool:
+	assert_eq(_fork_paths().size(), 2, "the fixture below is worth having")
+	return true
+
+# Every lane issues the WHOLE schedule, so two entrances field twice the wave.
+# That is the board's behaviour - one shared schedule, a cursor each - and the
+# thing a per-lane simulation summed afterwards could never reproduce.
+func test_each_lane_runs_the_whole_wave() -> bool:
+	var lanes := _fork_paths()
+	var one := Harness.run_wave({"wave": 4, "towers": [], "paths": [lanes[0]]})
+	var both := Harness.run_wave({"wave": 4, "towers": [], "paths": lanes})
+	assert_eq(int(both["leaks"]), int(one["leaks"]) * 2,
+		"two lanes leak twice as many, undefended")
+	return true
+
+# A wave is not over while any entrance still has enemies to send.
+func test_a_wave_does_not_clear_while_a_lane_still_has_spawns() -> bool:
+	var lanes := _fork_paths()
+	var both := Harness.run_wave({"wave": 4, "towers": [], "paths": lanes})
+	var longest := Harness.run_wave({"wave": 4, "towers": [], "paths": [lanes[0]]})
+	assert_true(int(both["ticks"]) >= int(longest["ticks"]),
+		"a two-lane wave runs at least as long as either lane alone")
+	assert_false(both["timed_out"], "and it does finish")
+	return true
+
+func test_lanes_are_deterministic() -> bool:
+	var lanes := _fork_paths()
+	var config := {"wave": 7, "towers": [], "paths": lanes}
+	assert_eq(Harness.run_wave(config), Harness.run_wave(config),
+		"same lanes, same config, same result")
+	return true
+
+# Progress is a fraction of an enemy's OWN lane, so it stays a fraction however
+# many lanes there are and however different their lengths.
+func test_progress_stays_a_fraction_across_lanes() -> bool:
+	var lanes := _fork_paths()
+	var r := Harness.run_wave({"wave": 4, "towers": [], "paths": lanes})
+	assert_almost_eq(r["deepest_progress"], 1.0, 0.01,
+		"undefended, something reaches the end of its lane")
+	assert_true(r["progress_at_death"] >= 0.0 and r["progress_at_death"] <= 1.0,
+		"and the mean death depth is a fraction")
+	return true

@@ -44,8 +44,8 @@ Fork's purse being "measured" that way in the first place.
 | — | Spec | ✅ committed |
 | — | Plan | ✅ committed |
 | 1 | `run_wave` accepts `paths`, one lane unchanged | ✅ done |
-| 2 | Two lanes are two lanes | 🔄 **next** |
-| 3 | Twelve towers on any map, by a stated rule | ⬜ |
+| 2 | Two lanes are two lanes | ✅ done |
+| 3 | Twelve towers on any map, by a stated rule | 🔄 **next** |
 | 4 | Benchmark every map | ⬜ |
 | 5 | Measure The Fork and The Coils, and report | ⬜ |
 | 6 | Docs | ⬜ |
