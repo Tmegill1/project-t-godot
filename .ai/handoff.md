@@ -6,8 +6,21 @@ proceeds so Codex can take over at any point.**
 ## Where the work is
 
 - Repository: `/home/tylermegill/Projects/project-t-godot`
-- Branch: **`feat/split-the-wave`**, off `master` at `cbf7c83`. **Complete**,
-  suite green at **13,855 checks across 46 files, exit 0**. Nothing pushed.
+- Branch: **`feat/split-the-wave`**, merged to `master` as `6edbca5` on the
+  owner's instruction. Both branches pushed; the Pages deploy succeeded. Suite
+  green on the merged result at **13,855 checks across 46 files, exit 0**.
+- **Nothing is in flight.** Everything in this session is merged and deployed.
+
+## The three things waiting, in the order I would take them
+
+1. **Per-map tower limits, then The Fork's budget to 16.** The only fix measured
+   for its Hard and Nightmare tiers. Blocked on `limit_bonus_map2` applying to
+   every map but the first, and on the map's halved income.
+2. **The tiers have never been tested against a build-out.** Hard and Nightmare
+   kill a spending player on wave 2-3 of *The Pass*, the easiest map. Every tier
+   value was swept against completed maxed boards.
+3. **The Coils kills a spending player on wave 10 of Normal**, despite the best
+   completed board in the game. An economy problem on that map.
 
 ## Result: Normal fixed, the harder tiers still open
 
