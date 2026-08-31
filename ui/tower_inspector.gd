@@ -9,6 +9,25 @@ extends Control
 ## half of everything sunk into THIS tower, upgrades included, which only means
 ## anything beside the tiers that produced it.
 ##
+## THE ROOT IS MOUSE_FILTER_IGNORE, and that is load-bearing rather than tidy.
+##
+## This Control spans the whole 140px column and is ALWAYS visible - only its
+## Rows child is hidden when no tower is selected. With the Control's default
+## STOP it therefore sat invisibly on top of the build palette and swallowed
+## every click meant for it, so no tower could be bought with the mouse at all.
+## Measured live on 2026-08-31 with an A/B/A: identical clicks on the Basic
+## button selected nothing at STOP, selected `basic` at IGNORE, and selected
+## nothing again at STOP.
+##
+## IGNORE affects this node only - the branch, priority and Sell buttons below
+## are picked independently and still receive their own clicks, and a click that
+## lands on the panel but misses them is stopped by TowerPanel's Background.
+##
+## The bug shipped with this scene (ce41a08) and survived because
+## test_tower_panel.gd asserted the PALETTE's visibility flag and never that the
+## inspector had stopped covering it - it checked the node that hides, not the
+## node that does the covering.
+##
 ## The rows are built ONCE and rewritten in place; nothing here frees a node
 ## after _ready(). An earlier version rebuilt them on every change, which broke
 ## the moment a row was actually pressed: Godot locks an object while it is

@@ -505,6 +505,41 @@ func test_the_selected_tower_inspector_fits_inside_the_shortest_map() -> bool:
 # side by side is not an option at this width. If a later change makes them
 # both visible, the column overflows again and the test above stops being
 # enough on its own - so the exclusivity is pinned directly.
+# The palette is only usable if nothing is sitting on top of it eating clicks.
+#
+# THIS IS THE ASSERTION THAT WAS MISSING, and the reason no tower could be
+# bought with the mouse from ce41a08 until 2026-08-31. The test below asserts
+# the PALETTE's visibility flag flips correctly - and it always did. What
+# nothing checked was the node doing the covering: TowerInspector spans the
+# whole column, is always visible, and defaulted to MOUSE_FILTER_STOP, so it
+# swallowed every click meant for the buttons underneath it.
+#
+# Written against every sibling drawn ABOVE the palette rather than against the
+# inspector by name, so the next full-panel overlay someone adds is caught too.
+# Rects are not used: nodes in this harness are never laid out, so their sizes
+# are meaningless - what matters is that a sibling above the palette cannot be
+# both visible and mouse-stopping.
+func test_nothing_drawn_over_the_palette_can_swallow_its_clicks() -> bool:
+	var board := _ready_board()
+	var panel := _ready_panel()
+	panel.bind(board)
+	var buttons: Control = panel.get_node("Buttons")
+
+	var found_one_above := false
+	for child in panel.get_children():
+		var control := child as Control
+		if control == null or control.get_index() <= buttons.get_index():
+			continue
+		found_one_above = true
+		assert_true(control.mouse_filter != Control.MOUSE_FILTER_STOP or not control.visible,
+			"%s is drawn over the palette, so it must not stop mouse input while visible"
+				% control.name)
+	assert_true(found_one_above,
+		"precondition: something IS drawn over the palette, or this test proves nothing")
+	panel.free()
+	board.free()
+	return true
+
 func test_the_build_palette_and_the_inspector_are_never_both_showing() -> bool:
 	var board := _ready_board()
 	var panel := _ready_panel()

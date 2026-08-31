@@ -6,43 +6,50 @@ proceeds so Codex can take over at any point.**
 ## Where the work is
 
 - Repository: `/home/tylermegill/Projects/project-t-godot`
-- Branch: **`feat/tiers-across-maps`**, merged to `master` as `16be937` on the
-  owner's instruction. Both branches pushed; the Pages deploy succeeded. Docs
-  only - no game numbers changed, suite unaffected at **13,770 checks, exit 0**.
-- **Nothing is in flight.** Everything in this session is merged and deployed.
+- Branch: **`fix/unclickable-tower-palette`**, off `master` at `caae5f4`.
+  **Complete**, suite green at **13,772 checks across 47 files, exit 0**.
+  Nothing pushed.
+- Everything before it this session is merged and deployed.
 
-## Re-measured against the new tiers: two findings were wrong, one is new
+## The game could not be played with a mouse, and this fixes it
 
-**The Fork's Hard/Nightmare catastrophe is gone.** It lost 93-144 lives; a
-completed board now loses 0-11 against budgets of 15 and 12. The "sixteen towers
-would fix it" finding and the `limit_bonus_map2` blocker are **obsolete**.
+Driving the real game through its own input for the first time - rather than
+through the harness - found the build palette **completely unclickable**.
+`TowerInspector`'s root is a full-column Control, always visible (only its Rows
+child toggles), with no `mouse_filter` - so it defaulted to STOP and swallowed
+every click meant for the palette. It shipped that way with `ce41a08`.
 
-**The Coils never had a Normal problem.** It was recorded as killing a spending
-player on wave 10; it finishes with **19 of 20**. The original number came from a
-probe placing towers at full-budget slots, which clusters an early board - the
-placement artifact found later the same day, reported before the confound was.
+Proven with an A/B/A on identical coordinates: STOP -> nothing, IGNORE ->
+`basic` selected, STOP -> nothing.
 
-**New, and the real remaining gap: the tiers are playable on The Pass and
-nowhere else.**
+**Why 13,772 assertions missed it:** the existing test asserted the palette's
+visibility flag flips, which it always did. Nothing checked the node doing the
+covering - **it watched the node that hides, not the node that hides it.**
 
-| A player who has to build | Normal | Hard | Nightmare |
-|---|---|---|---|
-| The Pass | 13 of 20 | **7 of 15** | dies wave 13 |
-| The Fork | 14 of 20 | **dies wave 10** | dies wave 10 |
-| The Coils | 19 of 20 | **dies wave 10** | dies wave 7 |
+Three fixes, all verified:
 
-Two structural causes, neither fixed:
+1. `TowerInspector` root is `MOUSE_FILTER_IGNORE`. **Do not tidy this back to
+   the default.** Its own buttons are picked independently and still work.
+2. `test_nothing_drawn_over_the_palette_can_swallow_its_clicks` asserts no
+   sibling drawn above the palette is both visible and mouse-stopping - written
+   generally, and **verified by reverting the fix and watching it fail**.
+3. `GameBoard._world_of` reads the event position instead of
+   `get_global_mouse_position()`. Identical for a person; the global position is
+   the OS cursor, so synthesised clicks could never place a tower - which is why
+   placement had never been exercised end to end.
 
-1. **Coverage density.** Same twelve-tower budget on routes of 2,448 / 2,832 /
-   3,696px - 4.9, 4.2 and 3.2 towers per 1,000px. Invisible on Normal, decisive
-   on Hard.
-2. **The wave-clear speed bonus punishes long maps.** Full at 20s, none at 60s,
-   flat thresholds against very different routes. On Hard The Coils earns 0 speed
-   bonus from wave 9 while The Pass still earns 27.
+**Verified live after the fix:** two real clicks place a Basic (gold 200 -> 165);
+clicking it opens the inspector; clicking the upgrade row buys the tier (gold
+165 -> 135, fire rate 1000 -> 800) and the generated summary updates from "fires
+0.2s faster" to "fires 0.16s faster".
 
-Levers: per-map tower budgets scaled to route length, and speed-bonus thresholds
-scaled to the route rather than fixed in seconds. **Both are decisions, and this
-is the third time a number tuned on The Pass has failed to transfer.**
+Also confirmed working live: difficulty selection (20/15/12 lives), the whole
+wave loop, the pause menu, and **Retry preserving map and difficulty** - the fix
+from the day before, until now only tested headlessly.
+
+**Still unreachable by any automation here:** art, animation, audio audibility,
+projectile flight, victory -> next-map chaining, touch. Screenshots are blank on
+this machine (`glx: failed to create dri3 screen`).
 
 ## Standing rules that govern this work
 

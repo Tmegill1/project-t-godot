@@ -447,12 +447,30 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	if event is InputEventMouseMotion:
-		_update_ghost(get_global_mouse_position())
+		_update_ghost(_world_of(event))
 		return
 	if event is InputEventMouseButton and event.pressed \
 			and event.button_index == MOUSE_BUTTON_LEFT:
-		_handle_tap(get_global_mouse_position())
+		_handle_tap(_world_of(event))
 		get_viewport().set_input_as_handled()
+
+## Where an input event happened, in world space.
+##
+## Taken from the EVENT rather than from get_global_mouse_position(), which is
+## what this used to read. For a person the two are identical - the cursor is
+## where they clicked - but the global position is the OS cursor, so a
+## synthesised event could never place a tower: measured 2026-08-31, the
+## viewport reported the mouse at (5, 621) while clicks were being delivered at
+## (408, 72), and every one of them placed nothing. Reading the event makes the
+## board drivable by a test, which is the only reason placement had never been
+## exercised end to end.
+##
+## Through the canvas transform rather than using event.position directly, so
+## this stays correct if a Camera2D is ever added; with none, the transform is
+## the identity and the two agree.
+func _world_of(event: InputEvent) -> Vector2:
+	var at: Vector2 = event.position
+	return get_viewport().get_canvas_transform().affine_inverse() * at
 
 ## Ghost preview: green where the tower would land, red where it would not,
 ## with the range ring shown only when the spot is legal so its absence is a
