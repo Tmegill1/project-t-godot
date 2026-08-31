@@ -6,10 +6,24 @@ proceeds so Codex can take over at any point.**
 ## Where the work is
 
 - Repository: `/home/tylermegill/Projects/project-t-godot`
-- Branch: **`feat/playable-tiers`**, off `master` at `a7e1c48`. **Complete**,
-  suite green at **13,770 checks across 47 files, exit 0**, about 127s against a
-  180s budget. Nothing pushed.
-- Everything before it this session is merged and deployed.
+- Branch: **`feat/playable-tiers`**, merged to `master` as `0269cf5` on the
+  owner's instruction. Both branches pushed; the Pages deploy succeeded. Suite
+  green on the merged result at **13,770 checks across 47 files, exit 0**, about
+  127s against a 180s budget.
+- **Nothing is in flight.** Everything in this session is merged and deployed.
+
+## Still open, in the order I would take them
+
+1. **The Fork's Hard and Nightmare.** A completed board loses 93-144 lives there
+   against budgets of 15 and 12. Sixteen towers fixes it, blocked on
+   `limit_bonus_map2` applying to every map but the first, and on the map's
+   income having halved when the wave was split. **Note this predates the tier
+   re-sweep and should be re-measured against the new rows before acting.**
+2. **The Coils kills a spending player on wave 10 of Normal**, despite the best
+   completed board in the game. An economy problem on that map. Also worth
+   re-measuring now the tiers have moved.
+3. **Nobody has played any of it.** Every number came from a harness with no
+   projectile travel time, which is kinder than the live board.
 
 ## What this branch did
 
