@@ -326,3 +326,62 @@ func test_a_tighter_interval_packs_the_schedule() -> bool:
 		tight_last = maxf(tight_last, float(e["at_ms"]))
 	assert_true(tight_last < wide_last, "a halved interval finishes spawning sooner")
 	return true
+
+# --------------------------------------------------------------------------
+# Splitting a wave between entrances
+# --------------------------------------------------------------------------
+
+func test_one_lane_gets_the_whole_schedule() -> bool:
+	var schedule := Waves.build_schedule(8)
+	var split := Waves.split_schedule(schedule, 1)
+	assert_eq(split.size(), 1, "one lane, one queue")
+	assert_eq((split[0] as Array).size(), schedule.size(), "and it holds everything")
+	return true
+
+# The wave is DIVIDED, not duplicated. Two entrances used to mean twice the
+# enemies; they mean the same enemies arriving two ways.
+func test_two_lanes_divide_the_wave_rather_than_doubling_it() -> bool:
+	var schedule := Waves.build_schedule(8)
+	var split := Waves.split_schedule(schedule, 2)
+	assert_eq(split.size(), 2, "two lanes, two queues")
+	assert_eq((split[0] as Array).size() + (split[1] as Array).size(), schedule.size(),
+		"between them they hold the wave exactly once")
+	return true
+
+# Round-robin rather than halving, so both entrances field a MIX arriving
+# together instead of one taking every goblin and the other every bat.
+func test_both_lanes_get_a_mix_of_kinds() -> bool:
+	var split := Waves.split_schedule(Waves.build_schedule(8), 2)
+	for lane in split.size():
+		var kinds := {}
+		for entry in split[lane]:
+			kinds[entry["kind"]] = true
+		assert_true(kinds.size() > 1, "lane %d fields more than one kind" % lane)
+	return true
+
+func test_splitting_moves_no_spawn_in_time() -> bool:
+	var schedule := Waves.build_schedule(8)
+	var split := Waves.split_schedule(schedule, 2)
+	var seen: Array = []
+	for lane in split:
+		for entry in lane:
+			seen.append(entry["at_ms"])
+	seen.sort()
+	var expected: Array = []
+	for entry in schedule:
+		expected.append(entry["at_ms"])
+	expected.sort()
+	assert_eq(seen, expected, "every spawn keeps the instant it was scheduled for")
+	return true
+
+# A boss is one appended entry, so it lands on whichever lane round-robin
+# reaches - one boss, one entrance, rather than a boss per lane.
+func test_a_boss_arrives_down_exactly_one_lane() -> bool:
+	var split := Waves.split_schedule(Waves.build_schedule(10), 2)
+	var bosses := 0
+	for lane in split:
+		for entry in lane:
+			if entry.get("boss", false):
+				bosses += 1
+	assert_eq(bosses, 1, "wave 10's boss is not duplicated across entrances")
+	return true

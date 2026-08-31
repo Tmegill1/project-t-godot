@@ -1,4 +1,4 @@
-# Claude Handoff — Multi-lane Harness
+# Claude Handoff — Splitting the Wave
 
 Generated: 2026-08-30 (America/Chicago). **Live document — rewritten as work
 proceeds so Codex can take over at any point.**
@@ -6,101 +6,75 @@ proceeds so Codex can take over at any point.**
 ## Where the work is
 
 - Repository: `/home/tylermegill/Projects/project-t-godot`
-- Branch: **`feat/multi-lane-harness`**, merged to `master` as `f625726` on the
-  owner's instruction. Both branches pushed; the Pages deploy succeeded. Suite
-  green on the merged result at **13,845 checks across 46 files, exit 0**, in
-  about 105s against a 180s budget.
-- **Nothing is in flight.** Everything in this session is merged and deployed.
+- Branch: **`feat/split-the-wave`**, off `master` at `cbf7c83`. **Complete**,
+  suite green at **13,855 checks across 46 files, exit 0**. Nothing pushed.
 
-## The one decision waiting for the owner
+## Result: Normal fixed, the harder tiers still open
 
-**The Fork needs a bigger tower budget, or something equivalent.** The table
-below is the evidence; `tower_budget` in `data/maps.gd` is the obvious lever and
-has been 12 on every map since the cap landed. It was deliberately not touched -
-see below - so this is the natural next piece of work and it starts with a
-decision rather than a measurement.
+| The Fork, completed board | Normal | Hard | Nightmare |
+|---|---|---|---|
+| Before | **101 / 128** | 508 / 439 | 530 / 458 |
+| **After** | **0 / 5** | 132 / 93 | 144 / 103 |
 
-## THE FINDING: The Fork is unwinnable, and it is not fixed here
+**Sixteen towers would fix Hard and Nightmare** (3-4 and 3-7 lives, nothing shut
+out); fourteen is not enough and eighteen shuts them out. Two blockers, both
+decisions rather than measurements:
 
-| Map | Lanes | Route | Normal | Hard | Nightmare |
-|---|---|---|---|---|---|
-| The Pass | 1 | 2,448px | 0 / 1 | 0 / 41 | 7 / 45 |
-| **The Fork** | **2** | 2,832px | **101 / 128** | **508 / 439** | **530 / 458** |
-| The Coils | 1 | 3,696px | 0 / 0 | 10 / 34 | 13 / 37 |
+1. `limit_bonus_map2` applies to every map but the first, so it cannot give The
+   Fork more towers without also giving The Coils more - and The Coils measures
+   well at twelve. **Per-map tower limits are needed first.**
+2. The Fork's income halved with the split, 30,371 -> 16,632, because it no
+   longer fields double the enemies. Sixteen maxed towers cost 20,920, so the
+   map cannot afford the board its own tiers require.
+- Everything before it this session is merged and deployed.
 
-*(lives lost by a completed twelve-tower board on wave 20; sustained / burst.
-The budget is 20 lives on Normal.)*
+## Why: budgets could not fix The Fork, and measurement said so
 
-**The cause is the tower budget, not the purse doubled this morning.** Every map
-allows twelve towers and The Fork must split them across two lanes - six per
-lane against a full wave each, where The Pass puts all twelve on its one.
-`tower_budget` in `data/maps.gd` is the obvious lever and has been 12 everywhere
-since the cap landed, but changing it is the owner's decision.
+The owner asked to fix the tower budgets. Measured first, and they are not the
+lever:
 
-`test_balance_tuning.gd` excludes The Fork from the Normal-comfort assertion
-under `NORMAL_COMFORT_UNDECIDED` **and separately pins how broken it is**, so a
-fix fails that pin and forces the exclusion to be revisited.
+| The Fork, a player who spends | Normal | Hard | Nightmare |
+|---|---|---|---|
+| 12 towers / 400 gold *(shipped)* | dies wave 3 | dies wave 2 | dies wave 2 |
+| **23 towers** / 400 gold | dies wave 3 | dies wave 2 | dies wave 2 |
+| 23 towers / **1,800** gold | dies wave 13 | dies wave 5 | dies wave 3 |
 
-**A correction also landed:** "at Normal nothing exceeds 0.18 of the route" was
-measured with towers massed at the entrance. Spaced along it, the same board on
-the same map reaches 0.76. That phrase described a clustered board, not the
-game. The tier tuning stands - it was swept against the clustered board
-consistently.
-- Everything before it in this session is merged and deployed. Suite on
-  `master`: **13,782 checks across 46 files, exit 0**.
-- Spec: `docs/superpowers/specs/2026-08-30-multi-lane-harness-design.md`
-- Plan: `docs/superpowers/plans/2026-08-30-multi-lane-harness.md` (6 tasks)
+The budget never binds - the player is dead long before reaching twelve towers,
+let alone twenty-three - and 4.5x the purse does not rescue it. The maxed
+23-tower board that *does* hold costs **33,605** against the map's **30,371** of
+income, so even the endgame board was unaffordable.
 
-## Why this work exists
+Raising the budget would have turned `NORMAL_COMFORT_UNDECIDED` green over a map
+that stays unplayable: a benchmark passing on a board nobody plays, which is the
+exact failure this whole session has been chasing.
 
-`sim/harness.gd` claims every balance number in this project is a test rather
-than an assertion. That holds for **one map out of three** — its header lists
-"one lane" among its simplifications and `run_wave` takes a single `path`.
+**Owner's decision (2026-08-31): split the wave between entrances.**
 
-It became load-bearing when The Fork's purse moved to 400 earlier today. Every
-other number this week was swept and pinned, two of them verified by restoring
-the defect and watching the assertion fail. That one could not be, and its own
-comment says so.
+## What this branch changes
 
-## The shape
+`Waves.split_schedule(schedule, lane_count)` distributes one wave's spawns
+round-robin across lanes - spawn 0 to lane 0, spawn 1 to lane 1 - so both
+entrances field a mix arriving together rather than one taking all the goblins.
+**Both `game_board.gd` and `sim/harness.gd` call it**, which is the invariant the
+harness exists to protect: one implementation, two callers.
 
-`config["paths"]` joins `config["path"]`, which keeps meaning exactly one lane.
-Enemies carry a `lane` index; routes are precomputed per lane; spawning uses one
-shared schedule with a cursor per lane — mirroring `GameBoard._spawn_queues` and
-`_spawned_per_path` rather than approximating them. Every lane runs the whole
-wave, so two entrances field twice the enemies.
+A second entrance stops meaning *twice the enemies* and starts meaning *the same
+enemies, two approaches*. That inverts a documented decision, so several things
+must move with it:
 
-**Rejected on correctness: running each lane separately and summing.** No core
-loop change at all, which is why it is tempting, and wrong — every tower would
-fire down every lane at full rate. That is the exact error that stopped The
-Fork's purse being "measured" that way in the first place.
+- `test_harness.gd`'s "each lane runs the whole wave" - committed an hour before
+  this - inverts. That test doing its job is why it was written.
+- The Fork's map comment claims "twice the enemies"; no longer true.
+- `NORMAL_COMFORT_UNDECIDED` and the "The Fork is unwinnable" pin come out **if**
+  the map now holds. That pin exists to force exactly this moment.
+- The Fork's purse of 400 was doubled this morning *because* it faced double the
+  threat. If the threat halves, re-measure it.
 
-## Task progress
-
-| # | Task | State |
-|---|---|---|
-| — | Spec | ✅ committed |
-| — | Plan | ✅ committed |
-| 1 | `run_wave` accepts `paths`, one lane unchanged | ✅ done |
-| 2 | Two lanes are two lanes | ✅ done |
-| 3 | Twelve towers on any map, by a stated rule | ✅ done |
-| 4 | Benchmark every map | ✅ done |
-| 5 | Measure The Fork and The Coils, and report | ✅ done |
-| 6 | Docs | ✅ done |
-
-## Three things that will bite an executor
-
-1. **No call site may be edited to make a test pass.** The 64 existing
-   `run_wave` calls are the project's measured corpus. If one of their numbers
-   moves, the change is wrong — fix the change, not the pin.
-2. **Task 4 is expected to fail, and that is a finding, not a defect.** The Fork
-   and The Coils have never been measured. If one shuts out Nightmare or leaks
-   on Normal, carry it forward to Task 5 and **do not retune a map** — retuning
-   inside the change that made measurement possible destroys the evidence.
-3. **The suite has a three-minute budget** with the fallback named in advance
-   (two builds per map instead of sixteen; then Normal drops to burst alone).
-   Whichever cut is taken goes in the test's own comment with the runtime that
-   forced it.
+**Out of scope, deliberately:** Hard and Nightmare are also unsurvivable from
+the opening on The Pass - two different simulated strategies die on wave 2-3 of
+the easiest map, because every tier was swept against completed maxed boards and
+never against a build-out. Real, separate, and bundling it here would tangle two
+findings.
 
 ## Standing rules that govern this work
 

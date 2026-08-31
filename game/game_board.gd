@@ -273,17 +273,18 @@ func start_next_wave() -> void:
 	_wave_clock = 0.0
 	_spawn_rng = Rng.new(Seeds.DEFAULT_SPAWN_SEED)
 	var schedule := Waves.build_schedule(_wave, _difficulty)
-	_spawn_queues = []
+	# The wave DIVIDED between the entrances, one queue and one cursor each. A
+	# second entrance means two approaches, not twice the enemies; sim/harness.gd
+	# calls the same function, so a wave cannot mean one thing here and another
+	# in a measurement.
+	#
+	# This replaced giving every path the same schedule. That doubling is what
+	# made The Fork unplayable rather than hard - a completed board lost 101
+	# lives there on Normal - and neither a bigger budget nor a bigger purse
+	# could answer it. See Waves.split_schedule.
+	_spawn_queues = Waves.split_schedule(schedule, maxi(1, _paths.size()))
 	_spawned_per_path = []
-	for i in maxi(1, _paths.size()):
-		# One shared schedule, one cursor each. Sharing is safe because the
-		# queue is only ever READ - progress lives entirely in
-		# _spawned_per_path - and build_schedule already returns fresh
-		# dictionaries per call. An earlier version deep-copied per path with
-		# a comment claiming a shared array would make one path skip the
-		# other's spawns; mutation testing showed that copy changed no
-		# observable behaviour, because the claim was simply false.
-		_spawn_queues.append(schedule)
+	for i in _spawn_queues.size():
 		_spawned_per_path.append(0)
 	wave_changed.emit(_wave, Waves.MAX_WAVES)
 	wave_state_changed.emit(true)

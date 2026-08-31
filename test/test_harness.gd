@@ -864,15 +864,18 @@ func test_the_fork_really_has_two_lanes() -> bool:
 	assert_eq(_fork_paths().size(), 2, "the fixture below is worth having")
 	return true
 
-# Every lane issues the WHOLE schedule, so two entrances field twice the wave.
-# That is the board's behaviour - one shared schedule, a cursor each - and the
-# thing a per-lane simulation summed afterwards could never reproduce.
-func test_each_lane_runs_the_whole_wave() -> bool:
+# The wave is DIVIDED between the lanes, not duplicated down each. This
+# asserted the doubling until 2026-08-31; the rule changed because doubling made
+# The Fork unplayable rather than hard, and this test failing is what said so.
+#
+# Compared against one lane carrying the whole wave, which is what a single-lane
+# map is - so the count is the same and only the number of approaches differs.
+func test_the_lanes_divide_the_wave_between_them() -> bool:
 	var lanes := _fork_paths()
-	var one := Harness.run_wave({"wave": 4, "towers": [], "paths": [lanes[0]]})
+	var one_lane := Harness.run_wave({"wave": 4, "towers": [], "paths": [lanes[0]]})
 	var both := Harness.run_wave({"wave": 4, "towers": [], "paths": lanes})
-	assert_eq(int(both["leaks"]), int(one["leaks"]) * 2,
-		"two lanes leak twice as many, undefended")
+	assert_eq(int(both["leaks"]), int(one_lane["leaks"]),
+		"two lanes leak what one does, undefended - the same wave, two ways")
 	return true
 
 # A wave is not over while any entrance still has enemies to send.

@@ -159,6 +159,36 @@ static func ogre_spawn_delay(goblin_count: int, interval_ms := INTERVAL_MS) -> f
 	var last_goblin_at := float(goblin_count - 1) * interval_ms
 	return minf(last_goblin_at + OGRE_DELAY_AFTER_LAST_GOBLIN_MS, OGRE_MAX_START_DELAY_MS)
 
+## One wave's spawns, divided round-robin between a map's entrances.
+##
+## A SECOND ENTRANCE MEANS TWO APPROACHES, NOT TWICE THE ENEMIES. It used to
+## mean the latter - every lane ran the whole schedule - and that made The Fork
+## unplayable rather than hard: measured 2026-08-31, a completed twelve-tower
+## board lost 101 lives there on NORMAL against a budget of 20, and a player who
+## simply spends died on wave 2. Neither a bigger tower budget nor a bigger
+## purse fixed it. Twenty-three towers still died on wave 2, 1,800 starting gold
+## still died on wave 13, and the maxed board that did hold cost more than the
+## map paid across a whole run.
+##
+## Round-robin rather than halving, so both entrances field a MIX arriving
+## together instead of one taking every goblin and the other every bat. Nothing
+## moves in time: a spawn keeps the instant build_schedule gave it, and only its
+## entrance changes.
+##
+## A boss is a single appended entry, so it lands on whichever lane the rotation
+## reaches - one boss, one entrance, never one per lane.
+##
+## Both game_board.gd and sim/harness.gd call this. That is the point: the rule
+## has one implementation and two callers, so a wave cannot mean one thing on
+## screen and another in a measurement.
+static func split_schedule(schedule: Array, lane_count: int) -> Array:
+	var lanes: Array = []
+	for i in maxi(1, lane_count):
+		lanes.append([])
+	for i in schedule.size():
+		(lanes[i % lanes.size()] as Array).append(schedule[i])
+	return lanes
+
 ## Spawn instants for a wave, mirroring GameScene.startWave's offsets.
 ##
 ## Public (not a private helper on Harness) because Task 19's live game board
