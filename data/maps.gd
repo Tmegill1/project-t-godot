@@ -33,24 +33,29 @@ const DEFS := {
 		# 400, raised from 250 on 2026-08-30, and exactly twice The Pass's purse
 		# so the relationship is arithmetic rather than an inherited number.
 		#
-		# Two entrances means the full wave runs down BOTH, so this map fields
-		# twice the enemies of the same wave number on The Pass - and each lane
-		# is only about 59% as long (1,440px and 1,392px against 2,448px), so
-		# every enemy is under fire for well under half as long. Double the
-		# threat, less than half the time to answer it.
+		# Two entrances mean two APPROACHES, not twice the enemies - the wave is
+		# divided between them (see Waves.split_schedule). It used to run whole
+		# down both, and that made this map unplayable rather than hard: a
+		# completed board lost 101 lives here on Normal against a budget of 20,
+		# and neither a bigger tower budget nor a bigger purse could answer it.
+		# Splitting the wave took that to 0.
 		#
-		# 400 buys four towers where The Pass's 200 buys two, which matches the
-		# doubled threat. 250 bought three. The ladder is lumpy and that is what
-		# picks the number: anything from 250 to 399 buys the same three towers
-		# with more idle change, because the fourth costs 135. Nothing buys a
-		# fifth until 630, so going past 400 is dead gold.
+		# Each lane is only about 59% as long as The Pass's route (1,440px and
+		# 1,392px against 2,448px), and twelve towers have to cover two
+		# approaches rather than concentrate on one. So this is still the harder
+		# map - it simply is not an impossible one.
 		#
-		# NOT simulated, unlike The Pass's purse. Harness.run_wave takes a
-		# single path and is one-lane by design; running each of this map's
-		# lanes separately with the same towers would have every tower firing
-		# down both at full rate, which over-counts coverage. This rests on what
-		# a purse buys and on the geometry above. Measuring it properly needs
-		# multi-lane harness support, which is its own piece of work.
+		# 400 is kept and is still needed: measured after the split, a player
+		# who spends survives Normal here, and the same player on 200 dies on
+		# wave 4. It buys four towers where The Pass's 200 buys two.
+		#
+		# KNOWN AND UNRESOLVED: Hard and Nightmare are still brutal here - a
+		# completed twelve-tower board loses 93 to 144 lives against budgets of
+		# 15 and 12. Measured 2026-08-31, sixteen towers fixes it (3 to 7 lives)
+		# and eighteen shuts the tiers out. Raising it needs per-map tower
+		# limits, because limit_bonus_map2 in data/towers.gd applies to every
+		# map but the first and would hand the same towers to The Coils, which
+		# measures well without them. See update.md.
 		#
 		# Tower variety still caps at three of each kind, as on every map.
 		"tower_budget": 12, "starting_gold": 400,

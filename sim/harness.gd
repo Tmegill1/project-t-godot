@@ -95,13 +95,14 @@ static func run_wave(config: Dictionary) -> Dictionary:
 	var leaks := 0
 	var lives_lost := 0
 	var gold_earned := 0
-	# One cursor per lane over one shared schedule, mirroring GameBoard's
-	# _spawn_queues and _spawned_per_path. Sharing the schedule is safe because
-	# it is only ever read, and build_schedule already returns fresh
-	# dictionaries per call - the board's own comment records that a per-lane
-	# deep copy was measured to change nothing.
+	# The wave DIVIDED between the entrances, one queue and one cursor each,
+	# mirroring GameBoard's _spawn_queues and _spawned_per_path. A second
+	# entrance means two approaches, not twice the enemies - Waves.split_schedule
+	# carries that rule for both callers, so a wave cannot mean one thing on
+	# screen and another here.
+	var lane_schedules := Waves.split_schedule(schedule, paths.size())
 	var spawned: Array[int] = []
-	for i in paths.size():
+	for i in lane_schedules.size():
 		spawned.append(0)
 	# Precomputed once per lane: a lane's route never changes during a wave and
 	# this is read for every living enemy on every tick.
@@ -116,15 +117,15 @@ static func run_wave(config: Dictionary) -> Dictionary:
 		ticks += 1
 		elapsed += tick_ms
 
-		# Spawns due this tick, lane by lane. Every lane issues the WHOLE
-		# schedule, so an N-lane map fields N times the enemies of the same
-		# wave number - which is what the board does, and what The Fork's map
-		# comment has always claimed.
-		for lane in paths.size():
+		# Spawns due this tick, lane by lane, each from its own share of the
+		# wave. An N-lane map fields the SAME enemies as a one-lane map, split
+		# N ways - see Waves.split_schedule for why that replaced doubling.
+		for lane in lane_schedules.size():
 			var lane_path: PackedVector2Array = paths[lane]
-			while spawned[lane] < schedule.size() \
-					and schedule[spawned[lane]]["at_ms"] <= elapsed:
-				var s: Dictionary = schedule[spawned[lane]]
+			var queue: Array = lane_schedules[lane]
+			while spawned[lane] < queue.size() \
+					and queue[spawned[lane]]["at_ms"] <= elapsed:
+				var s: Dictionary = queue[spawned[lane]]
 				var kind: StringName = s["kind"]
 				# A boss is an ordinary enemy with different numbers - same
 				# dictionary, same rules downstream, only the stats overridden.
@@ -265,7 +266,7 @@ static func run_wave(config: Dictionary) -> Dictionary:
 
 		enemies = enemies.filter(func(e): return e["alive"])
 
-		if _all_spawns_issued(spawned, schedule.size()) and enemies.is_empty():
+		if _all_spawns_issued(spawned, lane_schedules) and enemies.is_empty():
 			return _result(kills, leaks, lives_lost, gold_earned, ticks, false,
 				deepest_progress, death_progress_total, deaths)
 
@@ -277,9 +278,9 @@ static func run_wave(config: Dictionary) -> Dictionary:
 ## Checking one cursor is not enough: a wave is not over while any entrance
 ## still has enemies to send. GameBoard._all_spawns_issued exists for exactly
 ## this reason and says exactly this.
-static func _all_spawns_issued(spawned: Array[int], total: int) -> bool:
-	for issued in spawned:
-		if issued < total:
+static func _all_spawns_issued(spawned: Array[int], lane_schedules: Array) -> bool:
+	for lane in spawned.size():
+		if spawned[lane] < (lane_schedules[lane] as Array).size():
 			return false
 	return true
 

@@ -1384,7 +1384,12 @@ func _ready_board_for_map(map_name: StringName) -> GameBoard:
 # Ported faithfully from upstream, which computes totalEnemies * paths.length.
 # That is what makes The Fork harder than The Pass at the same wave number,
 # and why it opens with 250 gold rather than 100.
-func test_a_two_path_map_spawns_the_whole_wave_down_each_path() -> bool:
+# A second entrance means two APPROACHES, not twice the enemies. This asserted
+# the doubling until 2026-08-31, when that rule was measured to make The Fork
+# unplayable rather than hard - a completed board lost 101 lives there on
+# Normal, and neither a bigger budget nor a bigger purse could answer it. See
+# Waves.split_schedule.
+func test_a_two_path_map_divides_the_wave_between_its_entrances() -> bool:
 	var one := _ready_board_for_map(&"demoMap")
 	var two := _ready_board_for_map(&"map2")
 	one.start_next_wave()
@@ -1393,8 +1398,8 @@ func test_a_two_path_map_spawns_the_whole_wave_down_each_path() -> bool:
 		one._physics_process(0.05)
 		two._physics_process(0.05)
 	assert_true(one.get_spawned_count() > 0, "precondition: the one-path map spawned at all")
-	assert_eq(two.get_spawned_count(), one.get_spawned_count() * 2,
-		"two entrances field twice the wave")
+	assert_eq(two.get_spawned_count(), one.get_spawned_count(),
+		"two entrances field the same wave between them, not one each")
 	one.free()
 	two.free()
 	return true

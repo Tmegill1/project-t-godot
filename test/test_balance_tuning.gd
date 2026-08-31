@@ -358,19 +358,11 @@ func test_every_generated_position_is_one_the_board_would_accept() -> bool:
 # completed board hold this map, and does the hardest tier still bite - which
 # the two extreme builds answer between them.
 
-## The Fork is EXCLUDED, and that is a recorded defect rather than an oversight.
-##
-## Measured 2026-08-30, the first time it could be: a completed twelve-tower
-## maxed board loses 101 lives on Normal with the sustained build and 128 with
-## the burst build, against a budget of 20. It fields twice the enemies down
-## lanes barely 59% as long, and until this commit nothing could measure it.
-##
-## It is not retuned here on purpose. This change exists to make the map
-## measurable; rebalancing it inside the same change would destroy the evidence
-## it was built to produce, and what to do about it is the owner's call. The
-## test below pins how broken it is, so a fix cannot land unnoticed.
-const NORMAL_COMFORT_UNDECIDED: Array[StringName] = [&"map2"]
-
+## Every map is asked this now. The Fork was excluded from 2026-08-30 until
+## 2026-08-31, when splitting the wave between its entrances fixed it: a
+## completed board went from losing 101 lives on Normal to losing 0 with the
+## sustained build and 5 with the burst one. The exclusion constant and the pin
+## that recorded how broken it was are both gone, which is what they were for.
 ## Comfortable means the run is won with most of the life budget intact, not
 ## that nothing ever gets through.
 ##
@@ -382,8 +374,6 @@ const NORMAL_COMFORT_UNDECIDED: Array[StringName] = [&"map2"]
 ## assertion is about.
 func test_every_map_is_comfortable_on_normal_for_a_completed_board() -> bool:
 	for map_name in Maps.DEFS:
-		if NORMAL_COMFORT_UNDECIDED.has(map_name):
-			continue
 		for splits in [[SUSTAINED, SUSTAINED, SUSTAINED, SUSTAINED],
 				[BURST, BURST, BURST, BURST]]:
 			var r := Harness.run_wave({"wave": Waves.MAX_WAVES,
@@ -393,20 +383,6 @@ func test_every_map_is_comfortable_on_normal_for_a_completed_board() -> bool:
 				"%s is comfortable on Normal for a completed board, lost %s of %d"
 					% [map_name, r["lives_lost"], Economy.STARTING_LIVES])
 			assert_false(r["timed_out"], "%s completes" % map_name)
-	return true
-
-## How broken The Fork is, pinned so that fixing it fails this test and forces
-## the record above to be updated with it. A defect nobody has to notice is a
-## defect that survives.
-func test_the_fork_is_currently_unwinnable_on_normal() -> bool:
-	for splits in [[SUSTAINED, SUSTAINED, SUSTAINED, SUSTAINED],
-			[BURST, BURST, BURST, BURST]]:
-		var r := Harness.run_wave({"wave": Waves.MAX_WAVES,
-			"towers": _board_on(&"map2", splits), "paths": _lanes_for(&"map2"),
-			"difficulty": Difficulty.NORMAL})
-		assert_true(int(r["lives_lost"]) > Economy.STARTING_LIVES,
-			"The Fork still costs a completed board more than its whole life budget on NORMAL, lost %s of %d - if this now fails, the map was fixed and NORMAL_COMFORT_UNDECIDED should lose map2"
-				% [r["lives_lost"], Economy.STARTING_LIVES])
 	return true
 
 func test_no_map_shuts_out_the_hardest_tier() -> bool:

@@ -4,7 +4,7 @@
 not yet built, and what is still open. `CONTINUE.md` records what *is*; this
 records what *should be*.
 
-Last updated: 2026-08-30 (revised again after the multi-lane harness).
+Last updated: 2026-08-31 (revised after splitting the wave).
 
 ---
 
@@ -23,7 +23,8 @@ Last updated: 2026-08-30 (revised again after the multi-lane harness).
 | **Opening purse** — The Pass starts with two towers, not one | ✅ merged and **deployed** |
 | **Pause menu** — Escape pauses; Continue, Restart, Quit | ✅ merged and **deployed** |
 | **The Fork's purse** — doubled, to match a doubled map | ✅ merged and **deployed** |
-| **Multi-lane harness** — every map measurable, every map benchmarked | ✅ **built**, on `feat/multi-lane-harness`, **not merged** |
+| **Multi-lane harness** — every map measurable, every map benchmarked | ✅ merged and **deployed** |
+| **Splitting the wave** — a second entrance is two approaches, not twice the enemies | ✅ **built**, on `feat/split-the-wave`, **not merged** |
 | Slice 2 — tactical powers | ⬜ decided, not designed |
 | Slice 3 — versioned save + meta-progression | ⬜ decided, not designed |
 | Slice 4 — hero | ⬜ decided, not designed |
@@ -541,7 +542,76 @@ Lives lost by a completed twelve-tower board on wave 20:
 *(sustained build / burst build; the life budget is 20 on Normal, 15 on Hard,
 12 on Nightmare.)*
 
-### The Fork is unwinnable, and the reason is the tower budget
+### FIXED by splitting the wave *(2026-08-31)*
+
+**Budgets were measured first, and they were not the lever.** A player who
+spends died on wave 2–3 of The Fork at *every* budget and *every* purse:
+
+| The Fork, a player who spends | Normal | Hard | Nightmare |
+|---|---|---|---|
+| 12 towers / 400 gold | dies wave 3 | dies wave 2 | dies wave 2 |
+| **23 towers** / 400 gold | dies wave 3 | dies wave 2 | dies wave 2 |
+| 23 towers / **1,800** gold | dies wave 13 | dies wave 5 | dies wave 3 |
+
+The budget never bound — the player was dead long before reaching twelve towers,
+let alone twenty-three — and 4.5× the purse did not rescue it. The maxed
+23-tower board that *did* hold cost 33,605 against 30,371 of income, so even the
+endgame board was unaffordable. Raising the budget would have turned the
+benchmark green over a map that stayed unplayable.
+
+**So a second entrance now means two approaches, not twice the enemies.**
+`Waves.split_schedule` divides one wave's spawns round-robin between the lanes,
+and **both `game_board.gd` and `sim/harness.gd` call it** — one rule, two
+callers, which is what stops a wave meaning one thing on screen and another in a
+measurement. Nothing moves in time; only its entrance changes. A boss lands on
+one lane rather than one per lane.
+
+Completed twelve-tower board on wave 20, before and after:
+
+| The Fork | Normal | Hard | Nightmare |
+|---|---|---|---|
+| Before | **101 / 128** | 508 / 439 | 530 / 458 |
+| **After** | **0 / 5** | 132 / 93 | 144 / 103 |
+
+**Normal is fixed.** The pin recording how broken the map was fired the moment
+the split landed, which is what it was written for, and it and
+`NORMAL_COMFORT_UNDECIDED` are both gone.
+
+**The 400 purse is kept and still earns its place** — measured after the split, a
+spending player survives Normal on 400 and dies on wave 4 with 200.
+
+### Still open on The Fork: Hard and Nightmare, and it needs a decision
+
+A completed board still loses **93–144 lives** there against budgets of 15 and
+12. The map's remaining disadvantage is coverage: twelve towers must cover two
+approaches rather than concentrate on one, and each lane is only 59% as long.
+
+Measured 2026-08-31, **sixteen towers fixes it** — Hard 3–4 lives, Nightmare
+3–7, with nothing shut out. Fourteen is not enough (35–53) and eighteen shuts
+three of four cases out entirely.
+
+Two things block simply setting it, and both are decisions rather than
+measurements:
+
+1. **`limit_bonus_map2` applies to every map except the first**, so it cannot
+   give The Fork more towers without also giving The Coils more — and The Coils
+   measures well at twelve. Per-map tower limits are needed first.
+2. **The Fork's income halved with the split**, from 30,371 to 16,632, because
+   it no longer fields double the enemies. Sixteen maxed towers cost 20,920. So
+   the map would need a larger purse or a gentler cost curve to reach the board
+   its tiers now require.
+
+### Also found, and separate
+
+- **Hard and Nightmare are unsurvivable from the opening on The Pass too.** Two
+  different simulated strategies die on wave 2–3 of the *easiest* map. Every
+  tier value was swept against completed maxed boards; none was ever tested
+  against a build-out.
+- **The Coils kills a spending player on wave 10 of Normal**, despite its
+  completed board being the best-shaped in the game. That is an economy problem
+  on that map, not a lane one — it is single-lane and the split did not touch it.
+
+### What the tower budget looked like before the split
 
 **It loses 101 lives on Normal against a budget of 20** — five times over,
 before difficulty is even raised. The Coils, by contrast, is well shaped: clean

@@ -99,7 +99,7 @@ and 20.
 | `audio/` — pooled playback, 17 core-slice events | ✅ complete |
 | Web export | ✅ preset + build; **boots and renders in a browser; not yet played in one** |
 | Deploy | ✅ live at **https://tmegill1.github.io/project-t-godot/** — every push to `master` republishes, at the address GitHub assigns (no custom domain) |
-| Tests | ✅ 13,845 checks across 46 files, exit 0 (about 105s) |
+| Tests | ✅ 13,855 checks across 46 files, exit 0 (about 105s) |
 | Map authoring | ✅ text format (`data/maps/*.txt`) + a `@tool` painting scene — see §12 |
 | Decoration | ✅ camps (wall + fires) in forest; scattered landmarks in ice/desert — see §13 |
 | Enemies | ✅ five — goblin, bat, shaman, ogre (rank and file) and troll (**boss only**) |
@@ -1082,3 +1082,47 @@ old benchmark had. Spaced along the route, the same board on the same map lets
 enemies reach **0.76**. "Nothing reaches the first bend" described a clustered
 board, not the game. The tier tuning stands — it was swept against the clustered
 board consistently — but do not repeat the phrase as though it described a map.
+
+---
+
+## 19. A second entrance is two approaches, not twice the enemies
+
+`Waves.split_schedule(schedule, lane_count)` divides one wave's spawns
+round-robin between a map's entrances. **Both `game_board.gd` and
+`sim/harness.gd` call it** — one rule, two callers, which is what stops a wave
+meaning one thing on screen and another in a measurement.
+
+It replaced giving every lane the whole schedule. **That doubling made The Fork
+unplayable rather than hard**: a completed board lost 101 lives there on Normal
+against a budget of 20, and a player who spends died on wave 2. Neither a bigger
+budget nor a bigger purse answered it — twenty-three towers still died on wave
+2, and 1,800 starting gold still died on wave 13. Splitting the wave took Normal
+to 0.
+
+Round-robin rather than halving, so both entrances field a mix arriving together
+rather than one taking every goblin. Nothing moves in time; only its entrance
+changes. A boss is one appended entry, so it lands on one lane rather than one
+per lane.
+
+**Three tests inverted with the rule**, which is how a rule change should look:
+`test_harness.gd`'s "each lane runs the whole wave", `test_game_board.gd`'s
+equivalent, and the pin recording how broken The Fork was — the last written
+the day before precisely so that fixing the map could not pass unnoticed.
+
+### Still open here, and it needs a decision rather than a measurement
+
+Hard and Nightmare remain brutal on The Fork: a completed twelve-tower board
+loses **93–144 lives** against budgets of 15 and 12. Twelve towers must cover
+two approaches instead of concentrating on one, and each lane is only 59% as
+long as The Pass's route.
+
+**Sixteen towers fixes it** (Hard 3–4 lives, Nightmare 3–7, nothing shut out);
+fourteen does not, and eighteen shuts the tiers out. Two blockers, both
+decisions:
+
+1. **`limit_bonus_map2` in `data/towers.gd` applies to every map but the
+   first**, so it cannot give The Fork more towers without also giving The
+   Coils more — and The Coils measures well at twelve. Per-map limits first.
+2. **The Fork's income halved with the split**, 30,371 → 16,632, because it no
+   longer fields double the enemies. Sixteen maxed towers cost 20,920, so the
+   map cannot currently afford the board its own tiers require.
