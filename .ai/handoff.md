@@ -6,56 +6,42 @@ proceeds so Codex can take over at any point.**
 ## Where the work is
 
 - Repository: `/home/tylermegill/Projects/project-t-godot`
-- Branch: **`feat/playable-tiers`**, merged to `master` as `0269cf5` on the
-  owner's instruction. Both branches pushed; the Pages deploy succeeded. Suite
-  green on the merged result at **13,770 checks across 47 files, exit 0**, about
-  127s against a 180s budget.
-- **Nothing is in flight.** Everything in this session is merged and deployed.
+- Branch: **`feat/tiers-across-maps`**, off `master` at `2e2f6d9`. Docs only -
+  no game numbers changed. Suite unaffected.
+- Everything before it this session is merged and deployed.
 
-## Still open, in the order I would take them
+## Re-measured against the new tiers: two findings were wrong, one is new
 
-1. **The Fork's Hard and Nightmare.** A completed board loses 93-144 lives there
-   against budgets of 15 and 12. Sixteen towers fixes it, blocked on
-   `limit_bonus_map2` applying to every map but the first, and on the map's
-   income having halved when the wave was split. **Note this predates the tier
-   re-sweep and should be re-measured against the new rows before acting.**
-2. **The Coils kills a spending player on wave 10 of Normal**, despite the best
-   completed board in the game. An economy problem on that map. Also worth
-   re-measuring now the tiers have moved.
-3. **Nobody has played any of it.** Every number came from a harness with no
-   projectile travel time, which is kinder than the live board.
+**The Fork's Hard/Nightmare catastrophe is gone.** It lost 93-144 lives; a
+completed board now loses 0-11 against budgets of 15 and 12. The "sixteen towers
+would fix it" finding and the `limit_bonus_map2` blocker are **obsolete**.
 
-## What this branch did
+**The Coils never had a Normal problem.** It was recorded as killing a spending
+player on wave 10; it finishes with **19 of 20**. The original number came from a
+probe placing towers at full-budget slots, which clusters an early board - the
+placement artifact found later the same day, reported before the confound was.
 
-Hard and Nightmare killed a building player on **wave 3 of 20**. Both had been
-swept only against completed maxed boards. No lever bridged it - not lives (no
-effect), not gold, not a bigger purse, not ramping over thirty waves - because a
-maxed board is ~10x a full-but-unupgraded one and a tier is one curve across a
-run spanning that range.
+**New, and the real remaining gap: the tiers are playable on The Pass and
+nowhere else.**
 
-Owner's decision: **difficulty moves into the build-out.**
+| A player who has to build | Normal | Hard | Nightmare |
+|---|---|---|---|
+| The Pass | 13 of 20 | **7 of 15** | dies wave 13 |
+| The Fork | 14 of 20 | **dies wave 10** | dies wave 10 |
+| The Coils | 19 of 20 | **dies wave 10** | dies wave 7 |
 
-| Tier | health | speed | lives | A player who spends |
-|---|---|---|---|---|
-| Normal | 1.00 | 1.00 | 20 | finishes with 13 of 20 |
-| Hard | 1.30 | 1.10 | 15 | finishes with 7 of 15 |
-| Nightmare | 1.35 | 1.10 | 12 | dies on wave 13 of 20 |
+Two structural causes, neither fixed:
 
-**The cost, stated plainly: a fully maxed board now wins every tier without
-losing a life.** The two shut-out assertions are gone, with their reasoning left
-where they were. `test/test_playability.gd` replaced them and asks the same
-question of the board a player actually has. The branch-spread bound survived;
-its reference wave moved 30 -> 45.
+1. **Coverage density.** Same twelve-tower budget on routes of 2,448 / 2,832 /
+   3,696px - 4.9, 4.2 and 3.2 towers per 1,000px. Invisible on Normal, decisive
+   on Hard.
+2. **The wave-clear speed bonus punishes long maps.** Full at 20s, none at 60s,
+   flat thresholds against very different routes. On Hard The Coils earns 0 speed
+   bonus from wave 9 while The Pass still earns 27.
 
-**A mistake worth knowing about:** while reworking those tests I deleted the
-branch-spread bound and the per-map placement helpers by accident, and caught it
-on the next run. Both are restored. If something looks missing from
-`test_balance_tuning.gd`, check `git show HEAD~1` before assuming it was
-deliberate.
-
-**Placement is worth more than the tier.** The same run dies on wave 10 clustered
-and finishes with 7 lives spread. Both benchmarks recompute placement as the
-board grows.
+Levers: per-map tower budgets scaled to route length, and speed-bonus thresholds
+scaled to the route rather than fixed in seconds. **Both are decisions, and this
+is the third time a number tuned on The Pass has failed to transfer.**
 
 ## Standing rules that govern this work
 

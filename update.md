@@ -4,7 +4,7 @@
 not yet built, and what is still open. `CONTINUE.md` records what *is*; this
 records what *should be*.
 
-Last updated: 2026-08-31 (revised after making the tiers playable).
+Last updated: 2026-08-31 (revised after re-measuring the other two maps).
 
 ---
 
@@ -662,15 +662,78 @@ them spread along the route.** Two towers side by side cover one window between
 them; two spread give an enemy two windows to walk through. A benchmark of a
 build-out has to place like a player building, or it measures its own fixture.
 
+## Re-measured against the new tiers, and two recorded findings were wrong
+
+### The Fork's Hard and Nightmare problem is gone
+
+It was losing **93–144 lives** on those tiers. Against the re-swept rows a
+completed board loses **0–11**, within budgets of 15 and 12. **The "sixteen
+towers would fix it" finding is obsolete**, and with it the whole blocker about
+per-map tower limits and `limit_bonus_map2`. Nothing needs doing there.
+
+### The Coils never had a Normal problem — that was my measurement, not the map
+
+It was recorded as killing a spending player on wave 10 of Normal. It finishes
+with **19 of 20 lives**, the gentlest map in the game. The earlier figure came
+from a probe that placed towers at full-budget slots, which clusters an early
+board — the placement artifact identified later the same day, reported before
+the confound was found.
+
+## The tiers are playable on The Pass and nowhere else
+
+| A player who has to build | Normal | Hard | Nightmare |
+|---|---|---|---|
+| The Pass | 13 of 20 | **7 of 15** | dies wave 13 |
+| The Fork | 14 of 20 | **dies wave 10** | dies wave 10 |
+| The Coils | 19 of 20 | **dies wave 10** | dies wave 7 |
+
+Every map is comfortable on Normal. Hard kills a building player on both maps
+the tiers were not swept against. **Two things compound**, and both are
+structural rather than tuning.
+
+### 1. Coverage density: same budget, very different routes
+
+| Map | Route | Towers | Per 1,000px |
+|---|---|---|---|
+| The Pass | 2,448px | 12 | **4.9** |
+| The Fork | 2,832px | 12 | 4.2 |
+| The Coils | 3,696px | 12 | **3.2** |
+
+The Coils is 51% longer than The Pass with an identical budget, so it has **35%
+less coverage per unit of route**. On Normal that never shows: everything dies
+inside the covered stretches. On Hard the enemies survive them and reach the
+gaps.
+
+### 2. The wave-clear speed bonus punishes long maps
+
+`Economy.WAVE_CLEAR` pays a full speed bonus for clearing in **20s** and none at
+**60s** — flat thresholds, applied to routes of very different lengths. A long
+map takes longer to clear for purely geometric reasons, so it pays less for
+identical play. Traced side by side on Hard:
+
+| Wave | The Pass: time / speed bonus | The Coils: time / speed bonus |
+|---|---|---|
+| 2 | 21.6s / 38 | 30.9s / 29 |
+| 6 | 26.9s / 33 | 42.5s / 18 |
+| 9 | 33.2s / 27 | 65.1s / **0** |
+| 10 | 69.5s / 0 | 108.7s / 0 |
+
+By wave 9 The Coils earns nothing for speed while The Pass still earns 27. Fewer
+upgrades, thinner board, more leaks, longer clears — the spiral closes.
+
+**Neither is fixed here.** The obvious levers are per-map tower budgets scaled to
+route length, and speed-bonus thresholds scaled to the route rather than fixed
+in seconds. Both are decisions.
+
 ### Also found, and separate
 
 - **Hard and Nightmare are unsurvivable from the opening on The Pass too.** Two
   different simulated strategies die on wave 2–3 of the *easiest* map. Every
   tier value was swept against completed maxed boards; none was ever tested
   against a build-out.
-- **The Coils kills a spending player on wave 10 of Normal**, despite its
-  completed board being the best-shaped in the game. That is an economy problem
-  on that map, not a lane one — it is single-lane and the split did not touch it.
+- ~~The Coils kills a spending player on wave 10 of Normal~~ — **withdrawn.**
+  Re-measured with faithful placement it finishes with 19 of 20. The original
+  figure was a placement artifact.
 
 ### What the tower budget looked like before the split
 
